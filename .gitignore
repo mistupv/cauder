@@ -1,3 +1,10 @@
-.DS_Store
+# Erlang
 *.beam
+erl_crash.dump
+/ebin
 
+# IntelliJ
+/out
+
+# Other
+.DS_Store
