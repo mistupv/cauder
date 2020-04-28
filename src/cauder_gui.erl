@@ -59,6 +59,7 @@ setupCodePanel(Parent) ->
   CodePanel = wxPanel:new(Parent),
   CodeText = wxTextCtrl:new(CodePanel, ?CODE_TEXT,
                              [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
+  wxWindow:setFont(CodeText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
   ref_add(?CODE_TEXT,CodeText),
 
 
@@ -102,6 +103,7 @@ setupCodePanel(Parent) ->
   StatePanel = wxPanel:new(Parent),
   StateText = wxTextCtrl:new(StatePanel, ?STATE_TEXT,
                              [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
+   wxWindow:setFont(StateText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
   ref_add(?STATE_TEXT, StateText),
   StateSizer = wxBoxSizer:new(?wxVERTICAL),
   BorderSizer = wxBoxSizer:new(?wxVERTICAL),

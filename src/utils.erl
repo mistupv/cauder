@@ -304,7 +304,7 @@ pp_system(#sys{msgs = Msgs, procs = Procs}, Opts) ->
 
 pp_msgs(Msgs) ->
   MsgsList = [pp_msg(Msg) || Msg <- Msgs],
-  "GM: [" ++ string:join(MsgsList,",") ++ "]\n".
+  "GM : [" ++ string:join(MsgsList,",") ++ "]\n".
 
 pp_msg(#msg{dest = DestPid, val = MsgValue, time = Time}) ->
   "(" ++ pp(DestPid) ++ ",{" ++ pp(MsgValue) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ "})".
@@ -369,7 +369,7 @@ pp_hist_1(Hist, Opts) ->
       true  -> Hist
     end,
   StrItems = [pp_hist_2(Item) || Item <- FiltHist],
-  "H : [" ++ string:join(StrItems, ",") ++ "]".
+  "H  : [" ++ string:join(StrItems, ",") ++ "]".
 
 pp_hist_2({tau,_,_}) ->
   "seq";
@@ -385,7 +385,7 @@ pp_hist_2({rec,_,_,{Value,Time},_}) ->
 pp_mail(Mail, Opts) ->
   case proplists:get_value(?PRINT_MAIL, Opts) of
     false -> "";
-    true  -> "LM: " ++ pp_mail_1(Mail) ++ "\n"
+    true  -> "LM : " ++ pp_mail_1(Mail) ++ "\n"
   end.
 
 pp_mail_1([]) -> "[]";
