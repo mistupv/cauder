@@ -136,7 +136,7 @@ eval_proc_opt(RestSystem, CurProc) ->
     ?NULL_RULE -> ?NULL_OPT;
     OtherRule ->
       Pid = CurProc#proc.pid,
-      #opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid), rule = OtherRule}
+      #opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:concrete(Pid), rule = OtherRule}
   end.
 
 eval_sched_opt(Proc) ->
