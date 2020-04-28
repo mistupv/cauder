@@ -37,13 +37,7 @@ eval_seq_1(Env, Exp) ->
     variable ->
       Name = erl_syntax:variable_name(Exp),
       Binding = orddict:fetch(Name, Env),
-      % Environment stores the position where variables were last assigned so,
-      % to avoid problems, when we retrieve a value we change the position
-      % of the new node to match the position of the variable node.
-      %
-      % We also assume that we have an `erl_parse` node with position
-      % information in element 2.
-      NewValue = setelement(2, Binding, erl_syntax:get_pos(Exp)),
+      NewValue = erl_parse:abstract(Binding, erl_syntax:get_pos(Exp)),
       {Env, NewValue, tau};
     match_expr ->
       Body = erl_syntax:match_expr_body(Exp),
@@ -54,47 +48,14 @@ eval_seq_1(Env, Exp) ->
           NewMatchExp = setelement(4, Exp, NewBody),
           {NewEnv, NewMatchExp, Label};
         false ->
-          Pattern = erl_syntax:match_expr_pattern(Exp),
-          %io:format("Body: ~p\n", [Body]),
-          %io:format("Pattern: ~p\n", [Pattern]),
-          Bindings =
-            case erl_syntax:type(Pattern) of
-              nil ->
-                [];
-              variable ->
-                [{erl_syntax:variable_name(Pattern), Body}];
-              tuple ->
-                PatternElements = erl_syntax:tuple_elements(Pattern),
-                BodyElements = erl_syntax:tuple_elements(Body),
-
-                TupleBindings = lists:zipwith(
-                  fun(Var, Val) -> {erl_syntax:variable_name(Var), Val} end,
-                  PatternElements,
-                  BodyElements
-                ),
-
-                [Binding || Binding = {VarName, _} <- TupleBindings, VarName =/= '_'];
-              list ->
-                PatternPrefix = erl_syntax:list_prefix(Pattern),
-                PatternSuffix = erl_syntax:list_suffix(Pattern),
-                {BodyPrefix, BodySuffix} = lists:split(length(PatternPrefix), erl_syntax:list_elements(Body)),
-
-                PrefixBindings = lists:zipwith(
-                  fun(Var, Val) -> {erl_syntax:variable_name(Var), Val} end,
-                  PatternPrefix,
-                  BodyPrefix
-                ),
-
-                SuffixBinding = {erl_syntax:variable_name(PatternSuffix), erl_syntax:revert(erl_syntax:list(BodySuffix))},
-
-                [Binding || Binding = {VarName, _} <- PrefixBindings ++ [SuffixBinding], VarName =/= '_'];
-              Other ->
-                error(io_lib:format("Unsupported type: ~p", [Other])) % TODO Add more cases. See: 'erl_parse:af_pattern()'
-            end,
+          % There should be no variables to evaluate so we pass no bindings
+          {value, _, Bindings} = erl_eval:expr(Exp, []),
           NewEnv = utils:merge_env(Env, Bindings),
           {NewEnv, [], tau} % TODO Review
       end;
     infix_expr ->
+      % TODO Short-circuit expressions
+      % TODO Send operator
       Left = erl_syntax:infix_expr_left(Exp),
       case is_expr(Left) of
         true ->
@@ -111,14 +72,31 @@ eval_seq_1(Env, Exp) ->
               NewOp = setelement(5, Exp, NewRight),
               {NewEnv, NewOp, Label};
             false ->
-              Op = erl_syntax:operator_name(erl_syntax:infix_expr_operator(Exp)),
-              io:format("Op: ~p\n\tLeft: ~p\n\tRight: ~p\n\t", [Op, Left, Right]),
-              Result = apply(erlang, Op, [erl_syntax:concrete(Left), erl_syntax:concrete(Right)]),
-              ResultStr = lists:flatten(io_lib:format("~p", [Result])) ++ ".",
-              {ok, Tokens, _} = erl_scan:string(ResultStr),
-              {ok, [NewOp | []]} = erl_parse:parse_exprs(Tokens),
-              {Env, NewOp, tau}
+              % Infix operators are always built-in, so we just evaluate the expression
+              % There should be no variables to evaluate so we pass no bindings
+              {value, Value, _} = erl_eval:expr(Exp, []),
+              NewValue = erl_parse:abstract(Value),
+              {Env, NewValue, tau}
           end
+      end;
+    % FIXME The '-' prefix causes two steps the show the same expression,
+    % however they have two different internal representations:
+    %  - The number with the operator e.g -(42)
+    %  - The negated number e.g (-42)
+    prefix_expr ->
+      Arg = erl_syntax:prefix_expr_argument(Exp),
+      case is_expr(Arg) of
+        true ->
+          {NewEnv, NewArg, Label} = eval_seq(Env, Arg),
+          % Structure: {op, Pos, Operator, Arg}
+          NewOp = setelement(4, Exp, NewArg),
+          {NewEnv, NewOp, Label};
+        false ->
+          % Prefix operators are always built-in, so we just evaluate the expression
+          % There should be no variables to evaluate so we pass no bindings
+          {value, Value, _} = erl_eval:expr(Exp, []),
+          NewValue = erl_parse:abstract(Value),
+          {Env, NewValue, tau}
       end;
     application ->
       FunArgs = erl_syntax:application_arguments(Exp),
@@ -129,12 +107,26 @@ eval_seq_1(Env, Exp) ->
           NewExp = setelement(4, Exp, NewFunArgs),
           {NewEnv, NewExp, Label};
         false ->
-          FunName = erl_syntax:application_operator(Exp),
-          FunDef = utils:fundef_lookup(erl_syntax:atom_value(FunName), length(FunArgs), ref_lookup(?FUN_DEFS)),
-          FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
-          {Body, Bindings} = erl_eval:match_clause(FunClauses, FunArgs, erl_eval:new_bindings(), none), % TODO Review newBindings
-          NewEnv = utils:merge_env(Env, Bindings),
-          {NewEnv, Body, tau}
+          FunName = erl_syntax:atom_value(erl_syntax:application_operator(Exp)),
+          % Check if the function is in this file
+          case utils:fundef_lookup(FunName, length(FunArgs), ref_lookup(?FUN_DEFS)) of
+            {value, FunDef} -> FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
+              % There should be no variables to evaluate so we pass no bindings
+              % TODO `match_clause` looks like an internal function, because it is not documented
+              {Body, Bindings} = erl_eval:match_clause(FunClauses, FunArgs, [], none),
+              % The environment stores the literal value but `match_clause`
+              % returns the bindings as `erl_parse` nodes so we convert them
+              ValueBindings = [{Name, erl_syntax:concrete(Value)} || {Name, Value} <- Bindings],
+              NewEnv = utils:merge_env(Env, ValueBindings),
+              {NewEnv, Body, tau};
+            false ->
+              % TODO Look for function in other files in the same directory
+              % Function is a BIF so we simply evaluate it
+              % There should be no variables to evaluate so we pass no bindings
+              {value, Value, _} = erl_eval:expr(Exp, []),
+              NewValue = erl_parse:abstract(Value),
+              {Env, NewValue, tau}
+          end
       end;
     list ->
       Head = erl_syntax:list_head(Exp),
@@ -145,7 +137,7 @@ eval_seq_1(Env, Exp) ->
           NewList = setelement(3, Exp, NewHead),
           {NewEnv, NewList, Label};
         false ->
-          % `revert` is required to get an `erl_parse` node
+          % `list_tail` returns a syntax tree but we want an `erl_parse` node
           Tail = erl_syntax:revert(erl_syntax:list_tail(Exp)),
           {NewEnv, NewTail, Label} = eval_seq(Env, Tail),
           % Structure: {cons, Pos, Head, Tail}
@@ -599,6 +591,14 @@ eval_expr_opt(Expr, Env, Mail) ->
                 false ->
                   #opt{rule = ?RULE_SEQ}
               end
+          end;
+        prefix_expr ->
+          Arg = erl_syntax:prefix_expr_argument(Expr),
+          case is_expr(Arg) of
+            true ->
+              eval_expr_opt(Arg, Env, Mail);
+            false ->
+              #opt{rule = ?RULE_SEQ}
           end;
         application ->
           Args = erl_syntax:application_arguments(Expr),

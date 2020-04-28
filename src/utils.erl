@@ -43,24 +43,19 @@ fundef_lookup(FunName, FunDefs) ->
 %% @doc Searches a function definition in FunDefs with the specified Name and Arity
 %% @end
 %%--------------------------------------------------------------------
--spec fundef_lookup(Name, Arity, FunDefs) -> FunDef | not_found when
+-spec fundef_lookup(Name, Arity, FunDefs) -> {value, FunDef} | false when
   Name :: atom(),
   Arity :: arity(),
   FunDefs :: [FunDef],
   FunDef :: erl_parse:af_function_decl().
 
 fundef_lookup(FunName, FunArity, FunDefs) ->
-  case lists:search(
+  lists:search(
     fun({'function', _, Name, Arity, _}) ->
       Name == FunName andalso Arity == FunArity
     end,
     FunDefs
-  ) of
-    {value, FunDef} ->
-      FunDef;
-    false ->
-      not_found
-  end.
+  ).
 
 
 %%--------------------------------------------------------------------
@@ -366,16 +361,18 @@ pp_env(Env, Exp, Opts) ->
   end.
 
 pp_env_1(Env, Exp, Opts) ->
-  PrintEnv =
+  Bindings =
     case proplists:get_value(?PRINT_FULL_ENV, Opts) of
-      true  -> Env;
-      false -> relevant_bindings(Env, Exp)
+      true ->
+        Env;
+      false ->
+        relevant_bindings(Env, Exp)
     end,
-  PairsList = [pp_pair(Var,Val) || {Var,Val} <- PrintEnv],
-  "{" ++ string:join(PairsList,", ") ++ "}".
+  PairsList = [pp_binding(Var, Val) || {Var, Val} <- Bindings],
+  "{" ++ string:join(PairsList, ", ") ++ "}".
 
-pp_pair(Var, Val) ->
-  atom_to_list(Var) ++ " -> " ++ pp(Val).
+pp_binding(Var, Val) ->
+  io_lib:format("~s -> ~p", [atom_to_list(Var), Val]).
 
 is_conc_item({spawn,_,_,_}) -> true;
 is_conc_item({send,_,_,_,_}) -> true;
