@@ -46,7 +46,7 @@ stop_refs() ->
 %% @doc Returns all the evaluation options for a given System
 %% @end
 %%--------------------------------------------------------------------
-eval_opts(System) ->  
+eval_opts(System) ->
   FwdOpts = fwd_sem:eval_opts(System),
   BwdOpts = bwd_sem:eval_opts(System),
   FwdOpts ++ BwdOpts.
@@ -55,8 +55,8 @@ eval_step(System, Option) ->
   #opt{sem = Semantics, type = Type, id = Id} = Option,
   NewSystem =
     case Type of
-      ?TYPE_MSG -> Semantics:eval_sched(System,Id);
-      ?TYPE_PROC -> Semantics:eval_step(System,cerl:c_int(Id))
+      ?TYPE_MSG -> Semantics:eval_sched(System, Id);
+      ?TYPE_PROC -> Semantics:eval_step(System, erl_syntax:integer(Id))
     end,
   NewSystem.
 
@@ -71,7 +71,7 @@ eval_mult(System, Option, Steps) ->
 eval_mult_1(System, _Option, Steps, Steps) ->
   {System, Steps};
 eval_mult_1(System, Option, Steps, StepsDone) ->
-  Sem = 
+  Sem =
     case Option of
       ?MULT_FWD -> fwd_sem;
       ?MULT_BWD -> bwd_sem
