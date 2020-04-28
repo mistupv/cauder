@@ -58,20 +58,26 @@
 
 -define(LAST_PATH, last_path).
 
--record(msg, {dest,
-              val,
-              time}).
+%% Message
+-record(msg, {
+  % Target process identifier
+  dest,
+  % Message
+  val,
+  % Timestamp
+  time
+}).
 
 %% Process
 -record(proc, {
-  % Process PID
+  % Process identifier
   pid :: erl_syntax:syntaxTree(), % TODO Less generic type
   % History
-  hist = [],
+  hist = [] :: {tau, erl_eval:binding_struct(), erl_parse:abstract_expr()} | any(), % TODO Add all possible types
   % Log
   log = [],
   % Environment
-  env = [],
+  env = erl_eval:new_bindings() :: erl_eval:binding_struct(),
   % List of expressions
   exp :: [erl_syntax:syntaxTree()], % TODO Less generic type
   % Process mailbox
@@ -80,22 +86,34 @@
   spf = undef :: undef | {atom(), arity()}
 }).
 
--record(sys, {sched = ?SCHED_PRIO_RANDOM,
-              msgs  = [],
-              procs = [],
-              trace = [],
-              roll  = []}).
-
--record(opt, {sem,    % forward or backward
-              type,   % proc or msg
-              id,     % integer
-              rule}). % seq, spawn, ...
-
 -record(trace, {type,
                 from,
                 to,
                 val,
                 time}).
+
+% System
+-record(sys, {
+  sched = ?SCHED_PRIO_RANDOM :: ?SCHED_PRIO_RANDOM | ?SCHED_RANDOM,
+  % Global mailbox
+  msgs = [] :: [#msg{}],
+  % Pool of processes
+  procs = [] :: [#proc{}],
+  trace = [] :: [#trace{}],
+  roll = []
+}).
+
+% Option
+-record(opt, {
+  % forward or backward
+  sem :: ?FWD_SEM | ?BWD_SEM,
+  % proc or msg
+  type :: ?TYPE_PROC | ?TYPE_MSG,
+  % integer
+  id :: pos_integer(),
+  % seq, spawn, ...
+  rule :: ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF | ?RULE_SCHED
+}).
 
 -record(replay, {call,
                  main_pid,
