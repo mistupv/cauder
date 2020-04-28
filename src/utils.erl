@@ -4,13 +4,13 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([fundef_lookup/2, fundef_rename/1, substitute/2,
+-export([fundef_lookup/2, fundef_lookup/3, fundef_rename/1, substitute/2,
          build_var/1, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,
          select_proc_with_time/2, select_proc_with_send/2,
          select_proc_with_spawn/2, select_proc_with_rec/2,
          select_proc_with_var/2, list_from_core/1,
-         update_env/2, merge_env/2,
+         merge_env/2,
          replace/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
          funNames/1,
          stringToNameAndArity/1,stringToArgs/1, toCore/1, toErlang/1,
@@ -38,45 +38,68 @@ fundef_lookup(FunName, FunDefs) ->
       false -> io:fwrite("Funzione non trovata", [])
   end.
 
+
+%%--------------------------------------------------------------------
+%% @doc Searches a function definition in FunDefs with the specified Name and Arity
+%% @end
+%%--------------------------------------------------------------------
+-spec fundef_lookup(Name, Arity, FunDefs) -> FunDef | not_found when
+  Name :: atom(),
+  Arity :: arity(),
+  FunDefs :: [FunDef],
+  FunDef :: erl_parse:af_function_decl().
+
+fundef_lookup(FunName, FunArity, FunDefs) ->
+  case lists:search(
+    fun({'function', _, Name, Arity, _}) ->
+      Name == FunName andalso Arity == FunArity
+    end,
+    FunDefs
+  ) of
+    {value, FunDef} ->
+      FunDef;
+    false ->
+      not_found
+  end.
+
+
 %%--------------------------------------------------------------------
 %% @doc Renames all the variables in function definition FunDef
 %% @end
 %%--------------------------------------------------------------------
-fundef_rename(FunDef) ->
-  FunVars = cerl:fun_vars(FunDef),
-  FunBody = cerl:fun_body(FunDef),
-  RenamedVars = pars_rename(FunVars),
-  {RenamedExp, _} =
-    cerl_trees:mapfold(fun (Exp, Acc) ->
-                          case cerl:type(Exp) of
-                            var ->
-                              case cerl:var_name(Exp) of
-                                {_FunName, _FunArity} ->
-                                  NewExp = Exp,
-                                  NewAcc = Acc;
-                              OtherName ->
-                                case lists:keyfind(Exp, 1, Acc) of
-                                  false ->
-                                    NewExp = fresh_var(OtherName),
-                                    NewAcc = [{Exp,NewExp}] ++ Acc;
-                                  {Exp, NewVar} ->
-                                    NewExp = NewVar,
-                                    NewAcc = Acc
-                                end
-                              end;
-                            _Other ->
-                              NewExp = Exp,
-                              NewAcc = Acc
-                          end,
-                          {NewExp, NewAcc}
-                        end,
-                        RenamedVars,
-                        FunBody),
-  NewFunDef = cerl:c_fun([NewVar || {_, NewVar} <- RenamedVars], RenamedExp),
-  NewFunDef.
+-spec fundef_rename(FunDef) -> NewFunDef when
+  FunDef :: erl_parse:af_function_decl(),
+  NewFunDef :: erl_parse:af_function_decl().
 
-pars_rename(Vars) ->
-  [{Var, fresh_var(cerl:var_name(Var))} || Var <- Vars].
+fundef_rename(FunDef) ->
+  {RenamedFunDef, _} = erl_syntax_lib:mapfold(
+    fun(Node, RenameMap) ->
+      case Node of
+        % Underscore variable doesn't need to be renamed
+        {var, _, '_'} ->
+          {Node, RenameMap};
+        % Normal variable is renamed
+        {var, Line, Name} ->
+          case dict:find(Name, RenameMap) of
+            % Has already been renamed, reuse name
+            {ok, NewName} ->
+              NewNode = {var, Line, NewName},
+              {NewNode, RenameMap};
+            % Has not been renamed yet, get new name
+            error ->
+              NewName = fresh_variable_name(Name),
+              NewRenameMap = dict:store(Name, NewName, RenameMap),
+              NewNode = {var, Line, NewName},
+              {NewNode, NewRenameMap}
+          end;
+        % Other types of nodes are skipped
+        _ -> {Node, RenameMap}
+      end
+    end,
+    dict:new(),
+    FunDef
+  ),
+  erl_syntax:revert(RenamedFunDef).
 
 substitute(SuperExp, Env) ->
   cerl_trees:map(
@@ -126,9 +149,14 @@ pid_exists(Procs, Pid) ->
 %% the rest of processes from Procs
 %% @end
 %%--------------------------------------------------------------------
+-spec select_proc(Procs, Pid) -> {Proc, RestProcs} when
+  Procs :: [Proc],
+  Pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  Proc :: #proc{},
+  RestProcs :: [Proc].
+
 select_proc(Procs, Pid) ->
-  [Proc] = [ P || P <- Procs, P#proc.pid == Pid],
-  RestProcs = [ P || P <- Procs, P#proc.pid /= Pid],
+  {[Proc | []], RestProcs} = lists:partition(fun(P) -> P#proc.pid == Pid end, Procs),
   {Proc, RestProcs}.
 
 %%--------------------------------------------------------------------
@@ -217,21 +245,19 @@ list_from_core(Exp) ->
   end.
 
 %%--------------------------------------------------------------------
-%% @doc Update the environment Env with a single binding
-%% @end
-%%--------------------------------------------------------------------
-update_env({Key, Value}, Env) ->
-  DelEnv = proplists:delete(Key, Env),
-  DelEnv ++ [{Key, Value}].
-
-%%--------------------------------------------------------------------
 %% @doc Update the environment Env with multiple bindings
 %% @end
 %%--------------------------------------------------------------------
-merge_env(Env, []) -> Env;
-merge_env(Env, [CurBind|RestBind]) ->
-  NewEnv = update_env(CurBind, Env),
-  merge_env(NewEnv, RestBind).
+-spec merge_env(Env, Bindings) -> NewEnv when
+  Env :: erl_eval:binding_struct(),
+  Bindings :: erl_eval:binding_struct(),
+  NewEnv :: erl_eval:binding_struct().
+
+merge_env(Env, []) ->
+  Env;
+merge_env(Env, [{Name, Value} | RestBindings]) ->
+  NewEnv = erl_eval:add_binding(Name, Value, Env),
+  merge_env(NewEnv, RestBindings).
 
 %%--------------------------------------------------------------------
 %% @doc A typical substitution application
@@ -611,10 +637,10 @@ has_var(Env, Var) ->
     _ -> true
   end.
 
-fresh_var(Name) ->
+fresh_variable_name(Name) ->
   VarNum = ref_lookup(?FRESH_VAR),
   ref_add(?FRESH_VAR, VarNum + 1),
-  utils:build_var(Name,VarNum).
+  list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(VarNum)).
 
 last_msg_rest(Mail) ->
   LastMsg = lists:last(Mail),

@@ -11,59 +11,156 @@
 
 -include("cauder.hrl").
 
-eval_seq(Env,Exp) ->
+-spec eval_seq(Env, Exp) -> {NewEnv, NewExp, Label} when
+  Env :: erl_eval:binding_struct(),
+  Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
+  NewEnv :: erl_eval:binding_struct(),
+  NewExp :: Exp | [Exp], % FIXME Simplify
+  Label :: tau | any(). % TODO Add other labels
+
+eval_seq(Env, Exp) ->
   case is_list(Exp) of
-    true -> eval_list(Env,Exp);
-    false -> eval_seq_1(Env,Exp)
+    true -> eval_list(Env, Exp);
+    false -> eval_seq_1(Env, Exp)
   end.
 
-eval_seq_1(Env,Exp) ->
-  case cerl:type(Exp) of
-    var ->
-      Value = proplists:get_value(Exp, Env),
-      {Env,Value,tau};
-    cons ->
-      ConsHdExp = cerl:cons_hd(Exp),
-      ConsTlExp = cerl:cons_tl(Exp),
-      case is_expr(cerl:cons_hd(Exp)) of
+
+-spec eval_seq_1(Env, Exp) -> {NewEnv, NewExp, Label} when
+  Env :: erl_eval:binding_struct(),
+  Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
+  NewEnv :: erl_eval:binding_struct(),
+  NewExp :: Exp | [Exp], % FIXME Simplify
+  Label :: tau | any(). % TODO Add other labels
+
+eval_seq_1(Env, Exp) ->
+  case erl_syntax:type(Exp) of
+    variable ->
+      Name = erl_syntax:variable_name(Exp),
+      Binding = orddict:fetch(Name, Env),
+      % Environment stores the position where variables were last assigned so,
+      % to avoid problems, when we retrieve a value we change the position
+      % of the new node to match the position of the variable node.
+      %
+      % We also assume that we have an `erl_parse` node with position
+      % information in element 2.
+      NewValue = setelement(2, Binding, erl_syntax:get_pos(Exp)),
+      {Env, NewValue, tau};
+    match_expr ->
+      Body = erl_syntax:match_expr_body(Exp),
+      case is_expr(Body) of
         true ->
-          {NewEnv,NewConsHdExp,Label} = eval_seq(Env,ConsHdExp),
-          NewExp = cerl:c_cons_skel(NewConsHdExp,
-                                    ConsTlExp);
+          {NewEnv, NewBody, Label} = eval_seq(Env, Body),
+          % Structure: {match, Pos, Pattern, Body}
+          NewMatchExp = setelement(4, Exp, NewBody),
+          {NewEnv, NewMatchExp, Label};
         false ->
-          {NewEnv,NewConsTlExp,Label} = eval_seq(Env,ConsTlExp),
-          NewExp = cerl:c_cons_skel(ConsHdExp,
-                                    NewConsTlExp)
-      end,
-      {NewEnv,NewExp,Label};
-    values ->
-      {NewEnv, NewValuesEs, Label} = eval_list(Env, cerl:values_es(Exp)),
-      NewExp = cerl:c_values(NewValuesEs),
-      {NewEnv, NewExp, Label};
-    tuple ->
-      {NewEnv, NewTupleEs, Label} = eval_list(Env, cerl:tuple_es(Exp)),
-      NewExp = cerl:c_tuple_skel(NewTupleEs),
-      {NewEnv, NewExp, Label};
-    apply ->
-      ApplyArgs = cerl:apply_args(Exp),
-      ApplyOp = cerl:apply_op(Exp),
-      case is_expr(ApplyArgs) of
-        true ->
-          {NewEnv,NewApplyArgs,Label} = eval_seq(Env,ApplyArgs),
-          NewExp = cerl:update_c_apply(Exp,
-                                       ApplyOp,
-                                       NewApplyArgs),
-          {NewEnv,NewExp,Label};
-        false ->
-          FunDefs = ref_lookup(?FUN_DEFS),
-          FunDef = utils:fundef_lookup(ApplyOp, FunDefs),
-          NewFunDef = utils:fundef_rename(FunDef),
-          FunBody = cerl:fun_body(NewFunDef),
-          FunArgs = cerl:fun_vars(NewFunDef),
-          % standard zip is used here (pretty-printer forces it)
-          NewEnv = utils:merge_env(Env, lists:zip(FunArgs,ApplyArgs)),
-          {NewEnv,FunBody,tau}
+          Pattern = erl_syntax:match_expr_pattern(Exp),
+          %io:format("Body: ~p\n", [Body]),
+          %io:format("Pattern: ~p\n", [Pattern]),
+          Bindings =
+            case erl_syntax:type(Pattern) of
+              nil ->
+                [];
+              variable ->
+                [{erl_syntax:variable_name(Pattern), Body}];
+              tuple ->
+                PatternElements = erl_syntax:tuple_elements(Pattern),
+                BodyElements = erl_syntax:tuple_elements(Body),
+
+                TupleBindings = lists:zipwith(
+                  fun(Var, Val) -> {erl_syntax:variable_name(Var), Val} end,
+                  PatternElements,
+                  BodyElements
+                ),
+
+                [Binding || Binding = {VarName, _} <- TupleBindings, VarName =/= '_'];
+              list ->
+                PatternPrefix = erl_syntax:list_prefix(Pattern),
+                PatternSuffix = erl_syntax:list_suffix(Pattern),
+                {BodyPrefix, BodySuffix} = lists:split(length(PatternPrefix), erl_syntax:list_elements(Body)),
+
+                PrefixBindings = lists:zipwith(
+                  fun(Var, Val) -> {erl_syntax:variable_name(Var), Val} end,
+                  PatternPrefix,
+                  BodyPrefix
+                ),
+
+                SuffixBinding = {erl_syntax:variable_name(PatternSuffix), erl_syntax:revert(erl_syntax:list(BodySuffix))},
+
+                [Binding || Binding = {VarName, _} <- PrefixBindings ++ [SuffixBinding], VarName =/= '_'];
+              Other ->
+                error(io_lib:format("Unsupported type: ~p", [Other])) % TODO Add more cases. See: 'erl_parse:af_pattern()'
+            end,
+          NewEnv = utils:merge_env(Env, Bindings),
+          {NewEnv, [], tau} % TODO Review
       end;
+    infix_expr ->
+      Left = erl_syntax:infix_expr_left(Exp),
+      case is_expr(Left) of
+        true ->
+          {NewEnv, NewLeft, Label} = eval_seq(Env, Left),
+          % Structure: {op, Pos, Operator, Left, Right}
+          NewOp = setelement(4, Exp, NewLeft),
+          {NewEnv, NewOp, Label};
+        false ->
+          Right = erl_syntax:infix_expr_right(Exp),
+          case is_expr(Right) of
+            true ->
+              {NewEnv, NewRight, Label} = eval_seq(Env, Right),
+              % Structure: {op, Pos, Operator, Left, Right}
+              NewOp = setelement(5, Exp, NewRight),
+              {NewEnv, NewOp, Label};
+            false ->
+              Op = erl_syntax:operator_name(erl_syntax:infix_expr_operator(Exp)),
+              io:format("Op: ~p\n\tLeft: ~p\n\tRight: ~p\n\t", [Op, Left, Right]),
+              Result = apply(erlang, Op, [erl_syntax:concrete(Left), erl_syntax:concrete(Right)]),
+              ResultStr = lists:flatten(io_lib:format("~p", [Result])) ++ ".",
+              {ok, Tokens, _} = erl_scan:string(ResultStr),
+              {ok, [NewOp | []]} = erl_parse:parse_exprs(Tokens),
+              {Env, NewOp, tau}
+          end
+      end;
+    application ->
+      FunArgs = erl_syntax:application_arguments(Exp),
+      case is_expr(FunArgs) of
+        true ->
+          {NewEnv, NewFunArgs, Label} = eval_seq(Env, FunArgs),
+          % Structure: {call, Pos, Operator, Args}
+          NewExp = setelement(4, Exp, NewFunArgs),
+          {NewEnv, NewExp, Label};
+        false ->
+          FunName = erl_syntax:application_operator(Exp),
+          FunDef = utils:fundef_lookup(erl_syntax:atom_value(FunName), length(FunArgs), ref_lookup(?FUN_DEFS)),
+          FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
+          {Body, Bindings} = erl_eval:match_clause(FunClauses, FunArgs, erl_eval:new_bindings(), none), % TODO Review newBindings
+          NewEnv = utils:merge_env(Env, Bindings),
+          {NewEnv, Body, tau}
+      end;
+    list ->
+      Head = erl_syntax:list_head(Exp),
+      case is_expr(Head) of
+        true ->
+          {NewEnv, NewHead, Label} = eval_seq(Env, Head),
+          % Structure: {cons, Pos, Head, Tail}
+          NewList = setelement(3, Exp, NewHead),
+          {NewEnv, NewList, Label};
+        false ->
+          % `revert` is required to get an `erl_parse` node
+          Tail = erl_syntax:revert(erl_syntax:list_tail(Exp)),
+          {NewEnv, NewTail, Label} = eval_seq(Env, Tail),
+          % Structure: {cons, Pos, Head, Tail}
+          NewList = setelement(4, Exp, NewTail),
+          {NewEnv, NewList, Label}
+      end;
+    tuple ->
+      Elements = erl_syntax:tuple_elements(Exp),
+      {NewEnv, NewElements, Label} = eval_seq(Env, Elements),
+      % Structure: {tuple, Pos, Elements}
+      NewTuple = setelement(3, Exp, NewElements),
+      {NewEnv, NewTuple, Label};
+
+
+
     'case' ->
       CaseArg = cerl:case_arg(Exp),
       case is_expr(CaseArg) of
@@ -94,34 +191,6 @@ eval_seq_1(Env,Exp) ->
             {false,_} ->
               io:fwrite("Error: No matching clause~n")
           end
-      end;
-    'let' ->
-      LetArg = cerl:let_arg(Exp),
-      case is_expr(LetArg) of
-        true ->
-          {NewEnv,NewLetArg,Label} = eval_seq(Env,LetArg),
-          NewExp = cerl:update_c_let(Exp,
-                                     cerl:let_vars(Exp),
-                                     NewLetArg,
-                                     cerl:let_body(Exp)),
-          {NewEnv,NewExp,Label};
-        false ->
-          LetVars = cerl:let_vars(Exp),
-          LetEnv =
-            case cerl:let_arity(Exp) of
-              1 -> lists:zip(LetVars,[LetArg]);
-              _ ->
-                FlatLetArg =
-                case cerl:type(LetArg) of
-                  values ->
-                    cerl:values_es(LetArg);
-                  _ -> LetArg
-                end,
-                lists:zip(LetVars,FlatLetArg)
-            end,
-          NewEnv = utils:merge_env(Env, LetEnv),
-          NewExp = cerl:let_body(Exp),
-          {NewEnv,NewExp,tau}
       end;
     call ->
       CallArgs = cerl:call_args(Exp),
@@ -324,18 +393,22 @@ replace_guards(Bindings,Exps) ->
 %% @doc Performs an evaluation step in process Pid, given System
 %% @end
 %%--------------------------------------------------------------------
+-spec eval_step(System, Pid) -> NewSystem when
+  System :: #sys{},
+  Pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  NewSystem :: #sys{}.
+
 eval_step(System, Pid) ->
-  Msgs = System#sys.msgs,
-  Procs = System#sys.procs,
-  Trace = System#sys.trace,
+  #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = Hist, env = Env, exp = Exp, mail = Mail} = Proc,
+  #proc{pid = Pid, hist = Hist, env = Env, exp = [Exp | RestExpr], mail = Mail} = Proc,
   {NewEnv, NewExp, Label} = eval_seq(Env, Exp),
   NewSystem =
     case Label of
       tau ->
-        NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},
-        System#sys{msgs = Msgs, procs = [NewProc|RestProcs]};
+        NewHist = [{tau, Env, Exp} | Hist],
+        NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = lists:flatten([NewExp], RestExpr)}, % FIXME NewExp can be a list or not
+        System#sys{msgs = Msgs, procs = [NewProc | RestProcs]};
       {self, Var} ->
         NewHist = [{self, Env, Exp}|Hist],
         RepExp = utils:replace(Var, Pid, NewExp),
@@ -409,8 +482,6 @@ is_expr(Expr) when is_list(Expr) ->
   lists:any(fun is_expr/1, Expr);
 is_expr(Expr) ->
   case erl_syntax:type(Expr) of
-    nil ->
-      false;
     list ->
       is_expr(erl_syntax:list_elements(Expr));
     tuple ->
@@ -505,34 +576,44 @@ eval_expr_opt(Expr, Env, Mail) ->
       ?NOT_EXP;
     true ->
       case erl_syntax:type(Expr) of
-        var ->
+        variable ->
           #opt{rule = ?RULE_SEQ};
-        cons ->
-          ConsHdExp = cerl:cons_hd(Expr),
-          ConsTlExp = cerl:cons_tl(Expr),
-          case is_expr(ConsHdExp) of
+        match_expr ->
+          Body = erl_syntax:match_expr_body(Expr),
+          case is_expr(Body) of
             true ->
-              eval_expr_opt(ConsHdExp, Env, Mail);
-            false ->
-              case is_expr(ConsTlExp) of
-                true ->
-                  eval_expr_opt(ConsTlExp, Env, Mail);
-                false ->
-                  ?NOT_EXP
-              end
-          end;
-        values ->
-          eval_expr_list_opt(cerl:values_es(Expr), Env, Mail);
-        tuple ->
-          eval_expr_list_opt(cerl:tuple_es(Expr), Env, Mail);
-        application ->
-          ApplyArgs = erl_syntax:application_arguments(Expr),
-          case is_expr(ApplyArgs) of
-            true ->
-              eval_expr_list_opt(ApplyArgs, Env, Mail);
+              eval_expr_opt(Body, Env, Mail);
             false ->
               #opt{rule = ?RULE_SEQ}
           end;
+        infix_expr ->
+          Left = erl_syntax:infix_expr_left(Expr),
+          case is_expr(Left) of
+            true ->
+              eval_expr_opt(Left, Env, Mail);
+            false ->
+              Right = erl_syntax:infix_expr_right(Expr),
+              case is_expr(Right) of
+                true ->
+                  eval_expr_opt(Right, Env, Mail);
+                false ->
+                  #opt{rule = ?RULE_SEQ}
+              end
+          end;
+        application ->
+          Args = erl_syntax:application_arguments(Expr),
+          case is_expr(Args) of
+            true ->
+              eval_expr_list_opt(Args, Env, Mail);
+            false ->
+              #opt{rule = ?RULE_SEQ}
+          end;
+        list ->
+          eval_expr_list_opt(erl_syntax:list_elements(Expr), Env, Mail);
+        tuple ->
+          eval_expr_list_opt(erl_syntax:tuple_elements(Expr), Env, Mail);
+
+
         'let' ->
           LetArg = cerl:let_arg(Expr),
           case is_expr(LetArg) of
