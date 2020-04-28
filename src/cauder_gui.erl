@@ -201,7 +201,7 @@ setupManualPanel(Parent) ->
 
   wxSizer:add(ProcSizer, PidStaticText, [{flag, ?wxCENTRE}]),
   wxSizer:add(ProcSizer, PidTextCtrl, [{flag, ?wxCENTRE}]),
-  
+
   wxSizer:add(ForwardSizer, ForwIntButton),
   wxSizer:addSpacer(ForwardSizer, 5),
   wxSizer:add(ForwardSizer, ForwSchButton),
@@ -434,41 +434,39 @@ setupMenu() ->
   Frame = ref_lookup(?FRAME),
   wxFrame:setMenuBar(Frame, MenuBar).
 
+%% Loads the specified '.erl' source file
 loadFile(File) ->
-  Frame = ref_lookup(?FRAME),
-  ToggleOpts = utils_gui:toggle_opts(),
-  AddOptimize = proplists:get_value(?COMP_OPT, ToggleOpts),
-  CompOpts =
-    case AddOptimize of
-      true  -> [to_core,binary];
-      false -> [to_core,binary, no_copt]
-    end,
-  case compile:file(File, CompOpts) of
-    {ok, _, CoreForms} ->
-      NoAttsCoreForms = cerl:update_c_module(CoreForms,
-                                             cerl:module_name(CoreForms),
-                                             cerl:module_exports(CoreForms),
-                                             [],
-                                             cerl:module_defs(CoreForms)),
-      Stripper = fun(Tree) -> cerl:set_ann(Tree, []) end,
-      CleanCoreForms = cerl_trees:map(Stripper, NoAttsCoreForms),
-      FunDefs = cerl:module_defs(CleanCoreForms),
-      CodeText = ref_lookup(?CODE_TEXT),
-      wxTextCtrl:setValue(CodeText, core_pp:format(CleanCoreForms)),
+  % TODO Compiler optimizations option
+  case epp:parse_file(File, [], []) of
+    {ok, Forms} ->
+      % Extract function definitions
+      Functions = [Form || Form = {function, _, _, _, _} <- Forms],
+      % Extract attributes, but removing the 'file' attribute so it doesn't appear in the 'Code' tab
+      Attributes = [Form || Form = {attribute, _, Name, _} <- Forms, Name /= file],
+      % Extract comments from the file
+      Comments = erl_comment_scan:file(File),
+      % Generate forms that will appear in the 'Code' tab
+      FinalForms = erl_recomment:recomment_forms(Attributes ++ Functions, Comments),
+
+      wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), erl_prettypr:format(FinalForms)),
+
       Status = ref_lookup(?STATUS),
-      ref_add(?STATUS, Status#status{loaded = {true, FunDefs}}),
-      LeftNotebook = ref_lookup(?LEFT_NOTEBOOK),
-      wxNotebook:setSelection(LeftNotebook, ?PAGEPOS_CODE),
-      utils_gui:set_choices(utils:moduleNames(CleanCoreForms)),
+      ref_add(?STATUS, Status#status{loaded = {true, Functions}}),
+
+      % Open the 'Code' tab
+      wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_CODE),
+
+      % TODO Only allow to start system from an exported function?
+      utils_gui:set_choices(utils:funNames(Functions)),
       utils_gui:disable_all_buttons(),
       utils_gui:clear_texts(),
-      InputSizer = ref_lookup(?INPUT_SIZER),
-      wxSizer:layout(InputSizer),
-      StartButton = ref_lookup(?START_BUTTON),
-      wxButton:enable(StartButton),
-      wxFrame:setStatusText(Frame, "Loaded file " ++ File);
+
+      wxSizer:layout(ref_lookup(?INPUT_SIZER)),
+      wxButton:enable(ref_lookup(?START_BUTTON)),
+
+      utils_gui:update_status_text("Loaded file " ++ File);
     _Other ->
-      wxFrame:setStatusText(Frame, "Error: Could not compile file " ++ File)
+      utils_gui:update_status_text("Error: Could not compile file " ++ File)
   end.
 
 loadReplayData(Path) ->
@@ -476,7 +474,7 @@ loadReplayData(Path) ->
   ReplayData = get(replay_data),
   {_Mod, Fun, Args} = utils:get_mod_name(ReplayData#replay.call),
   MainPid = ReplayData#replay.main_pid,
-  MainLog = utils:extract_pid_log_data(Path, MainPid),  
+  MainLog = utils:extract_pid_log_data(Path, MainPid),
   start(cerl:c_var({Fun,length(Args)}), Args, MainPid, MainLog),
   cauder:eval_replay().
 
@@ -494,8 +492,8 @@ openDialog(Parent) ->
   case wxDialog:showModal(Dialog) of
       ?wxID_OK ->
         File = wxFileDialog:getPath(Dialog),
-        Path = wxFileDialog:getDirectory(Dialog),        
-	ref_add(?LAST_PATH,Path),  
+        Path = wxFileDialog:getDirectory(Dialog),
+	ref_add(?LAST_PATH,Path),
 	loadFile(File);
       _Other -> continue
   end,

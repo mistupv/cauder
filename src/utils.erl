@@ -12,7 +12,7 @@
          select_proc_with_var/2, list_from_core/1,
          update_env/2, merge_env/2,
          replace/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
-         moduleNames/1,
+         funNames/1,
          stringToFunName/1,stringToCoreArgs/1, toCore/1, toErlang/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
@@ -31,8 +31,8 @@ fundef_lookup(FunName, FunDefs) ->
     %io:fwrite("---------------~n"),
     %io:write(FunName),
     %io:fwrite("~n---------------~n"),
-    %io:write(FunDefs), 
-    %io:fwrite("~n---------------~n"), 
+    %io:write(FunDefs),
+    %io:fwrite("~n---------------~n"),
   case lists:keyfind(FunName, 1, FunDefs) of
       {_, FunDef} -> FunDef;
       false -> io:fwrite("Funzione non trovata", [])
@@ -444,17 +444,15 @@ pp_roll_log(#sys{roll = RollLog}) ->
   string:join(RollLog,"\n").
 
 %%--------------------------------------------------------------------
-%% @doc Returns the module names from Forms
+%% @doc Returns a list with the names of the functions defined in the given FunForms
 %% @end
 %%--------------------------------------------------------------------
-moduleNames(Forms) ->
-  FunDefs = cerl:module_defs(Forms),
-  FunNames = [cerl:var_name(Var) || {Var,_Fun} <- FunDefs],
-  FunNameStrings = [funNameToString({Name,Arity}) || {Name,Arity} <- FunNames, Name =/= 'module_info'],
-  FunNameStrings.
+-spec funNames(FunForms) -> FunNames when
+  FunForms :: [erl_parse:af_function_decl()],
+  FunNames :: [string()].
 
-funNameToString({Name,Arity}) ->
-  atom_to_list(Name) ++ "/" ++ integer_to_list(Arity).
+funNames(FunForms) ->
+  [atom_to_list(Name) ++ "/" ++ integer_to_list(Arity) || {function, _, Name, Arity, _} <- FunForms].
 
 %%--------------------------------------------------------------------
 %% @doc Converts a string String into a Core Erlang function name
