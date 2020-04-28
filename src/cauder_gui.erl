@@ -535,36 +535,84 @@ zoomOut() ->
   wxTextCtrl:setFont(CodeText, NewFont),
   wxTextCtrl:setFont(StateText, NewFont).
 
+%%--------------------------------------------------------------------
+%% @doc Initializes the system.
+%%
+%% @param Fun Entry point of the system.
+%% @param Args Arguments of the entry point.
+%% @param Pid Pid for the new system.
+%% @param Log Initial system log.
+%% @end
+%%--------------------------------------------------------------------
+-spec(init_system(Fun, Args, Pid, Log) -> no_return() when
+  Fun :: atom(),
+  Args :: [erl_parse:abstract_expr()],
+  Pid :: pos_integer(),
+  Log :: list()). % TODO
+
 init_system(Fun, Args, Pid, Log) ->
-  Proc = #proc{pid = cerl:c_int(Pid),
-               log = Log,
-               exp = cerl:c_apply(Fun, Args),
-               spf = cerl:var_name(Fun)},
+  % Store the new system
+  Proc = #proc{
+    pid = erl_syntax:integer(Pid),
+    log = Log,
+    exp = [erl_syntax:application(erl_syntax:atom(Fun), Args)],
+    spf = {Fun, length(Args)}
+  },
   Procs = [Proc],
   Sched = utils_gui:sched_opt(),
   System = #sys{sched = Sched, procs = Procs},
   ref_add(?SYSTEM, System),
+
+  % Update system status
   Status = ref_lookup(?STATUS),
   NewStatus = Status#status{running = true},
   ref_add(?STATUS, NewStatus).
 
-start(Fun,Args) ->
+%%--------------------------------------------------------------------
+%% @doc Starts a new system.
+%%
+%% @param Fun Entry point of the system.
+%% @param Args Arguments of the entry point.
+%% @end
+%%--------------------------------------------------------------------
+-spec start(Fun, Args) -> no_return() when
+  Fun :: atom(),
+  Args :: [erl_parse:abstract_expr()].
+
+start(Fun, Args) ->
   start(Fun, Args, 1, []).
 
-start(Fun,Args, Pid, Log) ->
-  Status = ref_lookup(?STATUS),
-  #status{loaded = {true, FunDefs}} = Status,
+%%--------------------------------------------------------------------
+%% @doc Starts a new system.
+%%
+%% @param Fun Entry point function of the system.
+%% @param Args Arguments of the entry point.
+%% @param Pid Initial pid for the new system.
+%% @param Log Initial system log.
+%% @end
+%%--------------------------------------------------------------------
+-spec start(Fun, Args, Pid, Log) -> no_return() when
+  Fun :: atom(),
+  Args :: [erl_parse:abstract_expr()],
+  Pid :: pos_integer(),
+  Log :: list(). % TODO
+
+start(Fun, Args, Pid, Log) ->
+  % Get current function definitions
+  #status{loaded = {true, FunDefs}} = ref_lookup(?STATUS),
+
+  % Initialize system
   utils_gui:stop_refs(),
   cauder:start_refs(FunDefs),
   init_system(Fun, Args, Pid, Log),
   refresh(true),
-  LeftNotebook = ref_lookup(?LEFT_NOTEBOOK),
-  wxNotebook:setSelection(LeftNotebook, ?PAGEPOS_STATE),
-  {FunName, FunArity} = cerl:var_name(Fun),
-  StartString = "Started system with " ++
-                atom_to_list(FunName) ++ "/" ++
-                integer_to_list(FunArity) ++ " fun application!",
-  utils_gui:update_status_text(StartString).
+
+  % Open the 'State' tab
+  wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_STATE),
+
+  % Update status bar message
+  StatusString = "Started system with " ++ atom_to_list(Fun) ++ "/" ++ integer_to_list(length(Args)) ++ " fun application!",
+  utils_gui:update_status_text(StatusString).
 
 refresh_buttons(Options) ->
   PidTextCtrl = ref_lookup(?PID_TEXT),
@@ -610,18 +658,14 @@ refresh(RefState) ->
   end.
 
 start() ->
-  InputTextCtrl = ref_lookup(?INPUT_TEXT),
-  InputText = wxTextCtrl:getValue(InputTextCtrl),
-  FunChoice = ref_lookup(?FUN_CHOICE),
-  NumChoice = wxChoice:getSelection(FunChoice),
-  StringChoice = wxChoice:getString(FunChoice, NumChoice),
-  Fun = utils:stringToFunName(StringChoice),
-  Args = utils:stringToCoreArgs(InputText),
-  {_, FunArity} = cerl:var_name(Fun),
-  case FunArity == length(Args) of
+  InputText = wxTextCtrl:getValue(ref_lookup(?INPUT_TEXT)),
+  SelectedFun = wxChoice:getStringSelection(ref_lookup(?FUN_CHOICE)),
+  {FunName, Arity} = utils:stringToNameAndArity(SelectedFun),
+  Args = utils:stringToArgs(InputText),
+  case Arity == length(Args) of
     true ->
-      start(Fun, Args),
-      ?LOG("start fun " ++ StringChoice ++ " with args " ++ InputText);
+      start(FunName, Args),
+      ?LOG("start fun " ++ SelectedFun ++ " with args " ++ InputText);
     false ->
       utils_gui:update_status_text(?ERROR_NUM_ARGS),
       error

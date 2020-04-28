@@ -58,17 +58,27 @@
 
 -define(LAST_PATH, last_path).
 
--record(proc, {pid,
-               hist = [],
-               log  = [],
-               env  = [],
-               exp,
-               mail = [],
-               spf  = undef}).
-
 -record(msg, {dest,
               val,
               time}).
+
+%% Process
+-record(proc, {
+  % Process PID
+  pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  % History
+  hist = [],
+  % Log
+  log = [],
+  % Environment
+  env = [],
+  % List of expressions
+  exp :: [erl_syntax:syntaxTree()], % TODO Less generic type
+  % Process mailbox
+  mail = [] :: [#msg{}],
+  % The entry point function for this process
+  spf = undef :: undef | {atom(), arity()}
+}).
 
 -record(sys, {sched = ?SCHED_PRIO_RANDOM,
               msgs  = [],

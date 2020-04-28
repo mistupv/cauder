@@ -25,7 +25,7 @@ eval_seq_1(Env,Exp) ->
     cons ->
       ConsHdExp = cerl:cons_hd(Exp),
       ConsTlExp = cerl:cons_tl(Exp),
-      case is_exp(cerl:cons_hd(Exp)) of
+      case is_expr(cerl:cons_hd(Exp)) of
         true ->
           {NewEnv,NewConsHdExp,Label} = eval_seq(Env,ConsHdExp),
           NewExp = cerl:c_cons_skel(NewConsHdExp,
@@ -44,10 +44,10 @@ eval_seq_1(Env,Exp) ->
       {NewEnv, NewTupleEs, Label} = eval_list(Env, cerl:tuple_es(Exp)),
       NewExp = cerl:c_tuple_skel(NewTupleEs),
       {NewEnv, NewExp, Label};
-    apply -> 
+    apply ->
       ApplyArgs = cerl:apply_args(Exp),
       ApplyOp = cerl:apply_op(Exp),
-      case is_exp(ApplyArgs) of
+      case is_expr(ApplyArgs) of
         true ->
           {NewEnv,NewApplyArgs,Label} = eval_seq(Env,ApplyArgs),
           NewExp = cerl:update_c_apply(Exp,
@@ -66,7 +66,7 @@ eval_seq_1(Env,Exp) ->
       end;
     'case' ->
       CaseArg = cerl:case_arg(Exp),
-      case is_exp(CaseArg) of
+      case is_expr(CaseArg) of
         true ->
           {NewEnv,NewCaseArg,Label} = eval_seq(Env,CaseArg),
           NewExp = cerl:update_c_case(Exp,
@@ -92,12 +92,12 @@ eval_seq_1(Env,Exp) ->
               NewEnv = utils:merge_env(Env, Bindings),
               {NewEnv,ClauseBody,tau};
             {false,_} ->
-              io:fwrite("Error: No matching clause~n") 
+              io:fwrite("Error: No matching clause~n")
           end
       end;
     'let' ->
       LetArg = cerl:let_arg(Exp),
-      case is_exp(LetArg) of
+      case is_expr(LetArg) of
         true ->
           {NewEnv,NewLetArg,Label} = eval_seq(Env,LetArg),
           NewExp = cerl:update_c_let(Exp,
@@ -128,7 +128,7 @@ eval_seq_1(Env,Exp) ->
       CallModule = cerl:call_module(Exp),
       CallName = cerl:call_name(Exp),
 
-      case is_exp(CallModule) of
+      case is_expr(CallModule) of
         true ->
           {NewEnv,NewCallModule,Label} = eval_seq(Env,CallModule),
           NewExp = cerl:update_c_call(Exp,
@@ -137,7 +137,7 @@ eval_seq_1(Env,Exp) ->
                                       CallArgs),
           {NewEnv,NewExp,Label};
         false ->
-          case is_exp(CallName) of
+          case is_expr(CallName) of
             true ->
               {NewEnv,NewCallName,Label} = eval_seq(Env,CallName),
               NewExp = cerl:update_c_call(Exp,
@@ -146,7 +146,7 @@ eval_seq_1(Env,Exp) ->
                                           CallArgs),
               {NewEnv,NewExp,Label};
             false ->
-              case is_exp(CallArgs) of
+              case is_expr(CallArgs) of
                 true ->
                   {NewEnv,NewCallArgs,Label} = eval_list(Env,CallArgs),
                   NewExp = cerl:update_c_call(Exp,
@@ -195,13 +195,13 @@ eval_seq_1(Env,Exp) ->
 									 cerl:module_defs(CoreForms)),
 				  Stripper = fun(Tree) -> cerl:set_ann(Tree, []) end,
 				  CleanCoreForms = cerl_trees:map(Stripper, NoAttsCoreForms),
-				  FunDefs = cerl:module_defs(CleanCoreForms),			  
+				  FunDefs = cerl:module_defs(CleanCoreForms),
 				  ConcName = cerl:concrete(CallName),
 				  %ConcArgs = [utils:toErlang(Arg) || Arg <- CallArgs],
 				  %io:fwrite("---------------~n"),
 				  %io:write(CallName),
 				  %io:fwrite("~n---------------~n"),
-				  %FunDef = utils:fundef_lookup(CallName, FunDefs), 
+				  %FunDef = utils:fundef_lookup(CallName, FunDefs),
 				  FunDef = utils:fundef_lookup(cerl:c_var({ConcName,cerl:call_arity(Exp)}), FunDefs),
 				  NewFunDef = utils:fundef_rename(FunDef),
 				  FunBody = cerl:fun_body(NewFunDef),
@@ -210,7 +210,7 @@ eval_seq_1(Env,Exp) ->
 				  NewEnv = utils:merge_env(Env, lists:zip(FunArgs,CallArgs)), %ApplyArgs
 				  {NewEnv,FunBody,tau};
 			      error -> %for builtin
-				  ConcModule = cerl:concrete(CallModule), 
+				  ConcModule = cerl:concrete(CallModule),
 				  ConcName = cerl:concrete(CallName),
 				  ConcArgs = [utils:toErlang(Arg) || Arg <- CallArgs],
 				  ConcExp = apply(ConcModule, ConcName, ConcArgs),
@@ -227,7 +227,7 @@ eval_seq_1(Env,Exp) ->
       end;
     seq ->
       SeqArg = cerl:seq_arg(Exp),
-      case is_exp(SeqArg) of
+      case is_expr(SeqArg) of
         true ->
           {NewEnv,NewSeqArg,Label} = eval_seq(Env,SeqArg),
           NewExp = cerl:update_c_seq(Exp,
@@ -253,15 +253,15 @@ eval_seq_1(Env,Exp) ->
 %nit([A|R]) -> [A|init(R)].
 
 replace_guards(Bindings,Exps) ->
-  lists:map(fun({c_clause,L,Pats,Guard,Exp}) -> 
+  lists:map(fun({c_clause,L,Pats,Guard,Exp}) ->
           Guard2 = utils:replace_all(Bindings,Guard),
           Guard3 = eval_guard(Guard2),
           {c_clause,L,Pats,Guard3,Exp}
           %case ReducedGuard of
           %    {value,true} -> {c_clause,L,Pats,true,Exp};
           %    _Other -> {c_clause,L,Pats,ReducedGuard,Exp}
-          %end 
-        end, Exps).  
+          %end
+        end, Exps).
 
   eval_guard(Exp) ->
     case cerl:type(Exp) of
@@ -278,10 +278,10 @@ replace_guards(Bindings,Exps) ->
 	    {ok, ParsedExp, _} = erl_scan:string(StrExp),
 	    {ok, TypedExp} = erl_parse:parse_exprs(ParsedExp),
 	    hd([utils:toCore(Expr) || Expr <- TypedExp]);
-	'let' -> 
+	'let' ->
 	    %io:format("1)~w~n",[Exp]),
 	    LetArg = cerl:let_arg(Exp),
-	    case is_exp(LetArg) of
+	    case is_expr(LetArg) of
 		true ->
 		    NewLetArg=eval_guard(LetArg),
 		    NewExp = cerl:update_c_let(Exp,
@@ -290,7 +290,7 @@ replace_guards(Bindings,Exps) ->
 					       cerl:let_body(Exp)),
 		    eval_guard(NewExp);
 		false ->
-		    LetVars = cerl:let_vars(Exp), 
+		    LetVars = cerl:let_vars(Exp),
 		    LetEnv =
 			case cerl:let_arity(Exp) of
 			    1 -> lists:zip(LetVars,[LetArg]);
@@ -331,7 +331,7 @@ eval_step(System, Pid) ->
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
   #proc{pid = Pid, hist = Hist, env = Env, exp = Exp, mail = Mail} = Proc,
   {NewEnv, NewExp, Label} = eval_seq(Env, Exp),
-  NewSystem = 
+  NewSystem =
     case Label of
       tau ->
         NewProc = Proc#proc{hist = [{tau,Env,Exp}|Hist], env = NewEnv, exp = NewExp},
@@ -373,7 +373,7 @@ eval_step(System, Pid) ->
         RepExp = utils:replace(Var, RecExp, NewExp),
         NewHist = [{rec, Env, Exp, ConsMsg, Mail}|Hist],
         NewProc = Proc#proc{hist = NewHist, env = UpdatedEnv, exp = RepExp, mail = NewMail},
-        {MsgValue, Time} = ConsMsg, 
+        {MsgValue, Time} = ConsMsg,
         TraceItem = #trace{type = ?RULE_RECEIVE, from = Pid, val = MsgValue, time = Time},
         NewTrace = [TraceItem|Trace],
         System#sys{msgs = Msgs, procs = [NewProc|RestProcs], trace = NewTrace}
@@ -395,21 +395,32 @@ eval_sched(System, Id) ->
   NewProc = Proc#proc{mail = NewMail},
   System#sys{msgs = RestMsgs, procs = [NewProc|RestProcs]}.
 
-is_exp([]) -> false;
-is_exp(Exp) when is_list(Exp) ->
-  lists:any(fun is_exp/1, Exp);
-is_exp(Exp) -> 
-  case cerl:type(Exp) of
-    literal -> false;
-    nil -> false;
-    cons -> is_exp(cerl:cons_hd(Exp)) or is_exp(cerl:cons_tl(Exp));
-    values -> is_exp(cerl:values_es(Exp));
-    tuple -> is_exp(cerl:tuple_es(Exp));
-    _Other -> true
+%%--------------------------------------------------------------------
+%% @doc Checks if Expr is an expression or not
+%% @end
+%%--------------------------------------------------------------------
+
+-spec is_expr(Expr) -> boolean() when
+  Expr :: erl_syntax:syntaxTree() | [erl_syntax:syntaxTree()]. % TODO Less generic type
+
+is_expr([]) ->
+  false;
+is_expr(Expr) when is_list(Expr) ->
+  lists:any(fun is_expr/1, Expr);
+is_expr(Expr) ->
+  case erl_syntax:type(Expr) of
+    nil ->
+      false;
+    list ->
+      is_expr(erl_syntax:list_elements(Expr));
+    tuple ->
+      is_expr(erl_syntax:tuple_elements(Expr));
+    _ ->
+      not erl_syntax:is_literal(Expr)
   end.
 
 eval_list(Env,[Exp|Exps]) ->
-  case is_exp(Exp) of
+  case is_expr(Exp) of
     true ->
       {NewEnv,NewExp,Label} = eval_seq(Env,Exp),
       {NewEnv,[NewExp|Exps],Label};
@@ -431,18 +442,18 @@ matchrec(Clauses, [CurMsg|RestMsgs], AccMsgs, Env) ->
   NewClauses = preprocessing_clauses(Clauses,MsgValue,Env),
   %io:format("matchrec (NewClauses): ~p~n",[NewClauses]),
   case cerl_clauses:reduce(NewClauses, [MsgValue]) of
-    {true, {Clause, Bindings}} -> 
+    {true, {Clause, Bindings}} ->
       ClauseBody = cerl:clause_body(Clause),
       NewMsgs =  AccMsgs ++ RestMsgs,
       {Bindings, ClauseBody, CurMsg, NewMsgs};
-    {false, []} -> 
+    {false, []} ->
 	  matchrec(Clauses, RestMsgs, AccMsgs ++ [CurMsg],Env);
       {false, [Clause|OtherClauses]} -> io:format("CauDEr: Unsupported pattern, some behaviours may be missed ~n~w~n",[Clause]),
-			matchrec(Clauses, RestMsgs, AccMsgs ++ [CurMsg],Env)		
+			matchrec(Clauses, RestMsgs, AccMsgs ++ [CurMsg],Env)
   end.
 
 preprocessing_clauses(Clauses,Msg,Env) ->
-  lists:map(fun({c_clause,L,Pats,Guard,Exp}) -> 
+  lists:map(fun({c_clause,L,Pats,Guard,Exp}) ->
   	%io:format("Clauses: ~p~n",[Clauses]),
   	%io:format("match (Pats/[Msg]) ~p~n~p~n",[Pats,[Msg]]),
   	%io:format("--result: ~p~n",[cerl_clauses:match_list(Pats,[Msg])]),
@@ -479,91 +490,88 @@ eval_sched_opts(#sys{msgs = [CurMsg|RestMsgs], procs = Procs}) ->
 
 eval_procs_opts(#sys{procs = []}) ->
   [];
-eval_procs_opts(#sys{procs = [CurProc|RestProcs]}) ->
-  Exp = CurProc#proc.exp,
-  Env = CurProc#proc.env,
-  Pid = CurProc#proc.pid,
-  Mail = CurProc#proc.mail,
-  case eval_exp_opt(Exp, Env, Mail) of
+eval_procs_opts(#sys{procs = [CurProc | RestProcs]}) ->
+  #proc{pid = Pid, env = Env, exp = [Expr | _], mail = Mail} = CurProc,
+  case eval_expr_opt(Expr, Env, Mail) of
     ?NOT_EXP ->
       eval_procs_opts(#sys{procs = RestProcs});
     Opt ->
-      [Opt#opt{sem = ?MODULE, type = ?TYPE_PROC, id = cerl:concrete(Pid)}|eval_procs_opts(#sys{procs = RestProcs})]
+      [Opt#opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:concrete(Pid)} | eval_procs_opts(#sys{procs = RestProcs})]
   end.
 
-eval_exp_opt(Exp, Env, Mail) ->
-  case is_exp(Exp) of
+eval_expr_opt(Expr, Env, Mail) ->
+  case is_expr(Expr) of
     false ->
       ?NOT_EXP;
     true ->
-      case cerl:type(Exp) of
+      case erl_syntax:type(Expr) of
         var ->
           #opt{rule = ?RULE_SEQ};
         cons ->
-          ConsHdExp = cerl:cons_hd(Exp),
-          ConsTlExp = cerl:cons_tl(Exp),
-          case is_exp(ConsHdExp) of
+          ConsHdExp = cerl:cons_hd(Expr),
+          ConsTlExp = cerl:cons_tl(Expr),
+          case is_expr(ConsHdExp) of
             true ->
-              eval_exp_opt(ConsHdExp, Env, Mail);
+              eval_expr_opt(ConsHdExp, Env, Mail);
             false ->
-              case is_exp(ConsTlExp) of
+              case is_expr(ConsTlExp) of
                 true ->
-                  eval_exp_opt(ConsTlExp, Env, Mail);
+                  eval_expr_opt(ConsTlExp, Env, Mail);
                 false ->
                   ?NOT_EXP
               end
           end;
         values ->
-          eval_exp_list_opt(cerl:values_es(Exp), Env, Mail);
+          eval_expr_list_opt(cerl:values_es(Expr), Env, Mail);
         tuple ->
-          eval_exp_list_opt(cerl:tuple_es(Exp), Env, Mail);
-        apply ->
-          ApplyArgs = cerl:apply_args(Exp),
-          case is_exp(ApplyArgs) of
+          eval_expr_list_opt(cerl:tuple_es(Expr), Env, Mail);
+        application ->
+          ApplyArgs = erl_syntax:application_arguments(Expr),
+          case is_expr(ApplyArgs) of
             true ->
-              eval_exp_list_opt(ApplyArgs, Env, Mail);
+              eval_expr_list_opt(ApplyArgs, Env, Mail);
             false ->
               #opt{rule = ?RULE_SEQ}
           end;
         'let' ->
-          LetArg = cerl:let_arg(Exp),
-          case is_exp(LetArg) of
+          LetArg = cerl:let_arg(Expr),
+          case is_expr(LetArg) of
             true ->
-              eval_exp_opt(LetArg, Env, Mail);
+              eval_expr_opt(LetArg, Env, Mail);
             false ->
               #opt{rule = ?RULE_SEQ}
           end;
         seq ->
-          SeqArg = cerl:seq_arg(Exp),
-          case is_exp(SeqArg) of
+          SeqArg = cerl:seq_arg(Expr),
+          case is_expr(SeqArg) of
             true ->
-              eval_exp_opt(SeqArg, Env, Mail);
+              eval_expr_opt(SeqArg, Env, Mail);
             false ->
               #opt{rule = ?RULE_SEQ}
           end;
         'case' ->
-          CaseArg = cerl:case_arg(Exp),
-          case is_exp(CaseArg) of
+          CaseArg = cerl:case_arg(Expr),
+          case is_expr(CaseArg) of
             true ->
-              eval_exp_opt(CaseArg, Env, Mail);
+              eval_expr_opt(CaseArg, Env, Mail);
             false ->
               #opt{rule = ?RULE_SEQ}
           end;
         call ->
-          CallModule = cerl:call_module(Exp),
-          case is_exp(CallModule) of
+          CallModule = cerl:call_module(Expr),
+          case is_expr(CallModule) of
             true ->
-              eval_exp_opt(CallModule, Env, Mail);
+              eval_expr_opt(CallModule, Env, Mail);
             false ->
-              CallName = cerl:call_name(Exp),
-              case is_exp(CallName) of
+              CallName = cerl:call_name(Expr),
+              case is_expr(CallName) of
                 true ->
-                  eval_exp_opt(CallName, Env, Mail);
+                  eval_expr_opt(CallName, Env, Mail);
                 false ->
-                  CallArgs = cerl:call_args(Exp),
-                  case is_exp(CallArgs) of
+                  CallArgs = cerl:call_args(Expr),
+                  case is_expr(CallArgs) of
                     true ->
-                      eval_exp_list_opt(CallArgs, Env, Mail);
+                      eval_expr_list_opt(CallArgs, Env, Mail);
                     false ->
                       case {CallModule, CallName} of
                         {{c_literal, _, 'erlang'},{c_literal, _, 'spawn'}} -> #opt{rule = ?RULE_SPAWN};
@@ -579,7 +587,7 @@ eval_exp_opt(Exp, Env, Mail) ->
           % ?LOG("Exp: " ++ ?TO_STRING(Exp) ++ "\n" ++
           %      "SUB: " ++ ?TO_STRING(SubsExp)),
           % ReceiveClauses = cerl:receive_clauses(SubsExp),
-          ReceiveClauses = cerl:receive_clauses(Exp),
+          ReceiveClauses = cerl:receive_clauses(Expr),
           case matchrec(ReceiveClauses, Mail, Env) of
             no_match ->
               ?NOT_EXP;
@@ -589,12 +597,12 @@ eval_exp_opt(Exp, Env, Mail) ->
       end
   end.
 
-eval_exp_list_opt([], _, _) ->
+eval_expr_list_opt([], _, _) ->
   ?NOT_EXP;
-eval_exp_list_opt([CurExp|RestExp], Env, Mail) ->
-  case is_exp(CurExp) of
-    true -> eval_exp_opt(CurExp, Env, Mail);
-    false -> eval_exp_list_opt(RestExp, Env, Mail)
+eval_expr_list_opt([Expr | RestExpr], Env, Mail) ->
+  case is_expr(Expr) of
+    true -> eval_expr_opt(Expr, Env, Mail);
+    false -> eval_expr_list_opt(RestExpr, Env, Mail)
   end.
 
 ref_add(Id, Ref) ->

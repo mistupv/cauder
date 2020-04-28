@@ -13,7 +13,7 @@
          update_env/2, merge_env/2,
          replace/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
          funNames/1,
-         stringToFunName/1,stringToCoreArgs/1, toCore/1, toErlang/1,
+         stringToNameAndArity/1,stringToArgs/1, toCore/1, toErlang/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
@@ -343,13 +343,13 @@ pp_env_1(Env, Exp, Opts) ->
   PrintEnv =
     case proplists:get_value(?PRINT_FULL_ENV, Opts) of
       true  -> Env;
-      false -> rel_binds(Env, Exp)
+      false -> relevant_bindings(Env, Exp)
     end,
   PairsList = [pp_pair(Var,Val) || {Var,Val} <- PrintEnv],
   "{" ++ string:join(PairsList,", ") ++ "}".
 
-pp_pair(Var,Val) ->
-  pp(Var) ++ " -> " ++ pp(Val).
+pp_pair(Var, Val) ->
+  atom_to_list(Var) ++ " -> " ++ pp(Val).
 
 is_conc_item({spawn,_,_,_}) -> true;
 is_conc_item({send,_,_,_,_}) -> true;
@@ -397,13 +397,14 @@ pp_msg_mail(Val, Time) ->
   "{" ++ pp(Val) ++ "," ++  [{?CAUDER_GREEN, integer_to_list(Time)}] ++ "}".
 
 
-pp(CoreForm, Opts) ->
+pp(Exprs, Opts) ->
   case proplists:get_value(?PRINT_EXP, Opts) of
     false -> "";
-    true  -> "EXP: " ++ pp(CoreForm) ++ "\n"
+    true -> "EXP: " ++ lists:join(",\n     ", [pp(Expr) || Expr <- Exprs]) ++ "\n"
   end.
 
-pp(CoreForm) -> lists:flatten(core_pp:format(CoreForm)).
+pp(Expr) ->
+  lists:flatten(erl_prettypr:format(Expr)).
 
 %%--------------------------------------------------------------------
 %% @doc Pretty-prints a given system trace
@@ -455,28 +456,35 @@ funNames(FunForms) ->
   [atom_to_list(Name) ++ "/" ++ integer_to_list(Arity) || {function, _, Name, Arity, _} <- FunForms].
 
 %%--------------------------------------------------------------------
-%% @doc Converts a string String into a Core Erlang function name
+%% @doc Converts a String into tuple with the Name and Arity of a function
 %% @end
 %%--------------------------------------------------------------------
-stringToFunName(String) ->
+-spec stringToNameAndArity(String) -> {Name, Arity} when
+  String :: string(),
+  Name :: atom(),
+  Arity :: arity().
+
+stringToNameAndArity(String) ->
   FunParts = string:tokens(String, "/"),
-  Name = list_to_atom(lists:nth(1,FunParts)),
-  Arity = list_to_integer(lists:nth(2,FunParts)),
-  cerl:c_var({Name,Arity}).
+  Name = list_to_atom(lists:nth(1, FunParts)),
+  Arity = list_to_integer(lists:nth(2, FunParts)),
+  {Name, Arity}.
 
 %%--------------------------------------------------------------------
 %% @doc Parses a string Str that represents a list of arguments
-%% and transforms these arguments to their equivalent in Core Erlang
+%% and transforms these arguments to their equivalent in Abstract Syntax
 %% @end
 %%--------------------------------------------------------------------
-stringToCoreArgs([]) ->
+-spec stringToArgs(Str) -> [Args] when
+  Str :: string(),
+  Args :: [erl_parse:abstract_expr()].
+
+stringToArgs([]) ->
   [];
-stringToCoreArgs(Str) ->
-  StrDot = Str ++ ".",
-  {ok, ParsedStr, _} = erl_scan:string(StrDot),
-  {ok, Exprs} = erl_parse:parse_exprs(ParsedStr),
-  CoreExprs = [toCore(Expr) || Expr <- Exprs],
-  CoreExprs.
+stringToArgs(Str) ->
+  {ok, Tokens, _} = erl_scan:string(Str ++ "."),
+  {ok, Args} = erl_parse:parse_exprs(Tokens),
+  Args.
 
 %%--------------------------------------------------------------------
 %% @doc Transforms an Erlang expression Expr to its equivalent in
@@ -614,12 +622,9 @@ last_msg_rest(Mail) ->
   RestMail = lists:sublist(Mail,LenMail-1),
   {LastMsg, RestMail}.
 
-rel_binds(Env, Exp) ->
-  RelVars = cerl_trees:variables(Exp),
-  lists:filter( fun ({Var,_}) ->
-                  VarName = cerl:var_name(Var),
-                  lists:member(VarName,RelVars)
-                end, Env).
+relevant_bindings(Env, Exprs) ->
+  Vars = sets:union([erl_syntax_lib:variables(Expr) || Expr <- Exprs]),
+  [Bind || Bind = {Var, _} <- erl_eval:bindings(Env), sets:is_element(Var, Vars)].
 
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
 [["Roll send from ",pp_pid(Pid), " of ",pp(MsgValue), " to ",pp_pid(OtherPid), " (",integer_to_list(Time),")"]].
