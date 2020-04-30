@@ -5,20 +5,20 @@
 
 -module(utils).
 -export([fundef_lookup/2, fundef_lookup/3, fundef_rename/1, substitute/2,
-         build_var/1, build_var/2, pid_exists/2,
+         temp_variable/0, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,
          select_proc_with_time/2, select_proc_with_send/2,
          select_proc_with_spawn/2, select_proc_with_rec/2,
          select_proc_with_var/2, list_from_core/1,
          merge_env/2,
-         replace/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
+         replace_variable/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
          funNames/1,
          stringToNameAndArity/1,stringToArgs/1, toCore/1, toErlang/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
-         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1]).
+         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0]).
 
 -include("cauder.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -108,13 +108,23 @@ substitute(SuperExp, Env) ->
         _   -> Exp
       end
     end, SuperExp).
-%%--------------------------------------------------------------------
-%% @doc Builds a variable from a given number Num
-%% @end
-%%--------------------------------------------------------------------
-build_var(Num) ->
-  NumAtom = list_to_atom("k_" ++ integer_to_list(Num)),
-  cerl:c_var(NumAtom).
+
+%% =====================================================================
+%% @doc Creates a variable with the name 'k_<num>' being <num> a unique
+%% positive number.
+%%
+%% This variable is intended to be used as a temporal variable in calls
+%% where a resulting value is not known immediately, so when the value
+%% is calculated it can replace this variable.
+%%
+%% @see replace_variable/3
+
+-spec temp_variable() -> erl_parse:af_variable().
+
+temp_variable() ->
+  Number = fresh_variable_number(),
+  Name = "k_" ++ integer_to_list(Number),
+  erl_syntax:revert(erl_syntax:variable(Name)).
 
 %%------------ It is not working in Erlang 22-----------------------------
 %%build_var(Name,Num) ->
@@ -146,7 +156,7 @@ pid_exists(Procs, Pid) ->
 %%--------------------------------------------------------------------
 -spec select_proc(Procs, Pid) -> {Proc, RestProcs} when
   Procs :: [Proc],
-  Pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  Pid :: erl_parse:af_integer(),
   Proc :: #proc{},
   RestProcs :: [Proc].
 
@@ -262,59 +272,38 @@ merge_env(Env, [{Name, Value} | RestBindings]) ->
 replace_all([],Exp) -> Exp;
 replace_all([{Var,Val}|R],Exp) ->
   %io:format("replace: ~p~n~p~n~p~n",[Var,Val,Exp]),
-  NewExp = utils:replace(Var,Val,Exp),
+  NewExp = utils:replace_variable(Var,Val,Exp),
   %io:format("--result: p~n",[NewExp]),
   replace_all(R,NewExp).
 
 
-%%--------------------------------------------------------------------
-%% @doc Replaces a variable Var by SubExp (subexpression) in SuperExp
-%% (expression)
-%% @end
-%%--------------------------------------------------------------------
-%replace(Var, SubExp, SuperExp) ->
-%  VarName = cerl:var_name(Var),
-%  case cerl:type(SuperExp) of
-%    var -> case cerl:var_name(SuperExp) of
-%             VarName -> SubExp;
-%             _Other -> SuperExp
-%           end;
-%    call -> NewArgs = lists:map(fun (E) -> replace(Var,SubExp,E) end, cerl:call_args(SuperExp)),
-%            CallModule = cerl:call_module(SuperExp),
-%            CallName = cerl:call_name(SuperExp),
-%            cerl:c_call(CallModule,CallName,NewArgs);
-%    %_Other -> SuperExp
-%    _Other -> cerl_trees:map(
-%                fun (Exp) ->
-%                  case cerl:type(Exp) of
-%                    var ->
-%                      case cerl:var_name(Exp) of
-%                          VarName -> SubExp;
-%                          _Other -> Exp
-%                      end;
-%                    _Other -> Exp
-%                  end
-%                end, SuperExp)
-%  end.
+%% =====================================================================
+%% @doc Replaces all occurrences of the variable Target in each one of
+%% the Expressions with the literal value Replacement.
 
-%%--------------------------------------------------------------------
-%% @doc Replaces a variable Var by SubExp (subexpression) in SuperExp
-%% (expression)
-%% @end
-%%--------------------------------------------------------------------
-replace(Var, SubExp, SuperExp) ->
-  VarName = cerl:var_name(Var),
-  cerl_trees:map(
-    fun (Exp) ->
-      case cerl:type(Exp) of
-        var ->
-          case cerl:var_name(Exp) of
-            VarName -> SubExp;
-            _Other -> Exp
-          end;
-        _Other -> Exp
-      end
-    end, SuperExp).
+-spec replace_variable(Target, Replacement, Expressions) -> Result when
+  Target :: erl_parse:af_variable(),
+  Replacement :: erl_parse:af_literal(),
+  Expressions :: [erl_parse:abstract_expr()],
+  Result :: [erl_parse:abstract_expr()].
+
+replace_variable(Target, Replacement, Expressions) ->
+  lists:map(
+    fun(Expr) ->
+      erl_syntax:revert(
+        erl_syntax_lib:map(
+          fun(Node) ->
+            case Node of
+              Target -> Replacement;
+              Other -> Other
+            end
+          end,
+          Expr
+        )
+      )
+    end,
+    Expressions
+  ).
 
 %%--------------------------------------------------------------------
 %% @doc Pretty-prints a given System
@@ -635,9 +624,13 @@ has_var(Env, Var) ->
   end.
 
 fresh_variable_name(Name) ->
-  VarNum = ref_lookup(?FRESH_VAR),
-  ref_add(?FRESH_VAR, VarNum + 1),
-  list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(VarNum)).
+  Number = fresh_variable_number(),
+  list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(Number)).
+
+fresh_variable_number() ->
+  Number = ref_lookup(?FRESH_VAR),
+  ref_add(?FRESH_VAR, Number + 1),
+  Number.
 
 last_msg_rest(Mail) ->
   LastMsg = lists:last(Mail),
@@ -754,3 +747,9 @@ ref_add(Id, Ref) ->
 
 ref_lookup(Id) ->
     ets:lookup_element(?APP_REF, Id, 2).
+
+
+fresh_pid() ->
+  Pid = ref_lookup(?FRESH_PID),
+  ref_add(?FRESH_PID, Pid + 1),
+  Pid.

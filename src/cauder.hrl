@@ -71,7 +71,7 @@
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  pid :: erl_parse:af_integer(), % TODO Why not an integer literal
   % History
   hist = [] :: {tau, erl_eval:binding_struct(), erl_parse:abstract_expr()} | any(), % TODO Add all possible types
   % Log

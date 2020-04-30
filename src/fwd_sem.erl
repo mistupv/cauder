@@ -16,7 +16,13 @@
   Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
   NewEnv :: erl_eval:binding_struct(),
   NewExp :: Exp | [Exp], % FIXME Simplify
-  Label :: tau | any(). % TODO Add other labels
+  Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | any(), % TODO Add other labels
+  % Temporal variable
+  Var :: erl_syntax:syntaxTree(),
+  % Spawn function name
+  FunName :: erl_syntax:syntaxTree(),
+  % Spawn function arguments
+  FunArgs :: [erl_syntax:syntaxTree()].
 
 eval_seq(Env, Exp) ->
   case is_list(Exp) of
@@ -30,9 +36,16 @@ eval_seq(Env, Exp) ->
   Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
   NewEnv :: erl_eval:binding_struct(),
   NewExp :: Exp | [Exp], % FIXME Simplify
-  Label :: tau | any(). % TODO Add other labels
+  Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | any(), % TODO Add other labels
+  % Temporal variable
+  Var :: erl_syntax:syntaxTree(),
+  % Spawn function name
+  FunName :: erl_syntax:syntaxTree(),
+  % Spawn function arguments
+  FunArgs :: [erl_syntax:syntaxTree()].
 
 eval_seq_1(Env, Exp) ->
+  io:format("eval_seq_1:\n\tEnv: ~p\n\tExp: ~p\n", [Env, Exp]),
   case erl_syntax:type(Exp) of
     variable ->
       Name = erl_syntax:variable_name(Exp),
@@ -99,33 +112,48 @@ eval_seq_1(Env, Exp) ->
           {Env, NewValue, tau}
       end;
     application ->
-      FunArgs = erl_syntax:application_arguments(Exp),
-      case is_expr(FunArgs) of
+      CallArgs = erl_syntax:application_arguments(Exp),
+      case is_expr(CallArgs) of
         true ->
-          {NewEnv, NewFunArgs, Label} = eval_seq(Env, FunArgs),
+          {NewEnv, NewFunArgs, Label} = eval_seq(Env, CallArgs),
           % Structure: {call, Pos, Operator, Args}
           NewExp = setelement(4, Exp, NewFunArgs),
           {NewEnv, NewExp, Label};
         false ->
-          FunName = erl_syntax:atom_value(erl_syntax:application_operator(Exp)),
-          % Check if the function is in this file
-          case utils:fundef_lookup(FunName, length(FunArgs), ref_lookup(?FUN_DEFS)) of
-            {value, FunDef} -> FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
-              % There should be no variables to evaluate so we pass no bindings
-              % TODO `match_clause` looks like an internal function, because it is not documented
-              {Body, Bindings} = erl_eval:match_clause(FunClauses, FunArgs, [], none),
-              % The environment stores the literal value but `match_clause`
-              % returns the bindings as `erl_parse` nodes so we convert them
-              ValueBindings = [{Name, erl_syntax:concrete(Value)} || {Name, Value} <- Bindings],
-              NewEnv = utils:merge_env(Env, ValueBindings),
-              {NewEnv, Body, tau};
-            false ->
-              % TODO Look for function in other files in the same directory
-              % Function is a BIF so we simply evaluate it
-              % There should be no variables to evaluate so we pass no bindings
-              {value, Value, _} = erl_eval:expr(Exp, []),
-              NewValue = erl_parse:abstract(Value),
-              {Env, NewValue, tau}
+          Op = erl_syntax:application_operator(Exp),
+          case erl_syntax:type(Op) of
+            module_qualifier ->
+              Module = erl_syntax:concrete(erl_syntax:module_qualifier_argument(Op)),
+              case Module of
+                'erlang' ->
+                  Name = erl_syntax:concrete(erl_syntax:module_qualifier_body(Op)),
+                  eval_bif(Name, Exp, Env);
+                % TODO Check if module matches current one
+                % TODO Handle calls to functions in other modules
+                _ ->
+                  % BIF so we just evaluate it
+                  % There should be no variables to evaluate so we pass no bindings
+                  {value, Value, _} = erl_eval:expr(Exp, []),
+                  NewValue = erl_parse:abstract(Value),
+                  {Env, NewValue, tau}
+              end;
+            atom ->
+              Name = erl_syntax:concrete(Op),
+              % Check if the function is in this file
+              case utils:fundef_lookup(Name, length(CallArgs), ref_lookup(?FUN_DEFS)) of
+                {value, FunDef} -> FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
+                  % There should be no variables to evaluate so we pass no bindings
+                  % TODO `match_clause` looks like an internal function, because it is not documented
+                  {Body, Bindings} = erl_eval:match_clause(FunClauses, CallArgs, [], none),
+                  % The environment stores the literal value but `match_clause`
+                  % returns the bindings as `erl_parse` nodes so we convert them
+                  ValueBindings = [{Name, erl_syntax:concrete(Value)} || {Name, Value} <- Bindings],
+                  NewEnv = utils:merge_env(Env, ValueBindings),
+                  {NewEnv, Body, tau};
+                false ->
+                  % TODO Look for function in other files in the same directory
+                  eval_bif(Name, Exp, Env)
+              end
           end
       end;
     list ->
@@ -218,16 +246,12 @@ eval_seq_1(Env, Exp) ->
                 false ->
                   case {CallModule, CallName} of
                     {{c_literal,_,'erlang'},{c_literal,_,'spawn'}} ->
-                      VarNum = ref_lookup(?FRESH_VAR),
-                      ref_add(?FRESH_VAR, VarNum + 1),
-                      Var = utils:build_var(VarNum),
+                      Var = utils:temp_variable(),
                       FunName = lists:nth(2,CallArgs),
                       FunArgs = utils:list_from_core(lists:nth(3,CallArgs)),
                       {Env,Var,{spawn,{Var,FunName,FunArgs}}};
                     {{c_literal,_,'erlang'},{c_literal, _, 'self'}} ->
-                      VarNum = ref_lookup(?FRESH_VAR),
-                      ref_add(?FRESH_VAR, VarNum + 1),
-                      Var = utils:build_var(VarNum),
+                      Var = utils:temp_variable(),
                       {Env, Var, {self, Var}};
                     {{c_literal,_,'erlang'},{c_literal, _, '!'}} ->
                       DestPid = lists:nth(1, CallArgs),
@@ -300,14 +324,34 @@ eval_seq_1(Env, Exp) ->
           {Env,NewExp,tau}
       end;
     'receive' ->
-        VarNum = ref_lookup(?FRESH_VAR),
-        ref_add(?FRESH_VAR, VarNum + 1),
-        Var = utils:build_var(VarNum),
+        Var = utils:temp_variable(),
         % SubsExp = utils:substitute(Exp, Env),
         % {Env, Var, {rec, Var, cerl:receive_clauses(SubsExp)}}
         ReceiveClauses = cerl:receive_clauses(Exp),
         %%ReceiveClauses2 = replace_guards(Env,ReceiveClauses),
         {Env, Var, {rec, Var, ReceiveClauses}}
+  end.
+
+eval_bif(Name, Exp, Env) ->
+  case Name of
+    'spawn' ->
+      TmpVar = utils:temp_variable(),
+      case erl_syntax:application_arguments(Exp) of
+        % TODO erlang:spawn/1,2,4
+        % erlang:spawn/3
+        [_Module, Function, Args] ->
+          % TODO Handle calls to functions in other modules
+          {Env, TmpVar, {spawn, {TmpVar, Function, erl_syntax:list_elements(Args)}}}
+      end;
+    'self' ->
+      TmpVar = utils:temp_variable(),
+      {Env, TmpVar, {self, TmpVar}};
+    _ ->
+      % BIF so we just evaluate it
+      % There should be no variables to evaluate so we pass no bindings
+      {value, Value, _} = erl_eval:expr(Exp, []),
+      NewValue = erl_parse:abstract(Value),
+      {Env, NewValue, tau}
   end.
 
 %init([_X]) -> [];
@@ -387,7 +431,7 @@ replace_guards(Bindings,Exps) ->
 %%--------------------------------------------------------------------
 -spec eval_step(System, Pid) -> NewSystem when
   System :: #sys{},
-  Pid :: erl_syntax:syntaxTree(), % TODO Less generic type
+  Pid :: erl_parse:af_integer(),
   NewSystem :: #sys{}.
 
 eval_step(System, Pid) ->
@@ -403,7 +447,7 @@ eval_step(System, Pid) ->
         System#sys{msgs = Msgs, procs = [NewProc | RestProcs]};
       {self, Var} ->
         NewHist = [{self, Env, Exp}|Hist],
-        RepExp = utils:replace(Var, Pid, NewExp),
+        RepExp = utils:replace_variable(Var, Pid, NewExp),
         NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
         System#sys{msgs = Msgs, procs = [NewProc|RestProcs]};
       {send, DestPid, MsgValue} ->
@@ -417,17 +461,14 @@ eval_step(System, Pid) ->
         NewTrace = [TraceItem|Trace],
         System#sys{msgs = NewMsgs, procs = [NewProc|RestProcs], trace = NewTrace};
       {spawn, {Var, FunName, FunArgs}} ->
-        PidNum = ref_lookup(?FRESH_PID),
-        ref_add(?FRESH_PID, PidNum + 1),
-        SpawnPid = cerl:c_int(PidNum),
-        ArgsLen = length(FunArgs),
-        FunCall = cerl:c_var({cerl:concrete(FunName), ArgsLen}),
-        SpawnProc = #proc{pid = SpawnPid,
-                          env = [],
-                          exp = cerl:c_apply(FunCall,FunArgs),
-                          spf = cerl:var_name(FunCall)},
-        NewHist = [{spawn, Env, Exp, SpawnPid}|Hist],
-        RepExp = utils:replace(Var, SpawnPid, NewExp),
+        SpawnPid = erl_parse:abstract(utils:fresh_pid()),
+        SpawnProc = #proc{
+          pid = SpawnPid,
+          exp = [erl_syntax:application(FunName, FunArgs)],
+          spf = {erl_syntax:atom_value(FunName), length(FunArgs)}
+        },
+        NewHist = [{spawn, Env, Exp, SpawnPid} | Hist],
+        RepExp = utils:replace_variable(Var, SpawnPid, lists:flatten([NewExp], RestExpr)), % FIXME NewExp can be a list or not
         NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
         TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
         NewTrace = [TraceItem|Trace],
@@ -435,7 +476,7 @@ eval_step(System, Pid) ->
       {rec, Var, ReceiveClauses} ->
         {Bindings, RecExp, ConsMsg, NewMail} = matchrec(ReceiveClauses, Mail, NewEnv),
         UpdatedEnv = utils:merge_env(NewEnv, Bindings),
-        RepExp = utils:replace(Var, RecExp, NewExp),
+        RepExp = utils:replace_variable(Var, RecExp, NewExp),
         NewHist = [{rec, Env, Exp, ConsMsg, Mail}|Hist],
         NewProc = Proc#proc{hist = NewHist, env = UpdatedEnv, exp = RepExp, mail = NewMail},
         {MsgValue, Time} = ConsMsg,
@@ -562,6 +603,13 @@ eval_procs_opts(#sys{procs = [CurProc | RestProcs]}) ->
       [Opt#opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:concrete(Pid)} | eval_procs_opts(#sys{procs = RestProcs})]
   end.
 
+
+-spec eval_expr_opt(Expr, Env, Mail) -> Opt when
+  Expr :: [erl_syntax:syntaxTree()],
+  Env :: erl_eval:binding_struct(),
+  Mail :: [#msg{}],
+  Opt :: ?NOT_EXP | #opt{}.
+
 eval_expr_opt(Expr, Env, Mail) ->
   case is_expr(Expr) of
     false ->
@@ -589,7 +637,13 @@ eval_expr_opt(Expr, Env, Mail) ->
                 true ->
                   eval_expr_opt(Right, Env, Mail);
                 false ->
-                  #opt{rule = ?RULE_SEQ}
+                  Op = erl_syntax:atom_value(erl_syntax:infix_expr_operator(Expr)),
+                  case Op of
+                    '!' ->
+                      #opt{rule = ?RULE_SEND};
+                    _ ->
+                      #opt{rule = ?RULE_SEQ}
+                  end
               end
           end;
         prefix_expr ->
@@ -606,7 +660,36 @@ eval_expr_opt(Expr, Env, Mail) ->
             true ->
               eval_expr_list_opt(Args, Env, Mail);
             false ->
-              #opt{rule = ?RULE_SEQ}
+              Op = erl_syntax:application_operator(Expr),
+              case erl_syntax:type(Op) of
+                module_qualifier ->
+                  Module = erl_syntax:concrete(erl_syntax:module_qualifier_argument(Op)),
+                  case Module of
+                    'erlang' ->
+                      Name = erl_syntax:concrete(erl_syntax:module_qualifier_body(Op)),
+                      case Name of
+                        'spawn' ->
+                          #opt{rule = ?RULE_SPAWN};
+                        'self' ->
+                          #opt{rule = ?RULE_SELF};
+                        _ ->
+                          #opt{rule = ?RULE_SEQ}
+                      end;
+                    _ ->
+                      #opt{rule = ?RULE_SEQ}
+                  end;
+                atom ->
+                  Name = erl_syntax:concrete(Op),
+                  % TODO Check for clashes with functions in the same file and/or directory
+                  case Name of
+                    'spawn' ->
+                      #opt{rule = ?RULE_SPAWN};
+                    'self' ->
+                      #opt{rule = ?RULE_SELF};
+                    _ ->
+                      #opt{rule = ?RULE_SEQ}
+                  end
+              end
           end;
         list ->
           eval_expr_list_opt(erl_syntax:list_elements(Expr), Env, Mail);

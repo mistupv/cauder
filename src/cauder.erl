@@ -56,7 +56,7 @@ eval_step(System, Option) ->
   NewSystem =
     case Type of
       ?TYPE_MSG -> Semantics:eval_sched(System, Id);
-      ?TYPE_PROC -> Semantics:eval_step(System, erl_syntax:integer(Id))
+      ?TYPE_PROC -> Semantics:eval_step(System, erl_parse:abstract(Id))
     end,
   NewSystem.
 

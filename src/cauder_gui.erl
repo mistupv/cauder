@@ -555,7 +555,7 @@ zoomOut() ->
 init_system(Fun, Args, Pid, Log) ->
   % Store the new system
   Proc = #proc{
-    pid = erl_syntax:integer(Pid),
+    pid = erl_parse:abstract(Pid),
     log = Log,
     exp = [erl_syntax:application(erl_syntax:atom(Fun), Args)],
     spf = {Fun, length(Args)}
