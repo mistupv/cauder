@@ -13,16 +13,16 @@
 
 -spec eval_seq(Env, Exp) -> {NewEnv, NewExp, Label} when
   Env :: erl_eval:binding_struct(),
-  Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
+  Exp :: erl_parse:abstract_expr(),
   NewEnv :: erl_eval:binding_struct(),
   NewExp :: Exp | [Exp], % FIXME Simplify
   Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | any(), % TODO Add other labels
   % Temporal variable
-  Var :: erl_syntax:syntaxTree(),
+  Var :: erl_parse:af_variable(),
   % Spawn function name
-  FunName :: erl_syntax:syntaxTree(),
+  FunName :: erl_parse:af_atom(),
   % Spawn function arguments
-  FunArgs :: [erl_syntax:syntaxTree()].
+  FunArgs :: [erl_parse:abstract_expr()].
 
 eval_seq(Env, Exp) ->
   case is_list(Exp) of
@@ -33,16 +33,16 @@ eval_seq(Env, Exp) ->
 
 -spec eval_seq_1(Env, Exp) -> {NewEnv, NewExp, Label} when
   Env :: erl_eval:binding_struct(),
-  Exp :: erl_syntax:syntaxTree(), % TODO Less generic type
+  Exp :: erl_parse:abstract_expr(),
   NewEnv :: erl_eval:binding_struct(),
   NewExp :: Exp | [Exp], % FIXME Simplify
   Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | any(), % TODO Add other labels
   % Temporal variable
-  Var :: erl_syntax:syntaxTree(),
+  Var :: erl_parse:af_variable(),
   % Spawn function name
-  FunName :: erl_syntax:syntaxTree(),
+  FunName :: erl_parse:af_atom(),
   % Spawn function arguments
-  FunArgs :: [erl_syntax:syntaxTree()].
+  FunArgs :: [erl_parse:abstract_expr()].
 
 eval_seq_1(Env, Exp) ->
   io:format("eval_seq_1:\n\tEnv: ~p\n\tExp: ~p\n", [Env, Exp]),
@@ -464,7 +464,7 @@ eval_step(System, Pid) ->
         SpawnPid = erl_parse:abstract(utils:fresh_pid()),
         SpawnProc = #proc{
           pid = SpawnPid,
-          exp = [erl_syntax:application(FunName, FunArgs)],
+          exp = [erl_syntax:revert(erl_syntax:application(FunName, FunArgs))],
           spf = {erl_syntax:atom_value(FunName), length(FunArgs)}
         },
         NewHist = [{spawn, Env, Exp, SpawnPid} | Hist],
@@ -507,7 +507,7 @@ eval_sched(System, Id) ->
 %%--------------------------------------------------------------------
 
 -spec is_expr(Expr) -> boolean() when
-  Expr :: erl_syntax:syntaxTree() | [erl_syntax:syntaxTree()]. % TODO Less generic type
+  Expr :: erl_parse:abstract_expr() | [erl_parse:abstract_expr()].
 
 is_expr([]) ->
   false;
@@ -605,7 +605,7 @@ eval_procs_opts(#sys{procs = [CurProc | RestProcs]}) ->
 
 
 -spec eval_expr_opt(Expr, Env, Mail) -> Opt when
-  Expr :: [erl_syntax:syntaxTree()],
+  Expr :: [erl_parse:abstract_expr()],
   Env :: erl_eval:binding_struct(),
   Mail :: [#msg{}],
   Opt :: ?NOT_EXP | #opt{}.

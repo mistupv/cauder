@@ -487,8 +487,8 @@ stringToNameAndArity(String) ->
 %% and transforms these arguments to their equivalent in Abstract Syntax
 %% @end
 %%--------------------------------------------------------------------
--spec stringToArgs(Str) -> [Args] when
-  Str :: string(),
+-spec stringToArgs(String) -> [Args] when
+  String :: string(),
   Args :: [erl_parse:abstract_expr()].
 
 stringToArgs([]) ->

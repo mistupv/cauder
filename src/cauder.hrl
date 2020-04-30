@@ -79,7 +79,7 @@
   % Environment
   env = erl_eval:new_bindings() :: erl_eval:binding_struct(),
   % List of expressions
-  exp :: [erl_syntax:syntaxTree()], % TODO Less generic type
+  exp :: [erl_parse:abstract_expr()],
   % Process mailbox
   mail = [] :: [#msg{}],
   % The entry point function for this process

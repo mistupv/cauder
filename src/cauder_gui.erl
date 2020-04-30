@@ -546,18 +546,18 @@ zoomOut() ->
 %% @param Log Initial system log.
 %% @end
 %%--------------------------------------------------------------------
--spec(init_system(Fun, Args, Pid, Log) -> no_return() when
+-spec init_system(Fun, Args, Pid, Log) -> no_return() when
   Fun :: atom(),
   Args :: [erl_parse:abstract_expr()],
   Pid :: pos_integer(),
-  Log :: list()). % TODO
+  Log :: list(). % TODO
 
 init_system(Fun, Args, Pid, Log) ->
   % Store the new system
   Proc = #proc{
     pid = erl_parse:abstract(Pid),
     log = Log,
-    exp = [erl_syntax:application(erl_syntax:atom(Fun), Args)],
+    exp = [erl_syntax:revert(erl_syntax:application(erl_syntax:atom(Fun), Args))],
     spf = {Fun, length(Args)}
   },
   Procs = [Proc],
