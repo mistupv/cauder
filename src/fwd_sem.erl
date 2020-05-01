@@ -52,7 +52,7 @@ eval_seq_1(Env, Exp) ->
     variable ->
       Name = erl_syntax:variable_name(Exp),
       Binding = orddict:fetch(Name, Env),
-      NewValue = erl_parse:abstract(Binding, erl_syntax:get_pos(Exp)),
+      NewValue = erl_syntax:revert(erl_syntax:abstract(Binding)),
       {Env, NewValue, tau};
     match_expr ->
       Body = erl_syntax:match_expr_body(Exp),
@@ -95,7 +95,10 @@ eval_seq_1(Env, Exp) ->
                   % Infix operators are always built-in, so we just evaluate the expression
                   % There should be no variables to evaluate so we pass no bindings
                   {value, Value, _} = erl_eval:expr(Exp, []),
-                  NewValue = erl_parse:abstract(Value),
+                  % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+                  % of `erl_parser:abstract/1` to avoid problems with lists being
+                  % represented as strings
+                  NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
                   {Env, NewValue, tau}
               end
           end
@@ -116,7 +119,10 @@ eval_seq_1(Env, Exp) ->
           % Prefix operators are always built-in, so we just evaluate the expression
           % There should be no variables to evaluate so we pass no bindings
           {value, Value, _} = erl_eval:expr(Exp, []),
-          NewValue = erl_parse:abstract(Value),
+          % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+          % of `erl_parser:abstract/1` to avoid problems with lists being
+          % represented as strings
+          NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
           {Env, NewValue, tau}
       end;
     application ->
@@ -142,7 +148,10 @@ eval_seq_1(Env, Exp) ->
                   % BIF so we just evaluate it
                   % There should be no variables to evaluate so we pass no bindings
                   {value, Value, _} = erl_eval:expr(Exp, []),
-                  NewValue = erl_parse:abstract(Value),
+                  % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+                  % of `erl_parser:abstract/1` to avoid problems with lists being
+                  % represented as strings
+                  NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
                   {Env, NewValue, tau}
               end;
             atom ->
@@ -358,7 +367,10 @@ eval_bif(Name, Exp, Env) ->
       % BIF so we just evaluate it
       % There should be no variables to evaluate so we pass no bindings
       {value, Value, _} = erl_eval:expr(Exp, []),
-      NewValue = erl_parse:abstract(Value),
+      % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+      % of `erl_parser:abstract/1` to avoid problems with lists being
+      % represented as strings
+      NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
       {Env, NewValue, tau}
   end.
 
