@@ -36,16 +36,18 @@ eval_seq(Env, Exp) ->
   Exp :: erl_parse:abstract_expr(),
   NewEnv :: erl_eval:binding_struct(),
   NewExp :: Exp | [Exp], % FIXME Simplify
-  Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | any(), % TODO Add other labels
+  Label :: tau | {spawn, {Var, FunName, FunArgs}} | {self, Var} | {send, DestPid, MsgValue} | any(), % TODO Add other labels
   % Temporal variable
   Var :: erl_parse:af_variable(),
   % Spawn function name
   FunName :: erl_parse:af_atom(),
   % Spawn function arguments
-  FunArgs :: [erl_parse:abstract_expr()].
+  FunArgs :: [erl_parse:abstract_expr()],
+  DestPid :: erl_parse:af_integer(),
+  MsgValue :: erl_parse:abstract_expr().
 
 eval_seq_1(Env, Exp) ->
-  io:format("eval_seq_1:\n\tEnv: ~p\n\tExp: ~p\n", [Env, Exp]),
+  %io:format("eval_seq_1:\n\tEnv: ~p\n\tExp: ~p\n", [Env, Exp]),
   case erl_syntax:type(Exp) of
     variable ->
       Name = erl_syntax:variable_name(Exp),
@@ -85,11 +87,17 @@ eval_seq_1(Env, Exp) ->
               NewOp = setelement(5, Exp, NewRight),
               {NewEnv, NewOp, Label};
             false ->
-              % Infix operators are always built-in, so we just evaluate the expression
-              % There should be no variables to evaluate so we pass no bindings
-              {value, Value, _} = erl_eval:expr(Exp, []),
-              NewValue = erl_parse:abstract(Value),
-              {Env, NewValue, tau}
+              Op = erl_syntax:atom_value(erl_syntax:infix_expr_operator(Exp)),
+              case Op of
+                '!' ->
+                  {Env, Right, {send, Left, Right}};
+                _ ->
+                  % Infix operators are always built-in, so we just evaluate the expression
+                  % There should be no variables to evaluate so we pass no bindings
+                  {value, Value, _} = erl_eval:expr(Exp, []),
+                  NewValue = erl_parse:abstract(Value),
+                  {Env, NewValue, tau}
+              end
           end
       end;
     % FIXME The '-' prefix causes two steps the show the same expression,
@@ -447,7 +455,7 @@ eval_step(System, Pid) ->
         System#sys{msgs = Msgs, procs = [NewProc | RestProcs]};
       {self, Var} ->
         NewHist = [{self, Env, Exp}|Hist],
-        RepExp = utils:replace_variable(Var, Pid, NewExp),
+        RepExp = utils:replace_variable(Var, Pid, lists:flatten([NewExp], RestExpr)), % FIXME NewExp can be a list or not
         NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
         System#sys{msgs = Msgs, procs = [NewProc|RestProcs]};
       {send, DestPid, MsgValue} ->
@@ -456,7 +464,7 @@ eval_step(System, Pid) ->
         NewMsg = #msg{dest = DestPid, val = MsgValue, time = Time},
         NewMsgs = [NewMsg|Msgs],
         NewHist = [{send, Env, Exp, DestPid, {MsgValue, Time}}|Hist],
-        NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = NewExp},
+        NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = lists:flatten([NewExp], RestExpr)}, % FIXME NewExp can be a list or not
         TraceItem = #trace{type = ?RULE_SEND, from = Pid, to = DestPid, val = MsgValue, time = Time},
         NewTrace = [TraceItem|Trace],
         System#sys{msgs = NewMsgs, procs = [NewProc|RestProcs], trace = NewTrace};
@@ -476,7 +484,7 @@ eval_step(System, Pid) ->
       {rec, Var, ReceiveClauses} ->
         {Bindings, RecExp, ConsMsg, NewMail} = matchrec(ReceiveClauses, Mail, NewEnv),
         UpdatedEnv = utils:merge_env(NewEnv, Bindings),
-        RepExp = utils:replace_variable(Var, RecExp, NewExp),
+        RepExp = utils:replace_variable(Var, RecExp, lists:flatten([NewExp], RestExpr)), % FIXME NewExp can be a list or not
         NewHist = [{rec, Env, Exp, ConsMsg, Mail}|Hist],
         NewProc = Proc#proc{hist = NewHist, env = UpdatedEnv, exp = RepExp, mail = NewMail},
         {MsgValue, Time} = ConsMsg,
@@ -574,10 +582,20 @@ preprocessing_clauses(Clauses,Msg,Env) ->
 %% @doc Gets the evaluation options for a given System
 %% @end
 %%--------------------------------------------------------------------
+
+-spec eval_opts(System) -> Options when
+  System::#sys{},
+  Options::[#opt{}].
+
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
   ProcsOpts = eval_procs_opts(System),
   SchedOpts ++ ProcsOpts.
+
+
+-spec eval_sched_opts(System) -> Options when
+  System::#sys{},
+  Options::[#opt{}].
 
 eval_sched_opts(#sys{msgs = []}) ->
   [];
@@ -591,6 +609,11 @@ eval_sched_opts(#sys{msgs = [CurMsg|RestMsgs], procs = Procs}) ->
       Time = CurMsg#msg.time,
       [#opt{sem = ?MODULE, type = ?TYPE_MSG, id = Time, rule = ?RULE_SCHED}|eval_sched_opts(#sys{msgs = RestMsgs, procs = Procs})]
   end.
+
+
+-spec eval_procs_opts(System) -> Options when
+  System::#sys{},
+  Options::[#opt{}].
 
 eval_procs_opts(#sys{procs = []}) ->
   [];
@@ -613,6 +636,7 @@ eval_procs_opts(#sys{procs = [CurProc | RestProcs]}) ->
 eval_expr_opt(Expr, Env, Mail) ->
   case is_expr(Expr) of
     false ->
+      % TODO Handle literals
       ?NOT_EXP;
     true ->
       case erl_syntax:type(Expr) of
