@@ -15,10 +15,10 @@
 % TODO Add other labels
 % TODO Maybe use concrete values?
 -type label() :: tau
-| {spawn, {erl_parse:af_variable(), erl_parse:af_atom(), [erl_parse:abstract_expr()]}}
-| {self, erl_parse:af_variable()}
-| {send, erl_parse:af_integer(), erl_parse:abstract_expr()}
-| any().
+               | {spawn, {erl_parse:af_variable(), erl_parse:af_atom(), [erl_parse:abstract_expr()]}}
+               | {self, erl_parse:af_variable()}
+               | {send, erl_parse:af_integer(), erl_parse:abstract_expr()}
+               | any().
 
 
 %% =====================================================================
@@ -255,9 +255,13 @@ eval_match_expr(Env, MatchExpr = {match, _, _, _}) ->
       {NewEnv, NewMatchExp, Label};
     false ->
       % There should be no variables to evaluate so we pass no bindings
-      {value, _, Bindings} = erl_eval:expr(MatchExpr, []),
+      {value, Value, Bindings} = erl_eval:expr(MatchExpr, []),
       NewEnv = utils:merge_env(Env, Bindings),
-      {NewEnv, [], tau} % TODO Review
+      % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+      % of `erl_parser:abstract/1` to avoid problems with lists being
+      % represented as strings
+      NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
+      {NewEnv, NewValue, tau}
   end.
 
 
