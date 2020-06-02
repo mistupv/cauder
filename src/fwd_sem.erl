@@ -18,7 +18,7 @@
                | {spawn, {{'var', erl_anno:anno(), atom()}, {'atom', erl_anno:anno(), atom()}, [erl_parse:abstract_expr()]}}
                | {self, {'var', erl_anno:anno(), atom()}}
                | {send, {'integer', erl_anno:anno(), non_neg_integer()}, erl_parse:abstract_expr()}
-               | any().
+               | {rec, {'var', erl_anno:anno(), atom()}, [erl_parse:abstract_clause()]}.
 
 
 %% =====================================================================
@@ -82,14 +82,8 @@ eval_expr(Env, Expr) ->
           eval_disjunction(Env, Expr);
         conjunction ->
           eval_conjunction(Env, Expr);
-
-        'receive' ->
-          Var = utils:temp_variable(),
-          % SubsExp = utils:substitute(Exp, Env),
-          % {Env, Var, {rec, Var, cerl:receive_clauses(SubsExp)}}
-          ReceiveClauses = cerl:receive_clauses(Expr),
-          %%ReceiveClauses2 = replace_guards(Env,ReceiveClauses),
-          {Env, Var, {rec, Var, ReceiveClauses}}
+        receive_expr ->
+          eval_receive(Env, Expr)
       end
   end.
 
@@ -213,7 +207,7 @@ eval_prefix_expr(Env, PrefixExpr = {op, _Pos, Operator, Argument}) when is_atom(
   Environment :: erl_eval:binding_struct(),
   CallExpression :: erl_parse:abstract_expr(), % erl_parse:af_local_call() | erl_parse:af_remote_call()
   NewEnvironment :: erl_eval:binding_struct(),
-  NewExpression :: erl_parse:abstract_expr(),
+  NewExpression :: erl_parse:abstract_expr() | [erl_parse:abstract_expr()],
   Label :: label().
 
 eval_application(Env, CallExpr = {call, _CallPos, RemoteExpr = {remote, _RemotePos, Module, Name}, Arguments}) ->
@@ -284,7 +278,7 @@ eval_application(Env, CallExpr = {call, _CallPos, Operator, Arguments}) ->
               {Body, Bindings} = erl_eval:match_clause(FunClauses, Arguments, [], none),
               % The environment stores the literal value but `match_clause`
               % returns the bindings as `erl_parse` nodes so we convert them
-              ValueBindings = [{Name, erl_syntax:concrete(Value)} || {Name, Value} <- Bindings],
+              ValueBindings = [{Var, erl_syntax:concrete(Val)} || {Var, Val} <- Bindings],
               NewEnv = utils:merge_env(Env, ValueBindings),
               {NewEnv, Body, tau};
             false ->
@@ -370,7 +364,7 @@ eval_tuple(Env, Tuple = {tuple, _Pos, Elements}) ->
   Environment :: erl_eval:binding_struct(),
   CaseExpression :: erl_parse:abstract_expr(), % erl_parse:af_case()
   NewEnvironment :: erl_eval:binding_struct(),
-  NewExpression :: erl_parse:abstract_expr(),
+  NewExpression :: erl_syntax:syntaxTree() | [erl_syntax:syntaxTree()],
   Label :: label().
 
 eval_case_expr(Env, CaseExpr = {'case', _Pos, Argument, Clauses}) ->
@@ -381,39 +375,53 @@ eval_case_expr(Env, CaseExpr = {'case', _Pos, Argument, Clauses}) ->
       NewCaseExpr = setelement(3, CaseExpr, NewArgument),
       {NewEnv, NewCaseExpr, Label};
     false ->
-      % We only want the first matching branch
-      [{NewEnv, Body} | _] = lists:filtermap(
-        fun(Clause) ->
-          % Case branches should have one pattern only
-          [Pattern] = erl_syntax:clause_patterns(Clause),
-          NewPattern = eval_pattern(Env, Pattern),
-          MatchExpr = erl_syntax:revert(erl_syntax:match_expr(NewPattern, Argument)),
-          try erl_eval:expr(MatchExpr, []) of
-            {value, _Value, Bindings} ->
-              NewEnv = utils:merge_env(Env, Bindings),
-              case erl_syntax:clause_guard(Clause) of
-                none ->
-                  Body = erl_syntax:clause_body(Clause),
-                  {true, {NewEnv, Body}};
-                Guard ->
-                  NewGuard = eval_guard(NewEnv, Guard),
-                  case erl_syntax:atom_value(NewGuard) of
-                    true ->
-                      Body = erl_syntax:clause_body(Clause),
-                      {true, {NewEnv, Body}};
-                    false ->
-                      false
-                  end
-              end
-          catch
-            % Pattern doesn't match
-            error:{badmatch, _Rhs} ->
-              false
-          end
-        end,
-        Clauses
-      ),
+      {NewEnv, Body} = match_clause(Env, Clauses, Argument),
       {NewEnv, Body, tau}
+  end.
+
+
+-spec match_clause(Environment, Clauses, Value) -> Match | nomatch when
+  Environment :: erl_eval:binding_struct(),
+  Clauses :: [erl_parse:abstract_clause()],
+  Value :: erl_parse:abstract_expr(),
+  NewEnvironment :: erl_eval:binding_struct(),
+  Body :: [erl_parse:abstract_expr()],
+  Match :: {NewEnvironment, Body}.
+
+match_clause(Env, Clauses, Value) ->
+  try
+    lists:foreach(
+      fun(Clause) ->
+        % `case` and `receive` branches should have one pattern only
+        [Pattern] = erl_syntax:clause_patterns(Clause),
+        NewPattern = eval_pattern(Env, Pattern),
+        MatchExpr = erl_syntax:revert(erl_syntax:match_expr(NewPattern, Value)),
+        try erl_eval:expr(MatchExpr, []) of
+          {value, _Value, Bindings} ->
+            NewEnv = utils:merge_env(Env, Bindings),
+            case erl_syntax:clause_guard(Clause) of
+              none ->
+                Body = erl_syntax:clause_body(Clause),
+                throw({NewEnv, Body});
+              Guard ->
+                NewGuard = eval_guard(NewEnv, Guard),
+                case erl_syntax:atom_value(NewGuard) of
+                  true ->
+                    Body = erl_syntax:clause_body(Clause),
+                    throw({NewEnv, Body});
+                  false -> continue
+                end
+            end
+        catch
+          % Pattern doesn't match
+          error:{badmatch, _Rhs} -> continue
+        end
+      end,
+      Clauses
+    ),
+    nomatch
+  catch
+    throw:Match -> Match
   end.
 
 
@@ -508,6 +516,19 @@ eval_conjunction(Env, Conjunction) ->
   end.
 
 
+-spec eval_receive(Environment, ReceiveExpr) -> {NewEnvironment, NewExpression, Label} when
+  Environment :: erl_eval:binding_struct(),
+  ReceiveExpr :: erl_parse:abstract_expr(), % erl_parse:af_receive()
+  NewEnvironment :: erl_eval:binding_struct(),
+  NewExpression :: erl_parse:abstract_expr(),
+  Label :: {rec, {'var', erl_anno:anno(), atom()}, [erl_parse:abstract_clause()]}.
+
+%% TODO Support receive with timeout
+eval_receive(Env, _ReceiveExpr = {'receive', _Pos, Clauses}) ->
+  TmpVar = utils:temp_variable(),
+  {Env, TmpVar, {rec, TmpVar, Clauses}}.
+
+
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
@@ -521,60 +542,102 @@ eval_step(System, Pid) ->
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
   #proc{pid = Pid, hist = Hist, env = Env, exp = [Expr | RestExpr], mail = Mail} = Proc,
   {NewEnv, NewExpr, Label} = eval_expr(Env, Expr),
-  NewSystem =
   case Label of
     tau ->
-      NewHist = [{tau, Env, Expr} | Hist],
-      NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = lists:flatten([NewExpr], RestExpr)}, % FIXME NewExp can be a list or not
-      System#sys{msgs = Msgs, procs = [NewProc | RestProcs]};
-    {self, Var} ->
-      NewHist = [{self, Env, Expr} | Hist],
-      RepExp = utils:replace_variable(Var, Pid, lists:flatten([NewExpr], RestExpr)), % FIXME NewExp can be a list or not
-      NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
-      System#sys{msgs = Msgs, procs = [NewProc | RestProcs]};
+      NewProc = Proc#proc{
+        hist = [{tau, Env, Expr} | Hist],
+        env  = NewEnv,
+        exp  = lists:flatten([NewExpr], RestExpr) % FIXME NewExp can be a list or not
+      },
+      System#sys{
+        procs = [NewProc | RestProcs]
+      };
+    {self, TmpVar} ->
+      RepExpr = utils:replace_variable(TmpVar, Pid, lists:flatten([NewExpr])),
+
+      NewProc = Proc#proc{
+        hist = [{self, Env, Expr} | Hist],
+        env  = NewEnv,
+        exp  = lists:flatten([RepExpr], RestExpr)
+      },
+      System#sys{
+        procs = [NewProc | RestProcs]
+      };
     {send, DestPid, MsgValue} ->
-      Time = ref_lookup(?FRESH_TIME),
-      ref_add(?FRESH_TIME, Time + 1),
+      Time = utils:fresh_time(),
       NewMsg = #msg{dest = DestPid, val = MsgValue, time = Time},
-      NewMsgs = [NewMsg | Msgs],
-      NewHist = [{send, Env, Expr, DestPid, {MsgValue, Time}} | Hist],
-      NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = lists:flatten([NewExpr], RestExpr)}, % FIXME NewExp can be a list or not
-      TraceItem = #trace{type = ?RULE_SEND, from = Pid, to = DestPid, val = MsgValue, time = Time},
-      NewTrace = [TraceItem | Trace],
-      System#sys{msgs = NewMsgs, procs = [NewProc | RestProcs], trace = NewTrace};
-    {spawn, {Var, FunName, FunArgs}} ->
+
+      NewProc = Proc#proc{
+        hist = [{send, Env, Expr, DestPid, {MsgValue, Time}} | Hist],
+        env  = NewEnv,
+        exp  = lists:flatten([NewExpr], RestExpr)
+      },
+      TraceItem = #trace{
+        type = ?RULE_SEND,
+        from = Pid,
+        to   = DestPid,
+        val  = MsgValue,
+        time = Time
+      },
+      System#sys{
+        msgs  = [NewMsg | Msgs],
+        procs = [NewProc | RestProcs],
+        trace = [TraceItem | Trace]
+      };
+    {spawn, {TmpVar, FunName, FunArgs}} ->
       SpawnPid = erl_parse:abstract(utils:fresh_pid()),
       SpawnProc = #proc{
         pid = SpawnPid,
         exp = [erl_syntax:revert(erl_syntax:application(FunName, FunArgs))],
         spf = {erl_syntax:atom_value(FunName), length(FunArgs)}
       },
-      NewHist = [{spawn, Env, Expr, SpawnPid} | Hist],
-      RepExp = utils:replace_variable(Var, SpawnPid, lists:flatten([NewExpr], RestExpr)), % FIXME NewExp can be a list or not
-      NewProc = Proc#proc{hist = NewHist, env = NewEnv, exp = RepExp},
-      TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
-      NewTrace = [TraceItem | Trace],
-      System#sys{msgs = Msgs, procs = [NewProc | [SpawnProc | RestProcs]], trace = NewTrace};
-    {rec, Var, ReceiveClauses} ->
+
+      RepExpr = utils:replace_variable(TmpVar, SpawnPid, lists:flatten([NewExpr])),
+
+      NewProc = Proc#proc{
+        hist = [{spawn, Env, Expr, SpawnPid} | Hist],
+        env  = NewEnv,
+        exp  = lists:flatten([RepExpr], RestExpr)
+      },
+      TraceItem = #trace{
+        type = ?RULE_SPAWN,
+        from = Pid,
+        to   = SpawnPid
+      },
+      System#sys{
+        procs = [NewProc | [SpawnProc | RestProcs]],
+        trace = [TraceItem | Trace]
+      };
+    {rec, TmpVar, ReceiveClauses} ->
       {Bindings, RecExp, ConsMsg, NewMail} = matchrec(ReceiveClauses, Mail, NewEnv),
-      UpdatedEnv = utils:merge_env(NewEnv, Bindings),
-      RepExp = utils:replace_variable(Var, RecExp, lists:flatten([NewExpr], RestExpr)), % FIXME NewExp can be a list or not
-      NewHist = [{rec, Env, Expr, ConsMsg, Mail} | Hist],
-      NewProc = Proc#proc{hist = NewHist, env = UpdatedEnv, exp = RepExp, mail = NewMail},
       {MsgValue, Time} = ConsMsg,
-      TraceItem = #trace{type = ?RULE_RECEIVE, from = Pid, val = MsgValue, time = Time},
-      NewTrace = [TraceItem | Trace],
-      System#sys{msgs = Msgs, procs = [NewProc | RestProcs], trace = NewTrace}
-  end,
-  NewSystem.
+
+      RepExpr = utils:replace_variable(TmpVar, RecExp, lists:flatten([NewExpr])),
+
+      NewProc = Proc#proc{
+        hist = [{rec, Env, Expr, ConsMsg, Mail} | Hist],
+        env  = utils:merge_env(NewEnv, Bindings),
+        exp  = lists:flatten([RepExpr], RestExpr),
+        mail = NewMail
+      },
+      TraceItem = #trace{
+        type = ?RULE_RECEIVE,
+        from = Pid,
+        val  = MsgValue,
+        time = Time
+      },
+      System#sys{
+        procs = [NewProc | RestProcs],
+        trace = [TraceItem | Trace]
+      }
+  end.
 
 
 %% =====================================================================
 %% @doc Performs an evaluation step in message Id, given System
 
 eval_sched(System, Id) ->
-  Procs = System#sys.procs,
-  Msgs = System#sys.msgs,
+  #sys{procs = Procs, msgs = Msgs} = System,
   {Msg, RestMsgs} = utils:select_msg(Msgs, Id),
   #msg{dest = DestPid, val = Value, time = Id} = Msg,
   {Proc, RestProcs} = utils:select_proc(Procs, DestPid),
@@ -625,99 +688,108 @@ is_expr(Env, Expr) when is_tuple(Expr) ->
   end.
 
 
+%% =====================================================================
+%% @doc Tries to match each message, in time order, in the mailbox against every
+%% pattern from the `Clauses`, sequentially. If a match succeeds and the optional
+%% guard sequence is `true`, a tuple with the following form is returned:
+%% `{NewEnvironment, NewExpression, MatchedMessage, RestMessages}`
+%% Otherwise, the atom `nomatch` is returned.
+
+-spec matchrec(Clauses, Mail, Environment) -> nomatch | Match when
+  Clauses :: [erl_parse:abstract_clause()], % erl_parse:af_clause_seq()
+  Mail :: [{erl_parse:abstract_expr(), non_neg_integer()}],
+  Environment :: erl_eval:binding_struct(),
+  NewEnvironment :: erl_eval:binding_struct(),
+  MatchedBody :: [erl_parse:abstract_expr()],
+  MatchedMessage :: {erl_parse:abstract_expr(), non_neg_integer()},
+  RestMessages :: [{erl_parse:abstract_expr(), non_neg_integer()}],
+  Match :: {NewEnvironment, MatchedBody, MatchedMessage, RestMessages}.
 
 matchrec(Clauses, Mail, Env) ->
   matchrec(Clauses, Mail, [], Env).
 
-matchrec(_, [], _, _) ->
-  no_match;
-matchrec(Clauses, [CurMsg | RestMsgs], AccMsgs, Env) ->
+
+-spec matchrec(Clauses, RemainingMessages, CheckedMessages, Environment) -> Match | nomatch when
+  Clauses :: [erl_parse:abstract_clause()], % erl_parse:af_clause_seq()
+  RemainingMessages :: [{erl_parse:abstract_expr(), non_neg_integer()}],
+  CheckedMessages :: [{erl_parse:abstract_expr(), non_neg_integer()}],
+  Environment :: erl_eval:binding_struct(),
+  NewEnvironment :: erl_eval:binding_struct(),
+  MatchedBody :: [erl_parse:abstract_expr()],
+  MatchedMessage :: {erl_parse:abstract_expr(), non_neg_integer()},
+  RestMessages :: [{erl_parse:abstract_expr(), non_neg_integer()}],
+  Match :: {NewEnvironment, MatchedBody, MatchedMessage, RestMessages}.
+
+matchrec(_Clauses, [], _CheckedMsgs, _Env) ->
+  nomatch;
+matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
   {MsgValue, _MsgTime} = CurMsg,
-  %io:format("matchrec (MsgValue): ~p~n",[MsgValue]),
-  %io:format("matchrec (Clauses): ~p~n",[Clauses]),
-  %%preprocessing is used to propagate matching bindings to guards
-  NewClauses = preprocessing_clauses(Clauses, MsgValue, Env),
-  %io:format("matchrec (NewClauses): ~p~n",[NewClauses]),
-  case cerl_clauses:reduce(NewClauses, [MsgValue]) of
-    {true, {Clause, Bindings}} ->
-      ClauseBody = cerl:clause_body(Clause),
-      NewMsgs = AccMsgs ++ RestMsgs,
-      {Bindings, ClauseBody, CurMsg, NewMsgs};
-    {false, []} ->
-      matchrec(Clauses, RestMsgs, AccMsgs ++ [CurMsg], Env);
-    {false, [Clause | OtherClauses]} ->
-      io:format("CauDEr: Unsupported pattern, some behaviours may be missed ~n~w~n", [Clause]),
-      matchrec(Clauses, RestMsgs, AccMsgs ++ [CurMsg], Env)
+  case match_clause(Env, Clauses, MsgValue) of
+    {NewEnv, Body} ->
+      {NewEnv, Body, CurMsg, lists:reverse(CheckedMsgs, RestMsgs)};
+    nomatch ->
+      matchrec(Clauses, RestMsgs, [CurMsg | CheckedMsgs])
   end.
 
-preprocessing_clauses(Clauses, Msg, Env) ->
-  lists:map(fun({c_clause, L, Pats, Guard, Exp}) ->
-    %io:format("Clauses: ~p~n",[Clauses]),
-    %io:format("match (Pats/[Msg]) ~p~n~p~n",[Pats,[Msg]]),
-    %io:format("--result: ~p~n",[cerl_clauses:match_list(Pats,[Msg])]),
-    case cerl_clauses:match_list(Pats, [Msg]) of
-      {true, Bindings} ->
-        Guard2 = utils:replace_all(Bindings ++ Env, Guard),
-        %io:format("calling eval_guard (Bindings/Guard/Guard2): ~n~p~n~p~n~p~n",[Bindings++Env,Guard,Guard2]),
-        Guard3 = eval_guard(Env, Guard2),
-        {c_clause, L, Pats, Guard3, Exp};
-      _ ->
-        {c_clause, L, Pats, Guard, Exp}
-    end
-            end, Clauses).
 
 %% =====================================================================
 %% @doc Gets the evaluation options for a given System
 
--spec eval_opts(System) ->
-  Options when
+-spec eval_opts(System) -> Options when
   System :: #sys{},
   Options :: [#opt{}].
 
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
   ProcsOpts = eval_procs_opts(System),
-  SchedOpts ++ ProcsOpts.
+  lists:append(SchedOpts, ProcsOpts).
 
 
--spec eval_sched_opts(System) ->
-  Options when
+-spec eval_sched_opts(System) -> Options when
   System :: #sys{},
   Options :: [#opt{}].
 
 eval_sched_opts(#sys{msgs = []}) ->
   [];
-eval_sched_opts(#sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
-  DestPid = CurMsg#msg.dest,
-  DestProcs = [P || P <- Procs, P#proc.pid == DestPid],
-  case DestProcs of
-    [] ->
-      eval_sched_opts(#sys{msgs = RestMsgs, procs = Procs});
-    _Other ->
-      Time = CurMsg#msg.time,
-      [#opt{sem = ?MODULE, type = ?TYPE_MSG, id = Time, rule = ?RULE_SCHED} | eval_sched_opts(#sys{msgs = RestMsgs, procs = Procs})]
+eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
+  #msg{dest = DestPid, time = Time} = CurMsg,
+  case lists:any(fun(P) -> P#proc.pid == DestPid end, Procs) of
+    false ->
+      eval_sched_opts(System#sys{msgs = RestMsgs});
+    true ->
+      Option = #opt{
+        sem  = ?MODULE,
+        type = ?TYPE_MSG,
+        id   = Time,
+        rule = ?RULE_SCHED
+      },
+      [Option | eval_sched_opts(System#sys{msgs = RestMsgs})]
   end.
 
 
--spec eval_procs_opts(System) ->
-  Options when
+-spec eval_procs_opts(System) -> Options when
   System :: #sys{},
   Options :: [#opt{}].
 
 eval_procs_opts(#sys{procs = []}) ->
   [];
-eval_procs_opts(#sys{procs = [CurProc | RestProcs]}) ->
+eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
   #proc{pid = Pid, env = Env, exp = Exprs, mail = Mail} = CurProc,
   case eval_expr_opt(Exprs, Env, Mail) of
     ?NOT_EXP ->
-      eval_procs_opts(#sys{procs = RestProcs});
+      eval_procs_opts(System#sys{procs = RestProcs});
     Rule ->
-      [#opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:integer_value(Pid), rule = Rule} | eval_procs_opts(#sys{procs = RestProcs})]
+      Option = #opt{
+        sem  = ?MODULE,
+        type = ?TYPE_PROC,
+        id   = erl_syntax:integer_value(Pid),
+        rule = Rule
+      },
+      [Option | eval_procs_opts(System#sys{procs = RestProcs})]
   end.
 
 
--spec eval_expr_opt(Expressions, Environment, Mail) ->
-  Options when
+-spec eval_expr_opt(Expressions, Environment, Mail) -> Options when
   Expressions :: erl_parse:abstract_expr() | [erl_parse:abstract_expr()],
   Environment :: erl_eval:binding_struct(),
   Mail :: [#msg{}],
@@ -846,17 +918,10 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
             false ->
               ?RULE_SEQ
           end;
-
-
-
-        'receive' ->
-          % SubsExp = utils:substitute(Exp, Env),
-          % ?LOG("Exp: " ++ ?TO_STRING(Exp) ++ "\n" ++
-          %      "SUB: " ++ ?TO_STRING(SubsExp)),
-          % ReceiveClauses = cerl:receive_clauses(SubsExp),
-          ReceiveClauses = cerl:receive_clauses(Expr),
-          case matchrec(ReceiveClauses, Mail, Env) of
-            no_match ->
+        receive_expr ->
+          Clauses = erl_syntax:receive_expr_clauses(Expr),
+          case matchrec(Clauses, Mail, Env) of
+            nomatch ->
               ?NOT_EXP;
             _Other ->
               ?RULE_RECEIVE

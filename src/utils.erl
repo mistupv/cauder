@@ -5,7 +5,7 @@
 
 -module(utils).
 -export([fundef_lookup/2, fundef_lookup/3, fundef_rename/1, substitute/2,
-         temp_variable/0, build_var/2, pid_exists/2,
+         temp_variable/0, fresh_time/0, build_var/2, pid_exists/2,
          select_proc/2, select_msg/2,
          select_proc_with_time/2, select_proc_with_send/2,
          select_proc_with_spawn/2, select_proc_with_rec/2,
@@ -13,7 +13,7 @@
          merge_env/2,
          replace_variable/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
          funNames/1,
-         stringToNameAndArity/1,stringToArgs/1, toCore/1, toErlang/1,
+         stringToNameAndArity/1, stringToArgs/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
@@ -47,7 +47,7 @@ fundef_lookup(FunName, FunDefs) ->
   Name :: atom(),
   Arity :: arity(),
   FunDefs :: [FunDef],
-  FunDef :: erl_parse:af_function_decl().
+  FunDef :: erl_parse:abstract_form(). % erl_parse:af_function_decl()
 
 fundef_lookup(FunName, FunArity, FunDefs) ->
   lists:search(
@@ -63,8 +63,8 @@ fundef_lookup(FunName, FunArity, FunDefs) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec fundef_rename(FunDef) -> NewFunDef when
-  FunDef :: erl_parse:af_function_decl(),
-  NewFunDef :: erl_parse:af_function_decl().
+  FunDef :: erl_parse:abstract_form(), % erl_parse:af_function_decl()
+  NewFunDef :: erl_parse:abstract_form(). % erl_parse:af_function_decl()
 
 fundef_rename(FunDef) ->
   {RenamedFunDef, _} = erl_syntax_lib:mapfold(
@@ -119,12 +119,21 @@ substitute(SuperExp, Env) ->
 %%
 %% @see replace_variable/3
 
--spec temp_variable() -> erl_parse:af_variable().
+-spec temp_variable() -> {'var', erl_anno:anno(), atom()}.
 
 temp_variable() ->
   Number = fresh_variable_number(),
   Name = "k_" ++ integer_to_list(Number),
   erl_syntax:revert(erl_syntax:variable(Name)).
+
+
+-spec fresh_time() -> non_neg_integer().
+
+fresh_time() ->
+  Time = ref_lookup(?FRESH_TIME),
+  ref_add(?FRESH_TIME, Time + 1),
+  Time.
+
 
 %%------------ It is not working in Erlang 22-----------------------------
 %%build_var(Name,Num) ->
@@ -156,7 +165,7 @@ pid_exists(Procs, Pid) ->
 %%--------------------------------------------------------------------
 -spec select_proc(Procs, Pid) -> {Proc, RestProcs} when
   Procs :: [Proc],
-  Pid :: erl_parse:af_integer(),
+  Pid :: {'integer', erl_anno:anno(), non_neg_integer()},
   Proc :: #proc{},
   RestProcs :: [Proc].
 
@@ -169,10 +178,9 @@ select_proc(Procs, Pid) ->
 %% the rest of messages from Msgs
 %% @end
 %%--------------------------------------------------------------------
-select_msg(Msgs, Time) ->
-  [Msg] = [ M || M <- Msgs, M#msg.time == Time],
-  RestMsgs = [ M || M <- Msgs, M#msg.time /= Time],
-  {Msg, RestMsgs}.
+select_msg(Messages, Time) ->
+  {[Message | []], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Messages),
+  {Message, RestMessages}.
 
 %%--------------------------------------------------------------------
 %% @doc Returns the process that contains a message with id Time
@@ -282,12 +290,13 @@ replace_all([{Var,Val}|R],Exp) ->
 %% the Expressions with the literal value Replacement.
 
 -spec replace_variable(Target, Replacement, Expressions) -> Result when
-  Target :: erl_parse:af_variable(),
-  Replacement :: erl_parse:af_literal(),
+  Target :: {'var', erl_anno:anno(), atom()},
+  Replacement :: erl_parse:abstract_expr() | [erl_parse:abstract_expr()], % erl_parse:af_literal()
   Expressions :: [erl_parse:abstract_expr()],
   Result :: [erl_parse:abstract_expr()].
 
-replace_variable(Target, Replacement, Expressions) ->
+% TODO Is necessary to accept a list of expression instead on a single expression?
+replace_variable(Target, Replacement, Expressions) when is_list(Expressions) ->
   lists:map(
     fun(Expr) ->
       erl_syntax:revert(
@@ -337,7 +346,7 @@ pp_pre(Pid, Fun) ->
 pp_pid(Pid) ->
   "Proc. " ++ pp(Pid).
 
-pp_fun(undef) ->
+pp_fun(undefined) ->
   "";
 pp_fun({Name, Arity}) ->
   atom_to_list(Name) ++ "/" ++ integer_to_list(Arity).
@@ -461,7 +470,7 @@ pp_roll_log(#sys{roll = RollLog}) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec funNames(FunForms) -> FunNames when
-  FunForms :: [erl_parse:af_function_decl()],
+  FunForms :: [erl_parse:abstract_form()], % [erl_parse:af_function_decl()]
   FunNames :: [string()].
 
 funNames(FunForms) ->
@@ -487,7 +496,7 @@ stringToNameAndArity(String) ->
 %% and transforms these arguments to their equivalent in Abstract Syntax
 %% @end
 %%--------------------------------------------------------------------
--spec stringToArgs(String) -> [Args] when
+-spec stringToArgs(String) -> Args when
   String :: string(),
   Args :: [erl_parse:abstract_expr()].
 
@@ -498,38 +507,6 @@ stringToArgs(Str) ->
   {ok, Args} = erl_parse:parse_exprs(Tokens),
   Args.
 
-%%--------------------------------------------------------------------
-%% @doc Transforms an Erlang expression Expr to its equivalent in
-%% Core Erlang
-%% @end
-%%--------------------------------------------------------------------
-toCore(Expr) ->
-  case Expr of
-    {atom, _, Atom} ->
-      cerl:c_atom(Atom);
-    {integer, _, Int} ->
-      cerl:c_int(Int);
-    {op, _, '-',{integer, _, Int}} ->
-      cerl:c_int(-Int);
-    {float, _, Float} ->
-      cerl:c_float(Float);
-    {string, _, String} ->
-      cerl:c_string(String);
-    {tuple, _, TupleEs} ->
-      cerl:c_tuple_skel([toCore(E) || E <- TupleEs]);
-    {cons, _, Head, Tail} ->
-      cerl:c_cons_skel(toCore(Head), toCore(Tail));
-    {nil, _} ->
-      cerl:c_nil()
-  end.
-
-toErlang(Expr) ->
-  LitExpr =
-    case cerl:is_literal(Expr) of
-      true -> Expr;
-      false -> cerl:fold_literal(Expr)
-    end,
-  cerl:concrete(LitExpr).
 
 %%--------------------------------------------------------------------
 %% @doc Filters the options with identifier Id
@@ -634,8 +611,7 @@ fresh_variable_number() ->
 
 last_msg_rest(Mail) ->
   LastMsg = lists:last(Mail),
-  LenMail = length(Mail),
-  RestMail = lists:sublist(Mail,LenMail-1),
+  RestMail = lists:droplast(Mail),
   {LastMsg, RestMail}.
 
 relevant_bindings(Env, Exprs) ->

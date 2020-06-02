@@ -61,17 +61,17 @@
 %% Message
 -record(msg, {
   % Target process identifier
-  dest,
+  dest :: {'integer', erl_anno:anno(), non_neg_integer()},
   % Message
-  val,
+  val :: erl_parse:abstract_expr(),
   % Timestamp
-  time
+  time :: non_neg_integer()
 }).
 
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: erl_parse:af_integer(), % TODO Why not an integer literal
+  pid :: {'integer', erl_anno:anno(), non_neg_integer()}, % TODO Why not an integer literal
   % History
   hist = [] :: {tau, erl_eval:binding_struct(), erl_parse:abstract_expr()} | any(), % TODO Add all possible types
   % Log
@@ -81,16 +81,18 @@
   % List of expressions
   exp :: [erl_parse:abstract_expr()],
   % Process mailbox
-  mail = [] :: [#msg{}],
+  mail = [] :: [{erl_parse:abstract_expr(), non_neg_integer()}], % {Value, Id}
   % The entry point function for this process
-  spf = undef :: undef | {atom(), arity()}
+  spf :: undefined | {atom(), arity()}
 }).
 
--record(trace, {type,
-                from,
-                to,
-                val,
-                time}).
+-record(trace, {
+  type :: ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN,
+  from :: {'integer', erl_anno:anno(), non_neg_integer()},
+  to :: undefined | {'integer', erl_anno:anno(), non_neg_integer()},
+  val :: undefined | erl_parse:abstract_expr(),
+  time :: undefined | non_neg_integer()
+}).
 
 % System
 -record(sys, {
@@ -110,12 +112,14 @@
   % proc or msg
   type :: ?TYPE_PROC | ?TYPE_MSG,
   % integer
-  id :: pos_integer(),
+  id :: undefined | pos_integer(),
   % seq, spawn, ...
   rule :: ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF | ?RULE_SCHED
 }).
 
--record(replay, {call,
-                 main_pid,
-                 log_path}).
+-record(replay, {
+  call,
+  main_pid,
+  log_path
+}).
 
