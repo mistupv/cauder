@@ -143,7 +143,6 @@ eval_match_expr(Env, MatchExpr = {match, _Pos, Pattern, Body}) ->
   Label :: label().
 
 eval_infix_expr(Env, InfixExpr = {op, _Pos, Operator, Left, Right}) when is_atom(Operator) ->
-  % TODO Short-circuit expressions
   case is_expr(Env, Left) of
     true ->
       {NewEnv, NewLeft, Label} = eval_expr(Env, Left),
@@ -151,24 +150,31 @@ eval_infix_expr(Env, InfixExpr = {op, _Pos, Operator, Left, Right}) when is_atom
       NewInfixExpr = setelement(4, InfixExpr, NewLeft),
       {NewEnv, NewInfixExpr, Label};
     false ->
-      case is_expr(Env, Right) of
-        true ->
-          {NewEnv, NewRight, Label} = eval_expr(Env, Right),
-          % Structure: {op, Pos, Operator, Left, Right}
-          NewInfixExpr = setelement(5, InfixExpr, NewRight),
-          {NewEnv, NewInfixExpr, Label};
-        false ->
-          case Operator of
-            '!' ->
-              {Env, Right, {send, Left, Right}};
-            _ ->
-              % Infix operators are always built-in, so we just evaluate the expression
-              Value = apply(erlang, Operator, [erl_parse:normalise(Left), erl_parse:normalise(Right)]),
-              % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
-              % of `erl_parser:abstract/1` to avoid problems with lists being
-              % represented as strings
-              NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
-              {Env, NewValue, tau}
+      case {erl_parse:normalise(Left), Operator} of
+        {'false', 'andalso'} ->
+          {Env, Left, tau};
+        {'true', 'orelse'} ->
+          {Env, Left, tau};
+        _ ->
+          case is_expr(Env, Right) of
+            true ->
+              {NewEnv, NewRight, Label} = eval_expr(Env, Right),
+              % Structure: {op, Pos, Operator, Left, Right}
+              NewInfixExpr = setelement(5, InfixExpr, NewRight),
+              {NewEnv, NewInfixExpr, Label};
+            false ->
+              case Operator of
+                '!' ->
+                  {Env, Right, {send, Left, Right}};
+                _ ->
+                  % Infix operators are always built-in, so we just evaluate the expression
+                  Value = apply(erlang, Operator, [erl_parse:normalise(Left), erl_parse:normalise(Right)]),
+                  % Use `erl_syntax:abstract/1` and `erl_syntax:revert/1` instead
+                  % of `erl_parser:abstract/1` to avoid problems with lists being
+                  % represented as strings
+                  NewValue = erl_syntax:revert(erl_syntax:abstract(Value)),
+                  {Env, NewValue, tau}
+              end
           end
       end
   end.
