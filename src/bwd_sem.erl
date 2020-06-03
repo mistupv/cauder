@@ -11,41 +11,98 @@
 
 -include("cauder.hrl").
 
-%%--------------------------------------------------------------------
+%% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
-%% @end
-%%--------------------------------------------------------------------
+
+-spec eval_step(System, Pid) -> NewSystem when
+  System :: #sys{},
+  Pid :: {'integer', erl_anno:anno(), non_neg_integer()},
+  NewSystem :: #sys{}.
+
 eval_step(System, Pid) ->
-  Procs = System#sys.procs,
-  Msgs = System#sys.msgs,
-  Trace = System#sys.trace,
+  #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = [CurHist|RestHist]} = Proc,
+  #proc{pid = Pid, hist = [CurHist | RestHist]} = Proc,
   case CurHist of
-    {tau, OldEnv, OldExp} ->
-      OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
-      System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
-    {self, OldEnv, OldExp} ->
-      OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
-      System#sys{msgs = Msgs, procs = [OldProc|RestProcs]};
-    {send, OldEnv, OldExp, DestPid, {MsgValue, Time}} ->
+    {tau, OldEnv, OldExprs} ->
+      OldProc = Proc#proc{
+        hist = RestHist,
+        env  = OldEnv,
+        exp  = OldExprs
+      },
+      System#sys{
+        msgs  = Msgs,
+        procs = [OldProc | RestProcs]
+      };
+    {self, OldEnv, OldExprs} ->
+      OldProc = Proc#proc{
+        hist = RestHist,
+        env  = OldEnv,
+        exp  = OldExprs
+      },
+      System#sys{
+        msgs  = Msgs,
+        procs = [OldProc | RestProcs]
+      };
+    {send, OldEnv, OldExprs, DestPid, {MsgValue, Time}} ->
       {_Msg, RestMsgs} = utils:select_msg(Msgs, Time),
-      OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
-      TraceItem = #trace{type = ?RULE_SEND, from = Pid, to = DestPid, val = MsgValue, time = Time},
+      OldProc = Proc#proc{
+        hist = RestHist,
+        env  = OldEnv,
+        exp  = OldExprs
+      },
+      TraceItem = #trace{
+        type = ?RULE_SEND,
+        from = Pid,
+        to   = DestPid,
+        val  = MsgValue,
+        time = Time
+      },
       OldTrace = lists:delete(TraceItem, Trace),
-      System#sys{msgs = RestMsgs, procs = [OldProc|RestProcs], trace = OldTrace};
-    {spawn, OldEnv, OldExp, SpawnPid} ->
+      System#sys{
+        msgs  = RestMsgs,
+        procs = [OldProc | RestProcs],
+        trace = OldTrace
+      };
+    {spawn, OldEnv, OldExprs, SpawnPid} ->
       {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
-      OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp},
-      TraceItem = #trace{type = ?RULE_SPAWN, from = Pid, to = SpawnPid},
+      OldProc = Proc#proc{
+        hist = RestHist,
+        env  = OldEnv,
+        exp  = OldExprs
+      },
+      TraceItem = #trace{
+        type = ?RULE_SPAWN,
+        from = Pid,
+        to   = SpawnPid
+      },
       OldTrace = lists:delete(TraceItem, Trace),
-      System#sys{msgs = Msgs, procs = [OldProc|OldRestProcs], trace = OldTrace};
-    {rec, OldEnv, OldExp, OldMsg, OldMail} ->
-      OldProc = Proc#proc{hist = RestHist, env = OldEnv, exp = OldExp, mail = OldMail},
+      System#sys{
+        msgs  = Msgs,
+        procs = [OldProc | OldRestProcs],
+        trace = OldTrace
+      };
+    {rec, OldEnv, OldExprs, OldMsg, OldMail} ->
       {MsgValue, Time} = OldMsg,
-      TraceItem = #trace{type = ?RULE_RECEIVE, from = Pid, val = MsgValue, time = Time},
+
+      OldProc = Proc#proc{
+        hist = RestHist,
+        env  = OldEnv,
+        exp  = OldExprs,
+        mail = OldMail
+      },
+      TraceItem = #trace{
+        type = ?RULE_RECEIVE,
+        from = Pid,
+        val  = MsgValue,
+        time = Time
+      },
       OldTrace = lists:delete(TraceItem, Trace),
-      System#sys{msgs = Msgs, procs = [OldProc|RestProcs], trace = OldTrace}
+      System#sys{
+        msgs  = Msgs,
+        procs = [OldProc | RestProcs],
+        trace = OldTrace
+      }
   end.
 
 %%--------------------------------------------------------------------

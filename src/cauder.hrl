@@ -58,6 +58,12 @@
 
 -define(LAST_PATH, last_path).
 
+-type proc_history() :: [{tau, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
+                      | {self, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
+                      | {send, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}, {erl_parse:abstract_expr(), non_neg_integer()}}
+                      | {spawn, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}}
+                      | {rec, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {erl_parse:abstract_expr(), non_neg_integer()}, [{erl_parse:abstract_expr(), non_neg_integer()}]}].
+
 %% Message
 -record(msg, {
   % Target process identifier
@@ -73,7 +79,7 @@
   % Process identifier
   pid :: {'integer', erl_anno:anno(), non_neg_integer()}, % TODO Why not an integer literal
   % History
-  hist = [] :: {tau, erl_eval:binding_struct(), erl_parse:abstract_expr()} | any(), % TODO Add all possible types
+  hist = [] :: proc_history(),
   % Log
   log = [],
   % Environment

@@ -546,12 +546,14 @@ eval_receive(Env, _ReceiveExpr = {'receive', _Pos, Clauses}) ->
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = Hist, env = Env, exp = [Expr | RestExpr], mail = Mail} = Proc,
-  {NewEnv, NewExpr, Label} = eval_expr(Env, Expr),
+  #proc{pid = Pid, hist = Hist, env = Env, exp = Exprs, mail = Mail} = Proc,
+  [CurExpr | RestExpr] = Exprs,
+  {NewEnv, NewExpr, Label} = eval_expr(Env, CurExpr),
+  io:format("eval_step:\n\tNewEnv: ~p\n\tNewExpr: ~p\n\tLabel: ~p\n", [NewEnv, NewExpr, Label]),
   case Label of
     tau ->
       NewProc = Proc#proc{
-        hist = [{tau, Env, Expr} | Hist],
+        hist = [{tau, Env, Exprs} | Hist],
         env  = NewEnv,
         exp  = lists:flatten([NewExpr], RestExpr) % FIXME NewExp can be a list or not
       },
@@ -562,7 +564,7 @@ eval_step(System, Pid) ->
       RepExpr = utils:replace_variable(TmpVar, Pid, lists:flatten([NewExpr])),
 
       NewProc = Proc#proc{
-        hist = [{self, Env, Expr} | Hist],
+        hist = [{self, Env, Exprs} | Hist],
         env  = NewEnv,
         exp  = lists:flatten([RepExpr], RestExpr)
       },
@@ -574,7 +576,7 @@ eval_step(System, Pid) ->
       NewMsg = #msg{dest = DestPid, val = MsgValue, time = Time},
 
       NewProc = Proc#proc{
-        hist = [{send, Env, Expr, DestPid, {MsgValue, Time}} | Hist],
+        hist = [{send, Env, Exprs, DestPid, {MsgValue, Time}} | Hist],
         env  = NewEnv,
         exp  = lists:flatten([NewExpr], RestExpr)
       },
@@ -601,7 +603,7 @@ eval_step(System, Pid) ->
       RepExpr = utils:replace_variable(TmpVar, SpawnPid, lists:flatten([NewExpr])),
 
       NewProc = Proc#proc{
-        hist = [{spawn, Env, Expr, SpawnPid} | Hist],
+        hist = [{spawn, Env, Exprs, SpawnPid} | Hist],
         env  = NewEnv,
         exp  = lists:flatten([RepExpr], RestExpr)
       },
@@ -621,7 +623,7 @@ eval_step(System, Pid) ->
       RepExpr = utils:replace_variable(TmpVar, RecExp, lists:flatten([NewExpr])),
 
       NewProc = Proc#proc{
-        hist = [{rec, Env, Expr, ConsMsg, Mail} | Hist],
+        hist = [{rec, Env, Exprs, ConsMsg, Mail} | Hist],
         env  = utils:merge_env(NewEnv, Bindings),
         exp  = lists:flatten([RepExpr], RestExpr),
         mail = NewMail
