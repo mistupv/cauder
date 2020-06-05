@@ -132,3 +132,8 @@
   log_path
 }).
 
+
+-type system() :: #sys{}.
+
+-type option() :: #opt{}.
+

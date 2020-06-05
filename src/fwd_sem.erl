@@ -196,7 +196,7 @@
 -spec eval_expr_list(environment(), [abstract_expr()]) -> result().
 
 eval_expr_list(Env, [Expr | Exprs]) when is_tuple(Expr) ->
-  case is_expr(Env, Expr) of
+  case is_expr(Expr, Env) of
     true ->
       {NewEnv, NewExprs, Label} = eval_expr(Env, Expr),
       {NewEnv, NewExprs ++ Exprs, Label};
@@ -213,30 +213,21 @@ eval_expr_list(Env, [Expr | Exprs]) when is_tuple(Expr) ->
 -spec eval_expr(environment(), abstract_expr()) -> result().
 
 eval_expr(Env, Expr) when is_tuple(Expr) ->
-  case is_expr(Env, Expr) of
+  case is_expr(Expr, Env) of
     false ->
       % If we find a literal we just consume it.
       {Env, [], tau};
     true ->
       case erl_syntax:type(Expr) of
-        variable ->
-          eval_variable(Env, Expr);
-        match_expr ->
-          eval_match_expr(Env, Expr);
-        infix_expr ->
-          eval_infix_expr(Env, Expr);
-        prefix_expr ->
-          eval_prefix_expr(Env, Expr);
-        application ->
-          eval_application(Env, Expr);
-        list ->
-          eval_list(Env, Expr);
-        tuple ->
-          eval_tuple(Env, Expr);
-        case_expr ->
-          eval_case_expr(Env, Expr);
-        receive_expr ->
-          eval_receive(Env, Expr)
+        variable -> eval_variable(Env, Expr);
+        match_expr -> eval_match_expr(Env, Expr);
+        infix_expr -> eval_infix_expr(Env, Expr);
+        prefix_expr -> eval_prefix_expr(Env, Expr);
+        application -> eval_application(Env, Expr);
+        list -> eval_list(Env, Expr);
+        tuple -> eval_tuple(Env, Expr);
+        case_expr -> eval_case_expr(Env, Expr);
+        receive_expr -> eval_receive(Env, Expr)
       end
   end.
 
@@ -252,12 +243,12 @@ eval_variable(Env, {var, _, Name}) when is_atom(Name) ->
 -spec eval_match_expr(environment(), af_match(abstract_expr())) -> result().
 
 eval_match_expr(Env, MatchExpr = {match, Line, Pattern, Body}) ->
-  case is_expr(Env, Pattern) of
+  case is_expr(Pattern, Env) of
     true ->
       {NewEnv, [NewPattern], Label} = eval_expr(Env, Pattern),
       {NewEnv, [{match, Line, NewPattern, Body}], Label};
     false ->
-      case is_expr(Env, Body) of
+      case is_expr(Body, Env) of
         true ->
           {NewEnv, [NewBody], Label} = eval_expr(Env, Body),
           {NewEnv, [{match, Line, Pattern, NewBody}], Label};
@@ -273,25 +264,22 @@ eval_match_expr(Env, MatchExpr = {match, Line, Pattern, Body}) ->
 -spec eval_infix_expr(environment(), af_binary_op(abstract_expr())) -> result().
 
 eval_infix_expr(Env, {op, Line, Operator, Left, Right}) when is_atom(Operator) ->
-  case is_expr(Env, Left) of
+  case is_expr(Left, Env) of
     true ->
       {NewEnv, [NewLeft], Label} = eval_expr(Env, Left),
       {NewEnv, [{op, Line, Operator, NewLeft, Right}], Label};
     false ->
       case {erl_parse:normalise(Left), Operator} of
-        {'false', 'andalso'} ->
-          {Env, Left, tau};
-        {'true', 'orelse'} ->
-          {Env, Left, tau};
+        {'false', 'andalso'} -> {Env, Left, tau};
+        {'true', 'orelse'} -> {Env, Left, tau};
         _ ->
-          case is_expr(Env, Right) of
+          case is_expr(Right, Env) of
             true ->
               {NewEnv, [NewRight], Label} = eval_expr(Env, Right),
               {NewEnv, [{op, Line, Operator, Left, NewRight}], Label};
             false ->
               case Operator of
-                '!' ->
-                  {Env, [Right], {send, Left, Right}};
+                '!' -> {Env, [Right], {send, Left, Right}};
                 _ ->
                   % Infix operators are always built-in, so we just evaluate the expression
                   Value = apply(erlang, Operator, [erl_parse:normalise(Left), erl_parse:normalise(Right)]),
@@ -309,7 +297,7 @@ eval_prefix_expr(Env, {op, Pos, Operator, Argument}) when is_atom(Operator) ->
   % however they have two different internal representations:
   %  - The number with the operator e.g -(42)
   %  - The negated number e.g (-42)
-  case is_expr(Env, Argument) of
+  case is_expr(Argument, Env) of
     true ->
       {NewEnv, [NewArgument], Label} = eval_expr(Env, Argument),
       {NewEnv, [{op, Pos, Operator, NewArgument}], Label};
@@ -323,24 +311,23 @@ eval_prefix_expr(Env, {op, Pos, Operator, Argument}) when is_atom(Operator) ->
 -spec eval_application(environment(), af_local_call() | af_remote_call()) -> result().
 
 eval_application(Env, RemoteCall = {call, CallPos, RemoteFun = {remote, RemotePos, Module, Name}, Arguments}) ->
-  case is_expr(Env, Module) of
+  case is_expr(Module, Env) of
     true ->
       {NewEnv, [NewModule], Label} = eval_expr(Env, Module),
       {NewEnv, [{call, CallPos, {remote, RemotePos, NewModule, Name}, Arguments}], Label};
     false ->
-      case is_expr(Env, Name) of
+      case is_expr(Name, Env) of
         true ->
           {NewEnv, [NewName], Label} = eval_expr(Env, Name),
           {NewEnv, [{call, CallPos, {remote, RemotePos, Module, NewName}, Arguments}], Label};
         false ->
-          case lists:any(fun(Arg) -> is_expr(Env, Arg) end, Arguments) of
+          case lists:any(fun(Arg) -> is_expr(Arg, Env) end, Arguments) of
             true ->
               {NewEnv, NewArguments, Label} = eval_expr_list(Env, Arguments),
               {NewEnv, [{call, CallPos, RemoteFun, NewArguments}], Label};
             false ->
               case erl_syntax:atom_value(Module) of
-                'erlang' ->
-                  eval_bif(Env, RemoteCall);
+                'erlang' -> eval_bif(Env, RemoteCall);
                 _ ->
                   % TODO Check if module matches current one
                   % TODO Handle calls to functions in other modules
@@ -350,12 +337,12 @@ eval_application(Env, RemoteCall = {call, CallPos, RemoteFun = {remote, RemotePo
       end
   end;
 eval_application(Env, LocalCall = {call, Pos, LocalFun, Arguments}) ->
-  case is_expr(Env, LocalFun) of
+  case is_expr(LocalFun, Env) of
     true ->
       {NewEnv, [NewLocalFun], Label} = eval_expr(Env, LocalFun),
       {NewEnv, [{call, Pos, NewLocalFun, Arguments}], Label};
     false ->
-      case lists:any(fun(Arg) -> is_expr(Env, Arg) end, Arguments) of
+      case lists:any(fun(Arg) -> is_expr(Arg, Env) end, Arguments) of
         true ->
           {NewEnv, NewArguments, Label} = eval_expr_list(Env, Arguments),
           {NewEnv, [{call, Pos, LocalFun, NewArguments}], Label};
@@ -408,7 +395,7 @@ eval_bif(Env, {call, _, {remote, _, erlang, FunName}, Arguments}) ->
 -spec eval_list(environment(), af_cons(abstract_expr())) -> result().
 
 eval_list(Env, {cons, Pos, Head, Tail}) ->
-  case is_expr(Env, Head) of
+  case is_expr(Head, Env) of
     true ->
       {NewEnv, [NewHead], Label} = eval_expr(Env, Head),
       {NewEnv, [{cons, Pos, NewHead, Tail}], Label};
@@ -428,7 +415,7 @@ eval_tuple(Env, {tuple, Pos, Elements}) when is_list(Elements) ->
 -spec eval_case_expr(environment(), af_case()) -> result().
 
 eval_case_expr(Env, {'case', Pos, Argument, Clauses}) ->
-  case is_expr(Env, Argument) of
+  case is_expr(Argument, Env) of
     true ->
       {NewEnv, [NewArgument], Label} = eval_expr(Env, Argument),
       {NewEnv, [{'case', Pos, NewArgument, Clauses}], Label};
@@ -450,13 +437,11 @@ match_clause(Env, Clauses, Value) ->
           {value, _Value, Bindings} ->
             NewEnv = utils:merge_env(Env, Bindings),
             case Guards of
-              [] ->
-                throw({NewEnv, Body});
+              [] -> throw({NewEnv, Body});
               Guard ->
                 NewGuard = eval_guard_seq(NewEnv, Guard),
                 case erl_syntax:atom_value(NewGuard) of
-                  true ->
-                    throw({NewEnv, Body});
+                  true -> throw({NewEnv, Body});
                   false -> continue
                 end
             end
@@ -476,12 +461,11 @@ match_clause(Env, Clauses, Value) ->
 -spec eval_pattern(environment(), af_pattern()) -> af_pattern().
 
 eval_pattern(Env, Pattern) ->
-  case is_expr(Env, Pattern) of
+  case is_expr(Pattern, Env) of
     true ->
       {NewEnv, [NewPattern], tau} = eval_expr(Env, Pattern),
       eval_pattern(NewEnv, NewPattern);
-    false ->
-      Pattern
+    false -> Pattern
   end.
 
 
@@ -506,16 +490,14 @@ eval_guard(Env, Guard) when is_list(Guard) ->
 eval_guard_test(Env, GuardTest) ->
   case erl_lint:is_guard_test(GuardTest) of
     true ->
-      case is_expr(Env, GuardTest) of
+      case is_expr(GuardTest, Env) of
         true ->
           % Environment should not change, and the label should be `tau`
           {Env, [NewGuardTest], tau} = eval_expr(Env, GuardTest),
           eval_guard_test(Env, NewGuardTest);
-        false ->
-          GuardTest
+        false -> GuardTest
       end;
-    false ->
-      erlang:error(guard_expr) % TODO How to handle error in the interpreted code?
+    false -> erlang:error(guard_expr) % TODO How to handle error in the interpreted code?
   end.
 
 
@@ -529,14 +511,13 @@ eval_receive(Env, {'receive', _, Clauses}) ->
 
 -spec abstract(term()) -> abstract_expr().
 
-abstract(Value) ->
-  erl_syntax:revert(erl_syntax:abstract(Value)).
+abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
 
 
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
--spec eval_step(#sys{}, af_integer()) -> #sys{}.
+-spec eval_step(system(), af_integer()) -> system().
 
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
@@ -638,7 +619,7 @@ eval_step(System, Pid) ->
 %% =====================================================================
 %% @doc Performs an evaluation step in message Id, given System
 
--spec eval_sched(#sys{}, non_neg_integer()) -> #sys{}.
+-spec eval_sched(system(), non_neg_integer()) -> system().
 
 eval_sched(System, Id) ->
   #sys{procs = Procs, msgs = Msgs} = System,
@@ -652,36 +633,21 @@ eval_sched(System, Id) ->
 
 
 %% =====================================================================
-%% @doc Checks if the given Expression can is an expression or not
+%% @doc Checks if the given abstract expression can be reduced any further or not.
 
--spec is_expr(environment(), abstract_expr()) -> boolean().
+-spec is_expr(abstract_expr(), environment()) -> boolean().
 
-is_expr(Env, Expr) when is_tuple(Expr) ->
-  case erl_syntax:type(Expr) of
-    atom ->
-      false;
-    integer ->
-      false;
-    float ->
-      false;
-    char ->
-      false;
-    string ->
-      false;
-    nil ->
-      false;
-    list ->
-      is_expr(Env, erl_syntax:list_head(Expr)) orelse is_expr(Env, erl_syntax:list_tail(Expr));
-    tuple ->
-      lists:any(fun(Elem) -> is_expr(Env, Elem) end, erl_syntax:tuple_elements(Expr));
-    variable ->
-      Name = erl_syntax:variable_name(Expr),
-      erl_eval:binding(Name, Env) =/= unbound;
-    underscore ->
-      false;
-    _ ->
-      true
-  end.
+is_expr({atom, _, _}, _)      -> false;
+is_expr({char, _, _}, _)      -> false;
+is_expr({float, _, _}, _)     -> false;
+is_expr({integer, _, _}, _)   -> false;
+is_expr({nil, _}, _)          -> false;
+is_expr({string, _, _}, _)    -> false;
+is_expr({var, _, '_'}, _)     -> false;
+is_expr({var, _, Name}, Env)  -> erl_eval:binding(Name, Env) =/= unbound;
+is_expr({cons, _, H, T}, Env) -> is_expr(H, Env) orelse is_expr(T, Env);
+is_expr({tuple, _, Es}, Env)  -> lists:any(fun(E) -> is_expr(E, Env) end, Es);
+is_expr(_, _)                 -> true.
 
 
 %% =====================================================================
@@ -693,28 +659,24 @@ is_expr(Env, Expr) when is_tuple(Expr) ->
 
 -spec matchrec(af_clause_seq(), [proc_msg()], environment()) -> {environment(), [abstract_expr()], proc_msg(), [proc_msg()]} | nomatch.
 
-matchrec(Clauses, Mail, Env) ->
-  matchrec(Clauses, Mail, [], Env).
+matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
 
 
 -spec matchrec(af_clause_seq(), [proc_msg()], [proc_msg()], environment()) -> {environment(), [abstract_expr()], proc_msg(), [proc_msg()]} | nomatch.
 
-matchrec(_Clauses, [], _CheckedMsgs, _Env) ->
-  nomatch;
+matchrec(_Clauses, [], _CheckedMsgs, _Env) -> nomatch;
 matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
   {MsgValue, _MsgTime} = CurMsg,
   case match_clause(Env, Clauses, MsgValue) of
-    {NewEnv, Body} ->
-      {NewEnv, Body, CurMsg, lists:reverse(CheckedMsgs, RestMsgs)};
-    nomatch ->
-      matchrec(Clauses, RestMsgs, [CurMsg | CheckedMsgs])
+    {NewEnv, Body} -> {NewEnv, Body, CurMsg, lists:reverse(CheckedMsgs, RestMsgs)};
+    nomatch -> matchrec(Clauses, RestMsgs, [CurMsg | CheckedMsgs], Env)
   end.
 
 
 %% =====================================================================
 %% @doc Gets the evaluation options for a given System
 
--spec eval_opts(#sys{}) -> [#opt{}].
+-spec eval_opts(system()) -> [option()].
 
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
@@ -722,15 +684,13 @@ eval_opts(System) ->
   lists:append(SchedOpts, ProcsOpts).
 
 
--spec eval_sched_opts(#sys{}) -> [#opt{}].
+-spec eval_sched_opts(system()) -> [option()].
 
-eval_sched_opts(#sys{msgs = []}) ->
-  [];
+eval_sched_opts(#sys{msgs = []}) -> [];
 eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
   #msg{dest = DestPid, time = Time} = CurMsg,
   case lists:any(fun(P) -> P#proc.pid == DestPid end, Procs) of
-    false ->
-      eval_sched_opts(System#sys{msgs = RestMsgs});
+    false -> eval_sched_opts(System#sys{msgs = RestMsgs});
     true ->
       Option = #opt{
         sem  = ?MODULE,
@@ -742,15 +702,13 @@ eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
   end.
 
 
--spec eval_procs_opts(#sys{}) -> [#opt{}].
+-spec eval_procs_opts(system()) -> [option()].
 
-eval_procs_opts(#sys{procs = []}) ->
-  [];
+eval_procs_opts(#sys{procs = []}) -> [];
 eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
   #proc{pid = Pid, env = Env, exp = Exprs, mail = Mail} = CurProc,
   case eval_expr_opt(Exprs, Env, Mail) of
-    ?NOT_EXP ->
-      eval_procs_opts(System#sys{procs = RestProcs});
+    ?NOT_EXP -> eval_procs_opts(System#sys{procs = RestProcs});
     Rule ->
       Option = #opt{
         sem  = ?MODULE,
@@ -768,14 +726,12 @@ eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
   Mail :: [#msg{}],
   Options :: ?NOT_EXP | ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF.
 
-eval_expr_opt(Expr, Env, Mail) when is_tuple(Expr) ->
-  eval_expr_opt([Expr], Env, Mail);
+eval_expr_opt(Expr, Env, Mail) when is_tuple(Expr) -> eval_expr_opt([Expr], Env, Mail);
 eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
-  case is_expr(Env, Expr) of
+  case is_expr(Expr, Env) of
     false ->
       case Exprs of
-        [] ->
-          ?NOT_EXP;
+        [] -> ?NOT_EXP;
         _ ->
           % If `Expr` is not an expression but there are still other expressions
           % to evaluate then it means we just found a literal in the middle of
@@ -784,127 +740,98 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
       end;
     true ->
       case erl_syntax:type(Expr) of
-        variable ->
-          ?RULE_SEQ;
+        variable -> ?RULE_SEQ;
         match_expr ->
           Pattern = erl_syntax:match_expr_pattern(Expr),
-          case is_expr(Env, Pattern) of
-            true ->
-              eval_expr_opt(Pattern, Env, Mail);
+          case is_expr(Pattern, Env) of
+            true -> eval_expr_opt(Pattern, Env, Mail);
             false ->
               Body = erl_syntax:match_expr_body(Expr),
-              case is_expr(Env, Body) of
-                true ->
-                  eval_expr_opt(Body, Env, Mail);
-                false ->
-                  ?RULE_SEQ
+              case is_expr(Body, Env) of
+                true -> eval_expr_opt(Body, Env, Mail);
+                false -> ?RULE_SEQ
               end
           end;
         infix_expr ->
           Left = erl_syntax:infix_expr_left(Expr),
-          case is_expr(Env, Left) of
-            true ->
-              eval_expr_opt(Left, Env, Mail);
+          case is_expr(Left, Env) of
+            true -> eval_expr_opt(Left, Env, Mail);
             false ->
               Right = erl_syntax:infix_expr_right(Expr),
-              case is_expr(Env, Right) of
-                true ->
-                  eval_expr_opt(Right, Env, Mail);
+              case is_expr(Right, Env) of
+                true -> eval_expr_opt(Right, Env, Mail);
                 false ->
                   Op = erl_syntax:atom_value(erl_syntax:infix_expr_operator(Expr)),
                   case Op of
-                    '!' ->
-                      ?RULE_SEND;
-                    _ ->
-                      ?RULE_SEQ
+                    '!' -> ?RULE_SEND;
+                    _ -> ?RULE_SEQ
                   end
               end
           end;
         prefix_expr ->
           Arg = erl_syntax:prefix_expr_argument(Expr),
-          case is_expr(Env, Arg) of
-            true ->
-              eval_expr_opt(Arg, Env, Mail);
-            false ->
-              ?RULE_SEQ
+          case is_expr(Arg, Env) of
+            true -> eval_expr_opt(Arg, Env, Mail);
+            false -> ?RULE_SEQ
           end;
         application ->
           Args = erl_syntax:application_arguments(Expr),
-          case lists:any(fun(Arg) -> is_expr(Env, Arg) end, Args) of
-            true ->
-              eval_expr_opt(Args, Env, Mail);
+          case lists:any(fun(Arg) -> is_expr(Arg, Env) end, Args) of
+            true -> eval_expr_opt(Args, Env, Mail);
             false ->
               Op = erl_syntax:application_operator(Expr),
               case erl_syntax:type(Op) of
                 module_qualifier ->
                   Module = erl_syntax:module_qualifier_argument(Op),
-                  case is_expr(Env, Module) of
-                    true ->
-                      eval_expr_opt(Module, Env, Mail);
+                  case is_expr(Module, Env) of
+                    true -> eval_expr_opt(Module, Env, Mail);
                     false ->
                       case erl_syntax:atom_value(Module) of
                         'erlang' ->
                           Name = erl_syntax:module_qualifier_body(Op),
-                          case is_expr(Env, Name) of
-                            true ->
-                              eval_expr_opt(Name, Env, Mail);
+                          case is_expr(Name, Env) of
+                            true -> eval_expr_opt(Name, Env, Mail);
                             false ->
                               case erl_syntax:atom_value(Name) of
-                                'spawn' ->
-                                  ?RULE_SPAWN;
-                                'self' ->
-                                  ?RULE_SELF;
-                                _ ->
-                                  ?RULE_SEQ
+                                'spawn' -> ?RULE_SPAWN;
+                                'self' -> ?RULE_SELF;
+                                _ -> ?RULE_SEQ
                               end
                           end;
-                        _ ->
-                          ?RULE_SEQ
+                        _ -> ?RULE_SEQ
                       end
                   end;
                 _ ->
-                  case is_expr(Env, Op) of
-                    true ->
-                      eval_expr_opt(Op, Env, Mail);
+                  case is_expr(Op, Env) of
+                    true -> eval_expr_opt(Op, Env, Mail);
                     false ->
                       % TODO Check for clashes with functions in the same file and/or directory
                       case erl_syntax:atom_value(Op) of
-                        'spawn' ->
-                          ?RULE_SPAWN;
-                        'self' ->
-                          ?RULE_SELF;
-                        _ ->
-                          ?RULE_SEQ
+                        'spawn' -> ?RULE_SPAWN;
+                        'self' -> ?RULE_SELF;
+                        _ -> ?RULE_SEQ
                       end
                   end
               end
           end;
-        list ->
-          eval_expr_opt(erl_syntax:list_elements(Expr), Env, Mail);
-        tuple ->
-          eval_expr_opt(erl_syntax:tuple_elements(Expr), Env, Mail);
+        list -> eval_expr_opt(erl_syntax:list_elements(Expr), Env, Mail);
+        tuple -> eval_expr_opt(erl_syntax:tuple_elements(Expr), Env, Mail);
         case_expr ->
           Arg = erl_syntax:case_expr_argument(Expr),
-          case is_expr(Env, Arg) of
-            true ->
-              eval_expr_opt(Arg, Env, Mail);
-            false ->
-              ?RULE_SEQ
+          case is_expr(Arg, Env) of
+            true -> eval_expr_opt(Arg, Env, Mail);
+            false -> ?RULE_SEQ
           end;
         receive_expr ->
           Clauses = erl_syntax:receive_expr_clauses(Expr),
           case matchrec(Clauses, Mail, Env) of
-            nomatch ->
-              ?NOT_EXP;
-            _Other ->
-              ?RULE_RECEIVE
+            nomatch -> ?NOT_EXP;
+            _Other -> ?RULE_RECEIVE
           end
       end
   end.
 
 
-ref_add(Id, Ref) ->
-  ets:insert(?APP_REF, {Id, Ref}).
+ref_add(Id, Ref) -> ets:insert(?APP_REF, {Id, Ref}).
 
-ref_lookup(Id) ->
-  ets:lookup_element(?APP_REF, Id, 2).
+ref_lookup(Id) -> ets:lookup_element(?APP_REF, Id, 2).
