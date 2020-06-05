@@ -64,6 +64,9 @@
                       | {spawn, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}}
                       | {rec, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {erl_parse:abstract_expr(), non_neg_integer()}, [{erl_parse:abstract_expr(), non_neg_integer()}]}].
 
+-type proc_msg() :: {erl_parse:abstract_expr(), non_neg_integer()}. % {Value, Id}
+
+
 %% Message
 -record(msg, {
   % Target process identifier
@@ -87,7 +90,7 @@
   % List of expressions
   exp :: [erl_parse:abstract_expr()],
   % Process mailbox
-  mail = [] :: [{erl_parse:abstract_expr(), non_neg_integer()}], % {Value, Id}
+  mail = [] :: [proc_msg()],
   % The entry point function for this process
   spf :: undefined | {atom(), arity()}
 }).
