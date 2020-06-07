@@ -450,6 +450,8 @@ loadFile(File) ->
       % Generate forms that will appear in the 'Code' tab
       FinalForms = erl_recomment:recomment_forms(Attributes ++ Functions, Comments),
 
+      % TODO erl_expand_records:module/2
+
       wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), erl_prettypr:format(FinalForms)),
 
       Status = ref_lookup(?STATUS),
@@ -555,10 +557,10 @@ zoomOut() ->
 init_system(Fun, Args, Pid, Log) ->
   % Store the new system
   Proc = #proc{
-    pid = erl_parse:abstract(Pid),
-    log = Log,
-    exp = [erl_syntax:revert(erl_syntax:application(erl_syntax:atom(Fun), Args))],
-    spf = {Fun, length(Args)}
+    pid   = erl_parse:abstract(Pid),
+    log   = Log,
+    exprs = [erl_syntax:revert(erl_syntax:application(erl_syntax:atom(Fun), Args))],
+    spf   = {Fun, length(Args)}
   },
   Procs = [Proc],
   Sched = utils_gui:sched_opt(),
@@ -650,10 +652,10 @@ refresh(RefState) ->
           StateText = ref_lookup(?STATE_TEXT),
           TraceText = ref_lookup(?TRACE_TEXT),
           RollLogText = ref_lookup(?ROLL_LOG_TEXT),
-          MarkedText = utils:pp_system(System, ToggleOpts),
+          MarkedText = pretty_print:system(System, ToggleOpts),
           utils_gui:pp_marked_text(StateText, MarkedText),
-          wxTextCtrl:setValue(TraceText,utils:pp_trace(System)),
-          wxTextCtrl:setValue(RollLogText,utils:pp_roll_log(System))
+          wxTextCtrl:setValue(TraceText,pretty_print:system_trace(System)),
+          wxTextCtrl:setValue(RollLogText,pretty_print:roll_log(System))
       end,
       refresh_buttons(Options),
       utils_gui:enable_perm_buttons()

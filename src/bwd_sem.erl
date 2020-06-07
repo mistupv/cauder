@@ -28,7 +28,7 @@ eval_step(System, Pid) ->
       OldProc = Proc#proc{
         hist = RestHist,
         env  = OldEnv,
-        exp  = OldExprs
+        exprs = OldExprs
       },
       System#sys{
         msgs  = Msgs,
@@ -38,7 +38,7 @@ eval_step(System, Pid) ->
       OldProc = Proc#proc{
         hist = RestHist,
         env  = OldEnv,
-        exp  = OldExprs
+        exprs = OldExprs
       },
       System#sys{
         msgs  = Msgs,
@@ -49,7 +49,7 @@ eval_step(System, Pid) ->
       OldProc = Proc#proc{
         hist = RestHist,
         env  = OldEnv,
-        exp  = OldExprs
+        exprs = OldExprs
       },
       TraceItem = #trace{
         type = ?RULE_SEND,
@@ -69,7 +69,7 @@ eval_step(System, Pid) ->
       OldProc = Proc#proc{
         hist = RestHist,
         env  = OldEnv,
-        exp  = OldExprs
+        exprs = OldExprs
       },
       TraceItem = #trace{
         type = ?RULE_SPAWN,
@@ -86,10 +86,10 @@ eval_step(System, Pid) ->
       {MsgValue, Time} = OldMsg,
 
       OldProc = Proc#proc{
-        hist = RestHist,
-        env  = OldEnv,
-        exp  = OldExprs,
-        mail = OldMail
+        hist  = RestHist,
+        env   = OldEnv,
+        exprs = OldExprs,
+        mail  = OldMail
       },
       TraceItem = #trace{
         type = ?RULE_RECEIVE,

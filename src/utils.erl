@@ -11,7 +11,7 @@
          select_proc_with_spawn/2, select_proc_with_rec/2,
          select_proc_with_var/2, list_from_core/1,
          merge_env/2,
-         replace_variable/3, replace_all/2, pp_system/2, pp_trace/1, pp_roll_log/1,
+         replace_variable/3, replace_all/2,
          funNames/1,
          stringToNameAndArity/1, stringToArgs/1,
          filter_options/2, filter_procs_opts/1,
@@ -21,7 +21,6 @@
          extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0]).
 
 -include("cauder.hrl").
--include_lib("wx/include/wx.hrl").
 
 %%--------------------------------------------------------------------
 %% @doc Searches a function definition in FunDefs with name FunName
@@ -314,156 +313,11 @@ replace_variable(Target, Replacement, Expressions) when is_list(Expressions) ->
     Expressions
   ).
 
-%%--------------------------------------------------------------------
-%% @doc Pretty-prints a given System
-%% @end
-%%--------------------------------------------------------------------
-pp_system(#sys{msgs = Msgs, procs = Procs}, Opts) ->
-  pp_msgs(Msgs) ++ "\n" ++ pp_procs(Procs, Opts).
-
-pp_msgs(Msgs) ->
-  MsgsList = [pp_msg(Msg) || Msg <- Msgs],
-  "GM : [" ++ string:join(MsgsList,",") ++ "]\n".
-
-pp_msg(#msg{dest = DestPid, val = MsgValue, time = Time}) ->
-  "(" ++ pp(DestPid) ++ ",{" ++ pp(MsgValue) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ "})".
-
-pp_procs(Procs, Opts) ->
-  SortProcs = lists:sort(fun(P1, P2) -> P1#proc.pid < P2#proc.pid end, Procs),
-  ProcsList = [pp_proc(Proc, Opts) || Proc <- SortProcs],
-  string:join(ProcsList,"\n").
-
-pp_proc(#proc{pid = Pid, hist = Hist, env = Env, exp = Exp, mail = Mail, spf = Fun}, Opts) ->
-  pp_pre(Pid, Fun) ++
-  pp_mail(Mail, Opts) ++
-  pp_hist(Hist, Opts) ++
-  pp_env(Env, Exp, Opts)++
-  pp(Exp, Opts).
-
-pp_pre(Pid, Fun) ->
-  "=============== " ++ pp_pid(Pid) ++ ": " ++ pp_fun(Fun)++ " ===============\n".
-
-pp_pid(Pid) ->
-  "Proc. " ++ pp(Pid).
-
-pp_fun(undefined) ->
-  "";
-pp_fun({Name, Arity}) ->
-  atom_to_list(Name) ++ "/" ++ integer_to_list(Arity).
 
 
-pp_env(Env, Exp, Opts) ->
-  case proplists:get_value(?PRINT_ENV, Opts) of
-    false -> "";
-    true  -> "ENV: " ++ pp_env_1(Env, Exp, Opts) ++ "\n"
-  end.
-
-pp_env_1(Env, Exp, Opts) ->
-  Bindings =
-    case proplists:get_value(?PRINT_FULL_ENV, Opts) of
-      true ->
-        Env;
-      false ->
-        relevant_bindings(Env, Exp)
-    end,
-  PairsList = [pp_binding(Var, Val) || {Var, Val} <- Bindings],
-  "{" ++ string:join(PairsList, ", ") ++ "}".
-
-pp_binding(Var, Val) ->
-  io_lib:format("~s -> ~p", [atom_to_list(Var), Val]).
-
-is_conc_item({spawn,_,_,_}) -> true;
-is_conc_item({send,_,_,_,_}) -> true;
-is_conc_item({rec,_,_,_,_}) -> true;
-is_conc_item(_) -> false.
-
-pp_hist(Hist, Opts) ->
-  case proplists:get_value(?PRINT_HIST, Opts) of
-    false -> "";
-    true  -> pp_hist_1(Hist, Opts) ++ "\n"
-  end.
-
-pp_hist_1(Hist, Opts) ->
-  FiltHist =
-    case proplists:get_value(?PRINT_FULL, Opts) of
-      false -> lists:filter(fun is_conc_item/1, Hist);
-      true  -> Hist
-    end,
-  StrItems = [pp_hist_2(Item) || Item <- FiltHist],
-  "H  : [" ++ string:join(StrItems, ",") ++ "]".
-
-pp_hist_2({tau,_,_}) ->
-  "seq";
-pp_hist_2({self,_,_}) ->
-  "self";
-pp_hist_2({spawn,_,_,Pid}) ->
-  "spawn(" ++ [{?CAUDER_GREEN, pp(Pid)}] ++ ")";
-pp_hist_2({send,_,_,_,{Value,Time}}) ->
-  "send(" ++ pp(Value) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
-pp_hist_2({rec,_,_,{Value,Time},_}) ->
-  "rec(" ++ pp(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")".
-
-pp_mail(Mail, Opts) ->
-  case proplists:get_value(?PRINT_MAIL, Opts) of
-    false -> "";
-    true  -> "LM : " ++ pp_mail_1(Mail) ++ "\n"
-  end.
-
-pp_mail_1([]) -> "[]";
-pp_mail_1(Mail) ->
-  MailList = [pp_msg_mail(Val, Time) || {Val, Time} <- Mail],
-  "[" ++ string:join(MailList,",") ++ "]".
-
-pp_msg_mail(Val, Time) ->
-  "{" ++ pp(Val) ++ "," ++  [{?CAUDER_GREEN, integer_to_list(Time)}] ++ "}".
 
 
-pp(Exprs, Opts) ->
-  case proplists:get_value(?PRINT_EXP, Opts) of
-    false -> "";
-    true -> "EXP: " ++ lists:join(",\n     ", [pp(Expr) || Expr <- Exprs]) ++ "\n"
-  end.
 
-pp(Expr) ->
-  lists:flatten(erl_prettypr:format(Expr)).
-
-%%--------------------------------------------------------------------
-%% @doc Pretty-prints a given system trace
-%% @end
-%%--------------------------------------------------------------------
-pp_trace(#sys{trace = Trace}) ->
-  % Trace is built as a stack (newest item is first)
-  % and we must reverse it to print it
-  RevTrace = lists:reverse(Trace),
-  TraceStr = [pp_trace_item(Item) || Item <- RevTrace],
-  string:join(TraceStr,"\n").
-
-pp_trace_item(#trace{type = Type,
-                     from = From,
-                     to   = To,
-                     val  = Val,
-                     time = Time}) ->
-  case Type of
-    ?RULE_SEND    -> pp_trace_send(From, To, Val, Time);
-    ?RULE_SPAWN   -> pp_trace_spawn(From, To);
-    ?RULE_RECEIVE -> pp_trace_receive(From, Val, Time)
-  end.
-
-pp_trace_send(From, To, Val, Time) ->
-  [pp_pid(From)," sends ",pp(Val)," to ",pp_pid(To)," (",integer_to_list(Time),")"].
-
-pp_trace_spawn(From, To) ->
-  [pp_pid(From)," spawns ",pp_pid(To)].
-
-pp_trace_receive(From, Val, Time) ->
-  [pp_pid(From)," receives ",pp(Val)," (",integer_to_list(Time),")"].
-
-%%--------------------------------------------------------------------
-%% @doc Prints a given system roll log
-%% @end
-%%--------------------------------------------------------------------
-pp_roll_log(#sys{roll = RollLog}) ->
-  string:join(RollLog,"\n").
 
 %%--------------------------------------------------------------------
 %% @doc Returns a list with the names of the functions defined in the given FunForms
@@ -614,16 +468,12 @@ last_msg_rest(Mail) ->
   RestMail = lists:droplast(Mail),
   {LastMsg, RestMail}.
 
-relevant_bindings(Env, Exprs) ->
-  Vars = sets:union([erl_syntax_lib:variables(Expr) || Expr <- Exprs]),
-  [Bind || Bind = {Var, _} <- erl_eval:bindings(Env), sets:is_element(Var, Vars)].
-
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
-[["Roll send from ",pp_pid(Pid), " of ",pp(MsgValue), " to ",pp_pid(OtherPid), " (",integer_to_list(Time),")"]].
+[["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:expression(MsgValue), " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
 
 gen_log_spawn(_Pid, OtherPid) ->
   % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
-  [["Roll spawn of ",pp_pid(OtherPid)]].
+  [["Roll spawn of ",pretty_print:pid(OtherPid)]].
 
 empty_log(System) ->
   System#sys{roll = []}.

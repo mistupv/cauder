@@ -58,21 +58,13 @@
 
 -define(LAST_PATH, last_path).
 
--type proc_history() :: [{tau, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
-                      | {self, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
-                      | {send, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}, {erl_parse:abstract_expr(), non_neg_integer()}}
-                      | {spawn, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}}
-                      | {rec, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {erl_parse:abstract_expr(), non_neg_integer()}, [{erl_parse:abstract_expr(), non_neg_integer()}]}].
-
--type proc_msg() :: {erl_parse:abstract_expr(), non_neg_integer()}. % {Value, Id}
-
 
 %% Message
 -record(msg, {
   % Target process identifier
-  dest :: {'integer', erl_anno:anno(), non_neg_integer()},
+  dest :: fwd_sem:af_integer(),
   % Message
-  val :: erl_parse:abstract_expr(),
+  val :: fwd_sem:abstract_expr(),
   % Timestamp
   time :: non_neg_integer()
 }).
@@ -80,26 +72,26 @@
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: {'integer', erl_anno:anno(), non_neg_integer()}, % TODO Why not an integer literal
+  pid :: fwd_sem:af_integer(),
   % History
-  hist = [] :: proc_history(),
+  hist = [] :: history(),
   % Log
   log = [],
   % Environment
-  env = erl_eval:new_bindings() :: erl_eval:binding_struct(),
+  env = erl_eval:new_bindings() :: fwd_sem:environment(),
   % List of expressions
-  exp :: [erl_parse:abstract_expr()],
+  exprs :: [fwd_sem:abstract_expr()],
   % Process mailbox
-  mail = [] :: [proc_msg()],
+  mail = [] :: [process_message()],
   % The entry point function for this process
   spf :: undefined | {atom(), arity()}
 }).
 
 -record(trace, {
   type :: ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN,
-  from :: {'integer', erl_anno:anno(), non_neg_integer()},
-  to :: undefined | {'integer', erl_anno:anno(), non_neg_integer()},
-  val :: undefined | erl_parse:abstract_expr(),
+  from :: fwd_sem:af_integer(),
+  to :: undefined | fwd_sem:af_integer(),
+  val :: undefined | fwd_sem:abstract_expr(),
   time :: undefined | non_neg_integer()
 }).
 
@@ -107,10 +99,10 @@
 -record(sys, {
   sched = ?SCHED_PRIO_RANDOM :: ?SCHED_PRIO_RANDOM | ?SCHED_RANDOM,
   % Global mailbox
-  msgs = [] :: [#msg{}],
+  msgs = [] :: [message()],
   % Pool of processes
-  procs = [] :: [#proc{}],
-  trace = [] :: [#trace{}],
+  procs = [] :: [process()],
+  trace = [] :: [trace()],
   roll = []
 }).
 
@@ -121,7 +113,7 @@
   % proc or msg
   type :: ?TYPE_PROC | ?TYPE_MSG,
   % integer
-  id :: undefined | pos_integer(),
+  id :: undefined | non_neg_integer(),
   % seq, spawn, ...
   rule :: ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF | ?RULE_SCHED
 }).
@@ -134,6 +126,26 @@
 
 
 -type system() :: #sys{}.
-
+-type process() :: #proc{}.
+-type message() :: #msg{}.
+-type trace() :: #trace{}.
 -type option() :: #opt{}.
 
+-type print_option() :: ?PRINT_MAIL
+                      | ?PRINT_HIST
+                      | ?PRINT_ENV
+                      | ?PRINT_EXP
+                      | ?PRINT_FULL
+                      | ?COMP_OPT
+                      | ?PRINT_FULL_ENV.
+
+-type history() :: [history_entry()].
+
+-type history_entry() :: {tau, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
+                       | {self, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
+                       | {send, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}, {erl_parse:abstract_expr(), non_neg_integer()}}
+                       | {spawn, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}}
+                       | {rec, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {erl_parse:abstract_expr(), non_neg_integer()}, [{erl_parse:abstract_expr(), non_neg_integer()}]}.
+
+
+-type process_message() :: {erl_parse:abstract_expr(), non_neg_integer()}. % {Value, Id}

@@ -264,6 +264,9 @@ sort_opts(Opts) ->
   SortOpts = lists:sort(fun(P1, P2) -> P1#opt.id < P2#opt.id end, Opts),
   SortOpts.
 
+
+-spec toggle_opts() -> [{print_option(), boolean()}].
+
 toggle_opts() ->
   MenuView = ref_lookup(?MENU_VIEW),
   MenuComp = ref_lookup(?MENU_COMP),

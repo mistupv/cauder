@@ -11,6 +11,8 @@
 
 -include("cauder.hrl").
 
+-export_type([abstract_expr/0, af_integer/0, environment/0]).
+
 %% Start of Abstract Format
 
 -type anno() :: erl_anno:anno().
@@ -522,15 +524,15 @@ abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = Hist, env = Env, exp = Exprs, mail = Mail} = Proc,
+  #proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, mail = Mail} = Proc,
   [CurExpr | RestExpr] = Exprs,
   {NewEnv, NewExprs, Label} = eval_expr(Env, CurExpr),
   case Label of
     tau ->
       NewProc = Proc#proc{
-        hist = [{tau, Env, Exprs} | Hist],
-        env  = NewEnv,
-        exp  = NewExprs ++ RestExpr
+        hist  = [{tau, Env, Exprs} | Hist],
+        env   = NewEnv,
+        exprs = NewExprs ++ RestExpr
       },
       System#sys{
         procs = [NewProc | RestProcs]
@@ -541,7 +543,7 @@ eval_step(System, Pid) ->
       NewProc = Proc#proc{
         hist = [{self, Env, Exprs} | Hist],
         env  = NewEnv,
-        exp  = RepExpr ++ RestExpr
+        exprs = RepExpr ++ RestExpr
       },
       System#sys{
         procs = [NewProc | RestProcs]
@@ -553,7 +555,7 @@ eval_step(System, Pid) ->
       NewProc = Proc#proc{
         hist = [{send, Env, Exprs, DestPid, {MsgValue, Time}} | Hist],
         env  = NewEnv,
-        exp  = NewExprs ++ RestExpr
+        exprs = NewExprs ++ RestExpr
       },
       TraceItem = #trace{
         type = ?RULE_SEND,
@@ -570,9 +572,9 @@ eval_step(System, Pid) ->
     {spawn, {TmpVar, FunName, FunArgs}} ->
       SpawnPid = abstract(utils:fresh_pid()),
       SpawnProc = #proc{
-        pid = SpawnPid,
-        exp = [{call, erl_anno:new(0), FunName, FunArgs}],
-        spf = {erl_syntax:atom_value(FunName), length(FunArgs)}
+        pid   = SpawnPid,
+        exprs = [{call, erl_anno:new(0), FunName, FunArgs}],
+        spf   = {erl_syntax:atom_value(FunName), length(FunArgs)}
       },
 
       RepExpr = utils:replace_variable(TmpVar, SpawnPid, NewExprs),
@@ -580,7 +582,7 @@ eval_step(System, Pid) ->
       NewProc = Proc#proc{
         hist = [{spawn, Env, Exprs, SpawnPid} | Hist],
         env  = NewEnv,
-        exp  = RepExpr ++ RestExpr
+        exprs = RepExpr ++ RestExpr
       },
       TraceItem = #trace{
         type = ?RULE_SPAWN,
@@ -598,10 +600,10 @@ eval_step(System, Pid) ->
       RepExpr = utils:replace_variable(TmpVar, RecExp, NewExprs),
 
       NewProc = Proc#proc{
-        hist = [{rec, Env, Exprs, ConsMsg, Mail} | Hist],
-        env  = utils:merge_env(NewEnv, Bindings),
-        exp  = RepExpr ++ RestExpr,
-        mail = NewMail
+        hist  = [{rec, Env, Exprs, ConsMsg, Mail} | Hist],
+        env   = utils:merge_env(NewEnv, Bindings),
+        exprs = RepExpr ++ RestExpr,
+        mail  = NewMail
       },
       TraceItem = #trace{
         type = ?RULE_RECEIVE,
@@ -657,12 +659,12 @@ is_expr(_, _)                 -> true.
 %% `{NewEnvironment, NewExpression, MatchedMessage, RestMessages}`
 %% Otherwise, the atom `nomatch` is returned.
 
--spec matchrec(af_clause_seq(), [proc_msg()], environment()) -> {environment(), [abstract_expr()], proc_msg(), [proc_msg()]} | nomatch.
+-spec matchrec(af_clause_seq(), [process_message()], environment()) -> {environment(), [abstract_expr()], process_message(), [process_message()]} | nomatch.
 
 matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
 
 
--spec matchrec(af_clause_seq(), [proc_msg()], [proc_msg()], environment()) -> {environment(), [abstract_expr()], proc_msg(), [proc_msg()]} | nomatch.
+-spec matchrec(af_clause_seq(), [process_message()], [process_message()], environment()) -> {environment(), [abstract_expr()], process_message(), [process_message()]} | nomatch.
 
 matchrec(_Clauses, [], _CheckedMsgs, _Env) -> nomatch;
 matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
@@ -706,7 +708,7 @@ eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
 
 eval_procs_opts(#sys{procs = []}) -> [];
 eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
-  #proc{pid = Pid, env = Env, exp = Exprs, mail = Mail} = CurProc,
+  #proc{pid = Pid, env = Env, exprs = Exprs, mail = Mail} = CurProc,
   case eval_expr_opt(Exprs, Env, Mail) of
     ?NOT_EXP -> eval_procs_opts(System#sys{procs = RestProcs});
     Rule ->
