@@ -11,11 +11,13 @@
 
 -include("cauder.hrl").
 
--export_type([abstract_expr/0, af_integer/0, environment/0]).
+-export_type([af_function_decl/0, abstract_expr/0, af_integer/0, environment/0]).
 
 %% Start of Abstract Format
 
 -type anno() :: erl_anno:anno().
+
+-type af_function_decl() :: {'function', anno(), function_name(), arity(), af_clause_seq()}.
 
 -type abstract_expr() :: erl_parse:abstract_expr().
 
@@ -351,7 +353,7 @@ eval_application(Env, LocalCall = {call, Pos, LocalFun, Arguments}) ->
         false ->
           Name = erl_syntax:atom_value(LocalFun),
           % Check if the function is in this file
-          case utils:fundef_lookup(Name, length(Arguments), ref_lookup(?FUN_DEFS)) of
+          case utils:fundef_lookup({Name, length(Arguments)}, ref_lookup(?FUN_DEFS)) of
             {value, FunDef} ->
               FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
               % There should be no variables to evaluate so we pass no bindings
@@ -833,7 +835,5 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
       end
   end.
 
-
-ref_add(Id, Ref) -> ets:insert(?APP_REF, {Id, Ref}).
 
 ref_lookup(Id) -> ets:lookup_element(?APP_REF, Id, 2).
