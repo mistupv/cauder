@@ -782,7 +782,7 @@ eval_roll_var() ->
       % name if it is the first character
       VarName =
         case string:find(IdText, "_") of
-          no_match -> IdText;
+          nomatch -> IdText;
           Match when length(IdText) =:= length(Match) ->
             string:slice(IdText, 1);
           _ ->

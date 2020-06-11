@@ -265,7 +265,7 @@ sort_opts(Opts) ->
   SortOpts.
 
 
--spec toggle_opts() -> [{print_option(), boolean()}].
+-spec toggle_opts() -> [{cauder_types:print_option(), boolean()}].
 
 toggle_opts() ->
   MenuView = ref_lookup(?MENU_VIEW),

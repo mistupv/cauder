@@ -28,7 +28,7 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec fundef_lookup({atom(), arity()}, [fwd_sem:af_function_decl()]) -> {value, fwd_sem:af_function_decl()} | false.
+-spec fundef_lookup({atom(), arity()}, [cauder_types:af_function_decl()]) -> {value, cauder_types:af_function_decl()} | false.
 
 fundef_lookup({Name, Arity}, FunDefs) ->
   lists:search(fun({'function', _, N, A, _}) -> Name == N andalso Arity == A end, FunDefs).
@@ -99,7 +99,7 @@ fresh_time() ->
   Time.
 
 
--spec pid_exists([process()], fwd_sem:af_integer()) -> boolean().
+-spec pid_exists([cauder_types:process()], cauder_types:af_integer()) -> boolean().
 
 pid_exists([#proc{pid = Pid} | _], Pid) -> true;
 pid_exists([_ | Procs], Pid)            -> pid_exists(Procs, Pid);
@@ -112,7 +112,7 @@ pid_exists([], _)                       -> false.
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc([process()], fwd_sem:af_integer()) -> {process(), [process()]}.
+-spec select_proc([cauder_types:process()], cauder_types:af_integer()) -> {cauder_types:process(), [cauder_types:process()]}.
 
 select_proc(Procs, Pid) ->
   {[Proc], RestProcs} = lists:partition(fun(P) -> P#proc.pid == Pid end, Procs),
@@ -125,7 +125,7 @@ select_proc(Procs, Pid) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_msg([message()], non_neg_integer()) -> {message(), [message()]}.
+-spec select_msg([cauder_types:message()], non_neg_integer()) -> {cauder_types:message(), [cauder_types:message()]}.
 
 select_msg(Messages, Time) ->
   {[Message | []], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Messages),
@@ -138,7 +138,7 @@ select_msg(Messages, Time) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_time([process()], non_neg_integer()) -> {value, process()} | false.
+-spec select_proc_with_time([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
 
 select_proc_with_time(Procs, Time) ->
   CheckTime = fun({_, MsgTime}) -> MsgTime == Time end,
@@ -151,7 +151,7 @@ select_proc_with_time(Procs, Time) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_send([process()], non_neg_integer()) -> [process()].
+-spec select_proc_with_send([cauder_types:process()], non_neg_integer()) -> [cauder_types:process()].
 
 select_proc_with_send(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> has_send(Hist, Time) end, Procs).
 
@@ -161,7 +161,7 @@ select_proc_with_send(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> ha
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_spawn([process()], fwd_sem:af_integer()) -> [process()].
+-spec select_proc_with_spawn([cauder_types:process()], cauder_types:af_integer()) -> [cauder_types:process()].
 
 select_proc_with_spawn(Procs, Pid) -> lists:filter(fun(#proc{hist = Hist}) -> has_spawn(Hist, Pid) end, Procs).
 
@@ -171,7 +171,7 @@ select_proc_with_spawn(Procs, Pid) -> lists:filter(fun(#proc{hist = Hist}) -> ha
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_rec([process()], non_neg_integer()) -> [process()].
+-spec select_proc_with_rec([cauder_types:process()], non_neg_integer()) -> [cauder_types:process()].
 
 select_proc_with_rec(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> has_rec(Hist, Time) end, Procs).
 
@@ -181,7 +181,7 @@ select_proc_with_rec(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> has
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_var([process()], {atom(), term()}) -> [process()].
+-spec select_proc_with_var([cauder_types:process()], cauder_types:binding()) -> [cauder_types:process()].
 
 select_proc_with_var(Procs, Var) -> lists:filter(fun(#proc{env = Env}) -> has_var(Env, Var) end, Procs).
 
@@ -191,7 +191,7 @@ select_proc_with_var(Procs, Var) -> lists:filter(fun(#proc{env = Env}) -> has_va
 %% @end
 %%--------------------------------------------------------------------
 
--spec merge_env(fwd_sem:environment(), fwd_sem:environment()) -> fwd_sem:environment().
+-spec merge_env(cauder_types:environment(), cauder_types:environment()) -> cauder_types:environment().
 
 merge_env(Env, []) -> Env;
 merge_env(Env, [{Name, Value} | RestBindings]) ->

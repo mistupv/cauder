@@ -59,51 +59,43 @@
 -define(LAST_PATH, last_path).
 
 
-%% Message
--record(msg, {
-  % Target process identifier
-  dest :: fwd_sem:af_integer(),
-  % Message
-  val :: fwd_sem:abstract_expr(),
-  % Timestamp
-  time :: non_neg_integer()
+% System
+-record(sys, {
+  sched = ?SCHED_PRIO_RANDOM :: ?SCHED_PRIO_RANDOM | ?SCHED_RANDOM,
+  % Global mailbox
+  msgs = [] :: [cauder_types:message()],
+  % Pool of processes
+  procs = [] :: [cauder_types:process()],
+  trace = [] :: [cauder_types:trace()],
+  roll = []
 }).
 
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: fwd_sem:af_integer(),
+  pid :: cauder_types:af_integer(),
   % History
-  hist = [] :: history(),
+  hist = [] :: cauder_types:history(),
   % Log
   log = [],
   % Environment
-  env = erl_eval:new_bindings() :: fwd_sem:environment(),
+  env = erl_eval:new_bindings() :: cauder_types:environment(),
   % List of expressions
-  exprs :: [fwd_sem:abstract_expr()],
+  exprs :: [cauder_types:abstract_expr()],
   % Process mailbox
-  mail = [] :: [process_message()],
+  mail = [] :: [cauder_types:process_message()],
   % The entry point function for this process
   spf :: undefined | {atom(), arity()}
 }).
 
--record(trace, {
-  type :: ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN,
-  from :: fwd_sem:af_integer(),
-  to :: undefined | fwd_sem:af_integer(),
-  val :: undefined | fwd_sem:abstract_expr(),
-  time :: undefined | non_neg_integer()
-}).
-
-% System
--record(sys, {
-  sched = ?SCHED_PRIO_RANDOM :: ?SCHED_PRIO_RANDOM | ?SCHED_RANDOM,
-  % Global mailbox
-  msgs = [] :: [message()],
-  % Pool of processes
-  procs = [] :: [process()],
-  trace = [] :: [trace()],
-  roll = []
+%% Message
+-record(msg, {
+  % Target process identifier
+  dest :: cauder_types:af_integer(),
+  % Message
+  val :: cauder_types:abstract_expr(),
+  % Timestamp
+  time :: non_neg_integer()
 }).
 
 % Option
@@ -118,34 +110,17 @@
   rule :: ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF | ?RULE_SCHED
 }).
 
+% Trace
+-record(trace, {
+  type :: ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN,
+  from :: cauder_types:af_integer(),
+  to :: undefined | cauder_types:af_integer(),
+  val :: undefined | cauder_types:abstract_expr(),
+  time :: undefined | non_neg_integer()
+}).
+
 -record(replay, {
   call,
   main_pid,
   log_path
 }).
-
-
--type system() :: #sys{}.
--type process() :: #proc{}.
--type message() :: #msg{}.
--type trace() :: #trace{}.
--type option() :: #opt{}.
-
--type print_option() :: ?PRINT_MAIL
-                      | ?PRINT_HIST
-                      | ?PRINT_ENV
-                      | ?PRINT_EXP
-                      | ?PRINT_FULL
-                      | ?COMP_OPT
-                      | ?PRINT_FULL_ENV.
-
--type history() :: [history_entry()].
-
--type history_entry() :: {tau, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
-                       | {self, erl_eval:binding_struct(), [erl_parse:abstract_expr()]}
-                       | {send, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}, {erl_parse:abstract_expr(), non_neg_integer()}}
-                       | {spawn, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {'integer', erl_anno:anno(), non_neg_integer()}}
-                       | {rec, erl_eval:binding_struct(), [erl_parse:abstract_expr()], {erl_parse:abstract_expr(), non_neg_integer()}, [{erl_parse:abstract_expr(), non_neg_integer()}]}.
-
-
--type process_message() :: {erl_parse:abstract_expr(), non_neg_integer()}. % {Value, Id}

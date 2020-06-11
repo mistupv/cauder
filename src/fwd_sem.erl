@@ -11,173 +11,8 @@
 
 -include("cauder.hrl").
 
--export_type([af_function_decl/0, abstract_expr/0, af_integer/0, environment/0]).
 
-%% Start of Abstract Format
-
--type anno() :: erl_anno:anno().
-
--type af_function_decl() :: {'function', anno(), function_name(), arity(), af_clause_seq()}.
-
--type abstract_expr() :: erl_parse:abstract_expr().
-
--type af_local_call() :: {'call', anno(), af_local_function(), af_args()}.
-
--type af_remote_call() :: {'call', anno(), af_remote_function(), af_args()}.
-
--type af_args() :: [abstract_expr()].
-
--type af_local_function() :: abstract_expr().
-
--type af_remote_function() :: {'remote', anno(), abstract_expr(), abstract_expr()}.
-
--type af_case() :: {'case', anno(), abstract_expr(), af_clause_seq()}.
-
--type af_clause_seq() :: [af_clause(), ...].
-
--type af_receive() :: {'receive', anno(), af_clause_seq()}
-                    | {'receive', anno(), af_clause_seq(), abstract_expr(), af_body()}.
-
--type af_clause() :: {'clause', anno(), [af_pattern()], af_guard_seq(), af_body()}.
-
--type af_body() :: [abstract_expr(), ...].
-
--type af_guard_seq() :: [af_guard()].
-
--type af_guard() :: [af_guard_test(), ...].
-
--type af_guard_test() :: af_literal()
-                       | af_variable()
-                       | af_tuple(af_guard_test())
-                       | af_nil()
-                       | af_cons(af_guard_test())
-                       | af_bin(af_guard_test())
-                       | af_binary_op(af_guard_test())
-                       | af_unary_op(af_guard_test())
-                       | af_record_creation(af_guard_test())
-                       | af_record_index()
-                       | af_record_field_access(af_guard_test())
-                       | af_map_creation(abstract_expr())
-                       | af_map_update(abstract_expr())
-                       | af_guard_call()
-                       | af_remote_guard_call().
-
--type af_record_field_access(T) :: {'record_field', anno(), T, record_name(), af_field_name()}.
-
--type af_map_creation(T) :: {'map', anno(), [af_assoc(T)]}.
-
--type af_map_update(T) :: {'map', anno(), T, [af_assoc(T)]}.
-
--type af_assoc(T) :: {'map_field_assoc', anno(), T, T}
-                   | af_assoc_exact(T).
-
--type af_assoc_exact(T) :: {'map_field_exact', anno(), T, T}.
-
--type af_guard_call() :: {'call', anno(), function_name(), [af_guard_test()]}.
-
--type af_remote_guard_call() :: {'call', anno(), {'remote', anno(), af_lit_atom('erlang'), af_atom()}, [af_guard_test()]}.
-
--type af_pattern() :: af_literal()
-                    | af_match(af_pattern())
-                    | af_variable()
-                    | af_tuple(af_pattern())
-                    | af_nil()
-                    | af_cons(af_pattern())
-                    | af_bin(af_pattern())
-                    | af_binary_op(af_pattern())
-                    | af_unary_op(af_pattern())
-                    | af_record_creation(af_pattern())
-                    | af_record_index()
-                    | af_map_pattern().
-
--type af_record_index() :: {'record_index', anno(), record_name(), af_field_name()}.
-
--type af_record_creation(T) :: {'record', anno(), record_name(), [af_record_field(T)]}.
-
--type af_record_field(T) :: {'record_field', anno(), af_field_name(), T}.
-
--type af_map_pattern() :: {'map', anno(), [af_assoc_exact(abstract_expr())]}.
-
--type af_literal() :: af_atom()
-                    | af_character()
-                    | af_float()
-                    | af_integer()
-                    | af_string().
-
--type af_atom() :: af_lit_atom(atom()).
-
--type af_lit_atom(A) :: {'atom', anno(), A}.
-
--type af_character() :: {'char', anno(), char()}.
-
--type af_float() :: {'float', anno(), float()}.
-
--type af_integer() :: {'integer', anno(), non_neg_integer()}.
-
--type af_string() :: {'string', anno(), string()}.
-
--type af_match(T) :: {'match', anno(), af_pattern(), T}.
-
--type af_variable() :: {'var', anno(), atom()}.
-
--type af_tuple(T) :: {'tuple', anno(), [T]}.
-
--type af_nil() :: {'nil', anno()}.
-
--type af_cons(T) :: {'cons', anno(), T, T}.
-
--type af_bin(T) :: {'bin', anno(), [af_binelement(T)]}.
-
--type af_binelement(T) :: {'bin_element', anno(), T, af_binelement_size(), type_specifier_list()}.
-
--type af_binelement_size() :: 'default' | abstract_expr().
-
--type af_binary_op(T) :: {'op', anno(), binary_op(), T, T}.
-
--type binary_op() :: '/' | '*' | 'div' | 'rem' | 'band' | 'and' | '+' | '-'
-                   | 'bor' | 'bxor' | 'bsl' | 'bsr' | 'or' | 'xor' | '++'
-                   | '--' | '==' | '/=' | '=<' | '<'  | '>=' | '>' | '=:='
-                   | '=/='.
-
--type af_unary_op(T) :: {'op', anno(), unary_op(), T}.
-
--type unary_op() :: '+' | '-' | 'bnot' | 'not'.
-
-%% See also lib/stdlib/{src/erl_bits.erl,include/erl_bits.hrl}.
--type type_specifier_list() :: 'default' | [type_specifier(), ...].
-
--type type_specifier() :: type()
-                        | signedness()
-                        | endianness()
-                        | unit().
-
--type type() :: 'integer'
-              | 'float'
-              | 'binary'
-              | 'bytes'
-              | 'bitstring'
-              | 'bits'
-              | 'utf8'
-              | 'utf16'
-              | 'utf32'.
-
--type signedness() :: 'signed' | 'unsigned'.
-
--type endianness() :: 'big' | 'little' | 'native'.
-
--type unit() :: {'unit', 1..256}.
-
--type record_name() :: atom().
-
--type af_field_name() :: af_atom().
-
--type function_name() :: atom().
-
-%% End of Abstract Format
-
--type environment() :: orddict:orddict(atom(), term()).
-
--type result() :: {environment(), [abstract_expr()], label()}.
+-type result() :: {cauder_types:environment(), [cauder_types:abstract_expr()], label()}.
 
 -type label() :: label_tau()
                | label_spawn()
@@ -186,10 +21,10 @@
                | label_rec().
 
 -type label_tau() :: tau.
--type label_spawn() :: {spawn, {af_variable(), af_atom(), list(abstract_expr())}}.
--type label_self() :: {self, af_variable()}.
--type label_send() :: {send, af_integer(), abstract_expr()}.
--type label_rec() :: {rec, af_variable(), af_clause_seq()}.
+-type label_spawn() :: {spawn, {cauder_types:af_variable(), cauder_types:af_atom(), list(cauder_types:abstract_expr())}}.
+-type label_self() :: {self, cauder_types:af_variable()}.
+-type label_send() :: {send, cauder_types:af_integer(), cauder_types:abstract_expr()}.
+-type label_rec() :: {rec, cauder_types:af_variable(), cauder_types:af_clause_seq()}.
 
 
 %% =====================================================================
@@ -197,7 +32,7 @@
 %% list and returns a tuple with an updated environment, the list of expressions
 %% that resulted from the evaluation, and a label.
 
--spec eval_expr_list(environment(), [abstract_expr()]) -> result().
+-spec eval_expr_list(cauder_types:environment(), [cauder_types:abstract_expr()]) -> result().
 
 eval_expr_list(Env, [Expr | Exprs]) when is_tuple(Expr) ->
   case is_expr(Expr, Env) of
@@ -214,7 +49,7 @@ eval_expr_list(Env, [Expr | Exprs]) when is_tuple(Expr) ->
 %% @doc Evaluates the given `Expression` and returns a tuple with an updated
 %% environment, the expression that resulted from the evaluation, and a label.
 
--spec eval_expr(environment(), abstract_expr()) -> result().
+-spec eval_expr(cauder_types:environment(), cauder_types:abstract_expr()) -> result().
 
 eval_expr(Env, Expr) when is_tuple(Expr) ->
   case is_expr(Expr, Env) of
@@ -236,7 +71,7 @@ eval_expr(Env, Expr) when is_tuple(Expr) ->
   end.
 
 
--spec eval_variable(environment(), af_variable()) -> result().
+-spec eval_variable(cauder_types:environment(), cauder_types:af_variable()) -> result().
 
 eval_variable(Env, {var, _, Name}) when is_atom(Name) ->
   Value = orddict:fetch(Name, Env),
@@ -244,7 +79,7 @@ eval_variable(Env, {var, _, Name}) when is_atom(Name) ->
   {Env, [AbstractValue], tau}.
 
 
--spec eval_match_expr(environment(), af_match(abstract_expr())) -> result().
+-spec eval_match_expr(cauder_types:environment(), cauder_types:af_match(cauder_types:abstract_expr())) -> result().
 
 eval_match_expr(Env, MatchExpr = {match, Line, Pattern, Body}) ->
   case is_expr(Pattern, Env) of
@@ -265,7 +100,7 @@ eval_match_expr(Env, MatchExpr = {match, Line, Pattern, Body}) ->
   end.
 
 
--spec eval_infix_expr(environment(), af_binary_op(abstract_expr())) -> result().
+-spec eval_infix_expr(cauder_types:environment(), cauder_types:af_binary_op(cauder_types:abstract_expr())) -> result().
 
 eval_infix_expr(Env, {op, Line, Operator, Left, Right}) when is_atom(Operator) ->
   case is_expr(Left, Env) of
@@ -294,7 +129,7 @@ eval_infix_expr(Env, {op, Line, Operator, Left, Right}) when is_atom(Operator) -
   end.
 
 
--spec eval_prefix_expr(environment(), af_unary_op(abstract_expr())) -> result().
+-spec eval_prefix_expr(cauder_types:environment(), cauder_types:af_unary_op(cauder_types:abstract_expr())) -> result().
 
 eval_prefix_expr(Env, {op, Pos, Operator, Argument}) when is_atom(Operator) ->
   % FIXME The '-' prefix causes two steps the show the same expression,
@@ -312,7 +147,7 @@ eval_prefix_expr(Env, {op, Pos, Operator, Argument}) when is_atom(Operator) ->
   end.
 
 
--spec eval_application(environment(), af_local_call() | af_remote_call()) -> result().
+-spec eval_application(cauder_types:environment(), cauder_types:af_local_call() | cauder_types:af_remote_call()) -> result().
 
 eval_application(Env, RemoteCall = {call, CallPos, RemoteFun = {remote, RemotePos, Module, Name}, Arguments}) ->
   case is_expr(Module, Env) of
@@ -373,7 +208,7 @@ eval_application(Env, LocalCall = {call, Pos, LocalFun, Arguments}) ->
   end.
 
 
--spec eval_bif(environment(), af_local_call() | af_remote_call()) -> result().
+-spec eval_bif(cauder_types:environment(), cauder_types:af_local_call() | cauder_types:af_remote_call()) -> result().
 
 eval_bif(Env, {call, CallPos, {atom, NamePos, Name}, Arguments}) ->
   eval_bif(Env, {call, CallPos, {remote, NamePos, erlang, Name}, Arguments});
@@ -396,7 +231,7 @@ eval_bif(Env, {call, _, {remote, _, erlang, FunName}, Arguments}) ->
   {Env, [(abstract(Value))], tau}.
 
 
--spec eval_list(environment(), af_cons(abstract_expr())) -> result().
+-spec eval_list(cauder_types:environment(), cauder_types:af_cons(cauder_types:abstract_expr())) -> result().
 
 eval_list(Env, {cons, Pos, Head, Tail}) ->
   case is_expr(Head, Env) of
@@ -409,14 +244,14 @@ eval_list(Env, {cons, Pos, Head, Tail}) ->
   end.
 
 
--spec eval_tuple(environment(), af_tuple(abstract_expr())) -> result().
+-spec eval_tuple(cauder_types:environment(), cauder_types:af_tuple(cauder_types:abstract_expr())) -> result().
 
 eval_tuple(Env, {tuple, Pos, Elements}) when is_list(Elements) ->
   {NewEnv, NewElements, Label} = eval_expr_list(Env, Elements),
   {NewEnv, [{tuple, Pos, NewElements}], Label}.
 
 
--spec eval_case_expr(environment(), af_case()) -> result().
+-spec eval_case_expr(cauder_types:environment(), cauder_types:af_case()) -> result().
 
 eval_case_expr(Env, {'case', Pos, Argument, Clauses}) ->
   case is_expr(Argument, Env) of
@@ -429,7 +264,8 @@ eval_case_expr(Env, {'case', Pos, Argument, Clauses}) ->
   end.
 
 
--spec match_clause(environment(), af_clause_seq(), abstract_expr()) -> {environment(), [abstract_expr()]} | nomatch.
+-spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:abstract_expr()) ->
+  {cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
 
 match_clause(Env, Clauses, Value) ->
   try
@@ -462,7 +298,7 @@ match_clause(Env, Clauses, Value) ->
   end.
 
 
--spec eval_pattern(environment(), af_pattern()) -> af_pattern().
+-spec eval_pattern(cauder_types:environment(), cauder_types:af_pattern()) -> cauder_types:af_pattern().
 
 eval_pattern(Env, Pattern) ->
   case is_expr(Pattern, Env) of
@@ -473,7 +309,7 @@ eval_pattern(Env, Pattern) ->
   end.
 
 
--spec eval_guard_seq(environment(), af_guard_seq()) -> af_lit_atom(true) | af_lit_atom(false).
+-spec eval_guard_seq(cauder_types:environment(), cauder_types:af_guard_seq()) -> cauder_types:af_boolean().
 
 eval_guard_seq(Env, GuardSeq) when is_list(GuardSeq) ->
   % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
@@ -482,14 +318,14 @@ eval_guard_seq(Env, GuardSeq) when is_list(GuardSeq) ->
   {atom, erl_anno:new(0), AnyTrue}.
 
 
--spec eval_guard(environment(), af_guard()) -> af_lit_atom(true) | af_lit_atom(false).
+-spec eval_guard(cauder_types:environment(), cauder_types:af_guard()) -> cauder_types:af_boolean().
 
 eval_guard(Env, Guard) when is_list(Guard) ->
   AllTrue = lists:all(fun(GuardTest) -> erl_syntax:atom_value(eval_guard_test(Env, GuardTest)) end, Guard),
   {atom, erl_anno:new(0), AllTrue}.
 
 
--spec eval_guard_test(environment(), af_guard_test()) -> af_guard_test() | af_lit_atom(true) | af_lit_atom(false).
+-spec eval_guard_test(cauder_types:environment(), cauder_types:af_guard_test()) -> cauder_types:af_guard_test() | cauder_types:af_boolean().
 
 eval_guard_test(Env, GuardTest) ->
   case erl_lint:is_guard_test(GuardTest) of
@@ -505,7 +341,7 @@ eval_guard_test(Env, GuardTest) ->
   end.
 
 
--spec eval_receive(environment(), af_receive()) -> result().
+-spec eval_receive(cauder_types:environment(), cauder_types:af_receive()) -> result().
 
 %% TODO Support receive with timeout
 eval_receive(Env, {'receive', _, Clauses}) ->
@@ -513,7 +349,7 @@ eval_receive(Env, {'receive', _, Clauses}) ->
   {Env, [TmpVar], {rec, TmpVar, Clauses}}.
 
 
--spec abstract(term()) -> abstract_expr().
+-spec abstract(term()) -> cauder_types:abstract_expr().
 
 abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
 
@@ -521,7 +357,7 @@ abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
--spec eval_step(system(), af_integer()) -> system().
+-spec eval_step(cauder_types:system(), cauder_types:af_integer()) -> cauder_types:system().
 
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
@@ -623,7 +459,7 @@ eval_step(System, Pid) ->
 %% =====================================================================
 %% @doc Performs an evaluation step in message Id, given System
 
--spec eval_sched(system(), non_neg_integer()) -> system().
+-spec eval_sched(cauder_types:system(), non_neg_integer()) -> cauder_types:system().
 
 eval_sched(System, Id) ->
   #sys{procs = Procs, msgs = Msgs} = System,
@@ -639,7 +475,7 @@ eval_sched(System, Id) ->
 %% =====================================================================
 %% @doc Checks if the given abstract expression can be reduced any further or not.
 
--spec is_expr(abstract_expr(), environment()) -> boolean().
+-spec is_expr(cauder_types:abstract_expr(), cauder_types:environment()) -> boolean().
 
 is_expr({atom, _, _}, _)      -> false;
 is_expr({char, _, _}, _)      -> false;
@@ -661,12 +497,27 @@ is_expr(_, _)                 -> true.
 %% `{NewEnvironment, NewExpression, MatchedMessage, RestMessages}`
 %% Otherwise, the atom `nomatch` is returned.
 
--spec matchrec(af_clause_seq(), [process_message()], environment()) -> {environment(), [abstract_expr()], process_message(), [process_message()]} | nomatch.
+-spec matchrec(Clauses, Mail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  Mail :: [cauder_types:process_message()],
+  Environment :: cauder_types:environment(),
+  NewEnvironment :: cauder_types:environment(),
+  MatchedBranch :: [cauder_types:abstract_expr()],
+  MatchedMessage :: cauder_types:process_message(),
+  RestMessages :: [cauder_types:process_message()].
 
 matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
 
 
--spec matchrec(af_clause_seq(), [process_message()], [process_message()], environment()) -> {environment(), [abstract_expr()], process_message(), [process_message()]} | nomatch.
+-spec matchrec(Clauses, RemainingMail, CheckedMail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  RemainingMail :: [cauder_types:process_message()],
+  CheckedMail :: [cauder_types:process_message()],
+  Environment :: cauder_types:environment(),
+  NewEnvironment :: cauder_types:environment(),
+  MatchedBranch :: [cauder_types:abstract_expr()],
+  MatchedMessage :: cauder_types:process_message(),
+  RestMessages :: [cauder_types:process_message()].
 
 matchrec(_Clauses, [], _CheckedMsgs, _Env) -> nomatch;
 matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
@@ -680,7 +531,7 @@ matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
 %% =====================================================================
 %% @doc Gets the evaluation options for a given System
 
--spec eval_opts(system()) -> [option()].
+-spec eval_opts(cauder_types:system()) -> [cauder_types:option()].
 
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
@@ -688,7 +539,7 @@ eval_opts(System) ->
   lists:append(SchedOpts, ProcsOpts).
 
 
--spec eval_sched_opts(system()) -> [option()].
+-spec eval_sched_opts(cauder_types:system()) -> [cauder_types:option()].
 
 eval_sched_opts(#sys{msgs = []}) -> [];
 eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
@@ -706,7 +557,7 @@ eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
   end.
 
 
--spec eval_procs_opts(system()) -> [option()].
+-spec eval_procs_opts(cauder_types:system()) -> [cauder_types:option()].
 
 eval_procs_opts(#sys{procs = []}) -> [];
 eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
@@ -725,8 +576,8 @@ eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
 
 
 -spec eval_expr_opt(Expressions, Environment, Mail) -> Options when
-  Expressions :: abstract_expr() | [abstract_expr()],
-  Environment :: environment(),
+  Expressions :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
+  Environment :: cauder_types:environment(),
   Mail :: [#msg{}],
   Options :: ?NOT_EXP | ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF.
 

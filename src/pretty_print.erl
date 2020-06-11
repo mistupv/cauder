@@ -13,26 +13,26 @@
 %% =====================================================================
 %% @doc Pretty-prints a given System
 
--spec system(system(), [{print_option(), boolean()}]) -> string().
+-spec system(cauder_types:system(), [{cauder_types:print_option(), boolean()}]) -> string().
 
 system(#sys{msgs = Msgs, procs = Procs}, Opts) ->
   messages(Msgs) ++ "\n" ++ processes(Procs, Opts).
 
 
--spec messages([message()]) -> string().
+-spec messages([cauder_types:message()]) -> string().
 
 messages(Msgs) ->
   MsgsList = [message(Msg) || Msg <- Msgs],
   "GM : [" ++ string:join(MsgsList, ",") ++ "]\n".
 
 
--spec message(message()) -> string().
+-spec message(cauder_types:message()) -> string().
 
 message(#msg{dest = DestPid, val = MsgValue, time = Time}) ->
   "(" ++ expression(DestPid) ++ ",{" ++ expression(MsgValue) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ "})".
 
 
--spec processes([process()], [{print_option(), boolean()}]) -> string().
+-spec processes([cauder_types:process()], [{cauder_types:print_option(), boolean()}]) -> string().
 
 processes(Procs, Opts) ->
   SortProcs = lists:sort(fun(P1, P2) -> P1#proc.pid < P2#proc.pid end, Procs),
@@ -40,7 +40,7 @@ processes(Procs, Opts) ->
   string:join(ProcsList, "\n").
 
 
--spec process(process(), [{print_option(), boolean()}]) -> string().
+-spec process(cauder_types:process(), [{cauder_types:print_option(), boolean()}]) -> string().
 
 process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, mail = Mail, spf = Fun}, Opts) ->
   header(Pid, Fun) ++
@@ -50,12 +50,12 @@ process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, mail = Mail, spf
   expressions(Exprs, Opts).
 
 
--spec header(fwd_sem:af_integer(), undefined | {atom(), arity()}) -> string().
+-spec header(cauder_types:af_integer(), undefined | {atom(), arity()}) -> string().
 
 header(Pid, Fun) -> "=============== " ++ pid(Pid) ++ ": " ++ function(Fun) ++ " ===============\n".
 
 
--spec pid(fwd_sem:af_integer()) -> string().
+-spec pid(cauder_types:af_integer()) -> string().
 
 pid(Pid) -> "Proc. " ++ expression(Pid).
 
@@ -66,7 +66,7 @@ function(undefined)     -> "";
 function({Name, Arity}) -> atom_to_list(Name) ++ "/" ++ integer_to_list(Arity).
 
 
--spec environment(fwd_sem:environment(), [fwd_sem:abstract_expr()], [{print_option(), boolean()}]) -> string().
+-spec environment(cauder_types:environment(), [cauder_types:abstract_expr()], [{cauder_types:print_option(), boolean()}]) -> string().
 
 environment(Env, Exprs, Opts) ->
   case proplists:get_value(?PRINT_ENV, Opts) of
@@ -75,7 +75,7 @@ environment(Env, Exprs, Opts) ->
   end.
 
 
--spec environment_1(fwd_sem:environment(), [fwd_sem:abstract_expr()], [{print_option(), boolean()}]) -> string().
+-spec environment_1(cauder_types:environment(), [cauder_types:abstract_expr()], [{cauder_types:print_option(), boolean()}]) -> string().
 
 environment_1(Env, Exprs, Opts) ->
   Bindings =
@@ -87,19 +87,19 @@ environment_1(Env, Exprs, Opts) ->
   "{" ++ string:join(PairsList, ", ") ++ "}".
 
 
--spec get_relevant_bindings(fwd_sem:environment(), [fwd_sem:abstract_expr()]) -> fwd_sem:environment().
+-spec get_relevant_bindings(cauder_types:environment(), [cauder_types:abstract_expr()]) -> cauder_types:environment().
 
 get_relevant_bindings(Env, Exprs) ->
   Vars = sets:union([erl_syntax_lib:variables(Expr) || Expr <- Exprs]),
   [Bind || Bind = {Var, _} <- erl_eval:bindings(Env), sets:is_element(Var, Vars)].
 
 
--spec binding({atom(), term()}) -> string().
+-spec binding(cauder_types:binding()) -> string().
 
 binding({Var, Val}) -> io_lib:format("~s -> ~p", [atom_to_list(Var), Val]).
 
 
--spec history(history(), [{print_option(), boolean()}]) -> string().
+-spec history(cauder_types:history(), [{cauder_types:print_option(), boolean()}]) -> string().
 
 history(Hist, Opts) ->
   case proplists:get_value(?PRINT_HIST, Opts) of
@@ -108,7 +108,7 @@ history(Hist, Opts) ->
   end.
 
 
--spec history_1(history(), [{print_option(), boolean()}]) -> string().
+-spec history_1(cauder_types:history(), [{cauder_types:print_option(), boolean()}]) -> string().
 
 history_1(Hist, Opts) ->
   FiltHist =
@@ -120,7 +120,7 @@ history_1(Hist, Opts) ->
   "H  : [" ++ string:join(StrItems, ",") ++ "]".
 
 
--spec is_conc_item(history_entry()) -> boolean().
+-spec is_conc_item(cauder_types:history_entry()) -> boolean().
 
 is_conc_item({spawn, _, _, _})   -> true;
 is_conc_item({send, _, _, _, _}) -> true;
@@ -128,7 +128,7 @@ is_conc_item({rec, _, _, _, _})  -> true;
 is_conc_item(_)                  -> false.
 
 
--spec history_entry(history_entry()) -> string().
+-spec history_entry(cauder_types:history_entry()) -> string().
 
 history_entry({tau, _, _})                    -> "seq";
 history_entry({self, _, _})                   -> "self";
@@ -137,7 +137,7 @@ history_entry({send, _, _, _, {Value, Time}}) -> "send(" ++ expression(Value) ++
 history_entry({rec, _, _, {Value, Time}, _})  -> "rec(" ++ expression(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")".
 
 
--spec process_messages([process_message()], [{print_option(), boolean()}]) -> string().
+-spec process_messages([cauder_types:process_message()], [{cauder_types:print_option(), boolean()}]) -> string().
 
 process_messages(Mail, Opts) ->
   case proplists:get_value(?PRINT_MAIL, Opts) of
@@ -146,7 +146,7 @@ process_messages(Mail, Opts) ->
   end.
 
 
--spec process_messages_1([process_message()]) -> string().
+-spec process_messages_1([cauder_types:process_message()]) -> string().
 
 process_messages_1([]) -> "[]";
 process_messages_1(Mail) ->
@@ -154,12 +154,12 @@ process_messages_1(Mail) ->
   "[" ++ string:join(MailList, ",") ++ "]".
 
 
--spec process_message(process_message()) -> string().
+-spec process_message(cauder_types:process_message()) -> string().
 
 process_message({Val, Time}) -> "{" ++ expression(Val) ++ "," ++ [{?CAUDER_GREEN, integer_to_list(Time)}] ++ "}".
 
 
--spec expressions([fwd_sem:abstract_expr()], [{print_option(), boolean()}]) -> string().
+-spec expressions([cauder_types:abstract_expr()], [{cauder_types:print_option(), boolean()}]) -> string().
 
 expressions(Exprs, Opts) ->
   case proplists:get_value(?PRINT_EXP, Opts) of
@@ -168,7 +168,7 @@ expressions(Exprs, Opts) ->
   end.
 
 
--spec expression(fwd_sem:abstract_expr()) -> string().
+-spec expression(cauder_types:abstract_expr()) -> string().
 
 expression(Expr) -> lists:flatten(erl_prettypr:format(Expr)).
 
@@ -176,7 +176,7 @@ expression(Expr) -> lists:flatten(erl_prettypr:format(Expr)).
 %% =====================================================================
 %% @doc Pretty-prints a given system trace
 
--spec system_trace(system()) -> string().
+-spec system_trace(cauder_types:system()) -> string().
 
 system_trace(#sys{trace = Trace}) ->
   % Trace is built as a stack (newest item is first)
@@ -186,7 +186,7 @@ system_trace(#sys{trace = Trace}) ->
   string:join(TraceStr, "\n").
 
 
--spec trace(trace()) -> [string()].
+-spec trace(cauder_types:trace()) -> [string()].
 
 trace(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Time}) ->
   [pid(From), " sends ", expression(Val), " to ", pid(To), " (", integer_to_list(Time), ")"];
@@ -199,6 +199,6 @@ trace(#trace{type = ?RULE_RECEIVE, from = From, to = _, val = Val, time = Time})
 %% =====================================================================
 %% @doc Prints a given system roll log
 
--spec roll_log(system()) -> string().
+-spec roll_log(cauder_types:system()) -> string().
 
 roll_log(#sys{roll = RollLog}) -> string:join(RollLog, "\n").
