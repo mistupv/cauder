@@ -285,18 +285,23 @@ sched_opt() ->
      {wxMenu:isChecked(MenuSched, ?RADIO_PRIO), ?SCHED_PRIO_RANDOM}],
   proplists:get_value(true, SchedOpts).
 
+
+-spec marked(wx:wxTextCtrl(), [char() | {wx:wx_colour(), string()}], string()) -> ok.
+
 marked(Ctrl, [], Acc) ->
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(?wxBLACK)),
   wxTextCtrl:appendText(Ctrl, Acc);
-marked(Ctrl, [{Attr, Text}|Rest], Acc) ->
+marked(Ctrl, [{Attr, Text} | Rest], Acc) ->
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(?wxBLACK)),
   wxTextCtrl:appendText(Ctrl, Acc),
-  TextAttr = wxTextAttr:new(Attr),
-  Start = wxTextCtrl:getInsertionPoint(Ctrl),
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(Attr)),
   wxTextCtrl:appendText(Ctrl, Text),
-  End = wxTextCtrl:getInsertionPoint(Ctrl),
-  wxTextCtrl:setStyle(Ctrl, Start, End, TextAttr),
   marked(Ctrl, Rest, "");
-marked(Ctrl, [Text|Rest], Acc) ->
-  marked(Ctrl, Rest, Acc ++ [Text]).
+marked(Ctrl, [Char | Rest], Acc) ->
+  marked(Ctrl, Rest, Acc ++ [Char]).
+
+
+-spec pp_marked_text(wx:wxTextCtrl(), [char() | {wx:wx_colour(), string()}]) -> ok.
 
 pp_marked_text(Ctrl, TextList) ->
   % Freeze control when inserting text
