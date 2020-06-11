@@ -102,7 +102,7 @@ setupCodePanel(Parent) ->
  setupStatePanel(Parent) ->
   StatePanel = wxPanel:new(Parent),
   StateText = wxTextCtrl:new(StatePanel, ?STATE_TEXT,
-                             [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
+                             [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH}]),
    wxWindow:setFont(StateText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
   ref_add(?STATE_TEXT, StateText),
   StateSizer = wxBoxSizer:new(?wxVERTICAL),
