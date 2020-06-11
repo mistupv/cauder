@@ -286,7 +286,7 @@ sched_opt() ->
   proplists:get_value(true, SchedOpts).
 
 
--spec marked(wx:wxTextCtrl(), [char() | {wx:wx_colour(), string()}], string()) -> ok.
+-spec marked(wxTextCtrl:wxTextCtrl(), [char() | {wx:wx_colour(), string()}], string()) -> ok.
 
 marked(Ctrl, [], Acc) ->
   wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(?wxBLACK)),
@@ -301,7 +301,7 @@ marked(Ctrl, [Char | Rest], Acc) ->
   marked(Ctrl, Rest, Acc ++ [Char]).
 
 
--spec pp_marked_text(wx:wxTextCtrl(), [char() | {wx:wx_colour(), string()}]) -> ok.
+-spec pp_marked_text(wxTextCtrl:wxTextCtrl(), [char() | {wx:wx_colour(), string()}]) -> ok.
 
 pp_marked_text(Ctrl, TextList) ->
   % Freeze control when inserting text
