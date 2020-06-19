@@ -288,11 +288,12 @@ match(Env, [], [])    -> {match, Env};
 match(Env, Ps, Vs) when length(Ps) == length(Vs) ->
   Ps1 = eval_pattern(Env, erl_syntax:revert(erl_syntax:tuple(Ps))),
   Vs1 = erl_syntax:revert(erl_syntax:tuple(Vs)),
-  case catch erl_eval:expr({match, erl_anno:new(0), Ps1, Vs1}, []) of
+  try erl_eval:expr({match, erl_anno:new(0), Ps1, Vs1}, []) of
     {value, _Val, Bs} ->
       Env1 = utils:merge_env(Env, Bs),
-      {match, Env1};
-    {badmatch, _Rhs} -> nomatch
+      {match, Env1}
+  catch
+    error:{badmatch, _Rhs} -> nomatch
   end;
 match(_Env, _Ps, _Vs) -> nomatch.
 
@@ -341,6 +342,9 @@ eval_guard_test(Env, GuardTest) ->
   end.
 
 
+-spec eval_if_expr(cauder_types:environment(), cauder_types:af_if()) -> result().
+
+eval_if_expr(Env, {'if', _, Clauses}) ->
   {NewEnv, Body} = match_clause(Env, Clauses, []),
   {NewEnv, Body, tau}.
 
