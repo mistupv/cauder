@@ -66,6 +66,7 @@ eval_expr(Env, Expr) when is_tuple(Expr) ->
         list -> eval_list(Env, Expr);
         tuple -> eval_tuple(Env, Expr);
         case_expr -> eval_case_expr(Env, Expr);
+        if_expr -> eval_if_expr(Env, Expr);
         receive_expr -> eval_receive(Env, Expr)
       end
   end.
@@ -192,12 +193,8 @@ eval_application(Env, LocalCall = {call, Pos, LocalFun, Arguments}) ->
             {value, FunDef} ->
               FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
               % There should be no variables to evaluate so we pass no bindings
-              % TODO `match_clause` looks like an internal function, because it is not documented
-              {Body, Bindings} = erl_eval:match_clause(FunClauses, Arguments, [], none),
-              % The environment stores the literal value but `match_clause`
-              % returns the bindings as `erl_parse` nodes so we convert them
-              ValueBindings = [{Var, erl_syntax:concrete(Val)} || {Var, Val} <- Bindings],
-              NewEnv = utils:merge_env(Env, ValueBindings),
+              {Bindings, Body} = match_clause([], FunClauses, Arguments),
+              NewEnv = utils:merge_env(Env, Bindings),
               {NewEnv, Body, tau};
             false ->
               % TODO If the function name was a variable then BIF should not be evaluated
@@ -259,43 +256,45 @@ eval_case_expr(Env, {'case', Pos, Argument, Clauses}) ->
       {NewEnv, [NewArgument], Label} = eval_expr(Env, Argument),
       {NewEnv, [{'case', Pos, NewArgument, Clauses}], Label};
     false ->
-      {NewEnv, Body} = match_clause(Env, Clauses, Argument),
+      {NewEnv, Body} = match_clause(Env, Clauses, [Argument]),
       {NewEnv, Body, tau}
   end.
 
 
--spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:abstract_expr()) ->
+-spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
   {cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
 
-match_clause(Env, Clauses, Value) ->
-  try
-    lists:foreach(
-      fun({'clause', _Pos, [Pattern], Guards, Body}) ->
-        NewPattern = eval_pattern(Env, Pattern),
-        MatchExpr = {match, erl_anno:new(0), NewPattern, Value},
-        try erl_eval:expr(MatchExpr, []) of
-          {value, _Value, Bindings} ->
-            NewEnv = utils:merge_env(Env, Bindings),
-            case Guards of
-              [] -> throw({NewEnv, Body});
-              Guard ->
-                NewGuard = eval_guard_seq(NewEnv, Guard),
-                case erl_syntax:atom_value(NewGuard) of
-                  true -> throw({NewEnv, Body});
-                  false -> continue
-                end
-            end
-        catch
-          % Pattern doesn't match
-          error:{badmatch, _Rhs} -> continue
-        end
-      end,
-      Clauses
-    ),
-    nomatch
-  catch
-    throw:Match -> Match
-  end.
+match_clause(Env, [{'clause', _, Ps, G, B} | Cs], Vs) ->
+  case match(Env, Ps, Vs) of
+    {match, Env1} ->
+      Bool = erl_syntax:atom_value(eval_guard_seq(Env1, G)),
+      case Bool of
+        true -> {Env1, B};
+        false -> match_clause(Env, Cs, Vs)
+      end;
+    nomatch -> match_clause(Env, Cs, Vs)
+  end;
+match_clause(_Env, [], _Vs) -> nomatch.
+
+
+%% Tries to match a list of values against a list of patterns using the given environment.
+%% The list of values should have no variables.
+%% TODO Allow for variables in list of values
+
+-spec match(cauder_types:environment(), [cauder_types:af_pattern()], [cauder_types:abstract_expr()]) ->
+  {match, cauder_types:environment()} | nomatch.
+
+match(Env, [], [])    -> {match, Env};
+match(Env, Ps, Vs) when length(Ps) == length(Vs) ->
+  Ps1 = eval_pattern(Env, erl_syntax:revert(erl_syntax:tuple(Ps))),
+  Vs1 = erl_syntax:revert(erl_syntax:tuple(Vs)),
+  case catch erl_eval:expr({match, erl_anno:new(0), Ps1, Vs1}, []) of
+    {value, _Val, Bs} ->
+      Env1 = utils:merge_env(Env, Bs),
+      {match, Env1};
+    {badmatch, _Rhs} -> nomatch
+  end;
+match(_Env, _Ps, _Vs) -> nomatch.
 
 
 -spec eval_pattern(cauder_types:environment(), cauder_types:af_pattern()) -> cauder_types:af_pattern().
@@ -311,11 +310,12 @@ eval_pattern(Env, Pattern) ->
 
 -spec eval_guard_seq(cauder_types:environment(), cauder_types:af_guard_seq()) -> cauder_types:af_boolean().
 
+eval_guard_seq(_Env, []) -> abstract(true);
 eval_guard_seq(Env, GuardSeq) when is_list(GuardSeq) ->
   % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
   % See: https://erlang.org/doc/reference_manual/expressions.html#guard-sequences
   AnyTrue = lists:any(fun(Guard) -> erl_syntax:atom_value(eval_guard(Env, Guard)) end, GuardSeq),
-  {atom, erl_anno:new(0), AnyTrue}.
+  abstract(AnyTrue).
 
 
 -spec eval_guard(cauder_types:environment(), cauder_types:af_guard()) -> cauder_types:af_boolean().
@@ -339,6 +339,10 @@ eval_guard_test(Env, GuardTest) ->
       end;
     false -> erlang:error(guard_expr) % TODO How to handle error in the interpreted code?
   end.
+
+
+  {NewEnv, Body} = match_clause(Env, Clauses, []),
+  {NewEnv, Body, tau}.
 
 
 -spec eval_receive(cauder_types:environment(), cauder_types:af_receive()) -> result().
@@ -522,7 +526,7 @@ matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
 matchrec(_Clauses, [], _CheckedMsgs, _Env) -> nomatch;
 matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
   {MsgValue, _MsgTime} = CurMsg,
-  case match_clause(Env, Clauses, MsgValue) of
+  case match_clause(Env, Clauses, [MsgValue]) of
     {NewEnv, Body} -> {NewEnv, Body, CurMsg, lists:reverse(CheckedMsgs, RestMsgs)};
     nomatch -> matchrec(Clauses, RestMsgs, [CurMsg | CheckedMsgs], Env)
   end.
@@ -677,6 +681,7 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
             true -> eval_expr_opt(Arg, Env, Mail);
             false -> ?RULE_SEQ
           end;
+        if_expr -> ?RULE_SEQ;
         receive_expr ->
           Clauses = erl_syntax:receive_expr_clauses(Expr),
           case matchrec(Clauses, Mail, Env) of

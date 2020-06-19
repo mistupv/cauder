@@ -10,7 +10,7 @@
 -export_type([af_function_decl/0]).
 % Abstract Form Expressions
 -export_type([abstract_expr/0, af_atom/0, af_boolean/0, af_integer/0, af_string/0, af_match/1, af_variable/0, af_tuple/1, af_nil/0, af_cons/1, af_bin/1,
-              af_binary_op/1, af_unary_op/1, af_local_call/0, af_remote_call/0, af_case/0, af_receive/0]).
+              af_binary_op/1, af_unary_op/1, af_local_call/0, af_remote_call/0, af_if/0, af_case/0, af_receive/0]).
 -export_type([af_clause_seq/0, af_pattern/0, af_guard_seq/0, af_guard/0, af_guard_test/0]).
 
 
@@ -63,6 +63,8 @@
 -type af_local_function() :: abstract_expr().
 
 -type af_remote_function() :: {'remote', anno(), abstract_expr(), abstract_expr()}.
+
+-type af_if() :: {'if', anno(), af_clause_seq()}.
 
 -type af_case() :: {'case', anno(), abstract_expr(), af_clause_seq()}.
 
