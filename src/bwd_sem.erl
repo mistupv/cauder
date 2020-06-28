@@ -6,18 +6,17 @@
 %%%-------------------------------------------------------------------
 
 -module(bwd_sem).
--export([eval_step/2, eval_sched/2, eval_opts/1,
-         eval_procs_opts/1, eval_sched_opts/1]).
+
+-export([eval_step/2, eval_sched/2]).
+-export([eval_opts/1, eval_procs_opts/1, eval_sched_opts/1]).
 
 -include("cauder.hrl").
+
 
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
--spec eval_step(System, Pid) -> NewSystem when
-  System :: #sys{},
-  Pid :: {'integer', erl_anno:anno(), non_neg_integer()},
-  NewSystem :: #sys{}.
+-spec eval_step(cauder_types:system(), cauder_types:af_integer()) -> cauder_types:system().
 
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
@@ -26,8 +25,8 @@ eval_step(System, Pid) ->
   case CurHist of
     {tau, OldEnv, OldExprs} ->
       OldProc = Proc#proc{
-        hist = RestHist,
-        env  = OldEnv,
+        hist  = RestHist,
+        env   = OldEnv,
         exprs = OldExprs
       },
       System#sys{
@@ -36,8 +35,8 @@ eval_step(System, Pid) ->
       };
     {self, OldEnv, OldExprs} ->
       OldProc = Proc#proc{
-        hist = RestHist,
-        env  = OldEnv,
+        hist  = RestHist,
+        env   = OldEnv,
         exprs = OldExprs
       },
       System#sys{
@@ -47,8 +46,8 @@ eval_step(System, Pid) ->
     {send, OldEnv, OldExprs, DestPid, {MsgValue, Time}} ->
       {_Msg, RestMsgs} = utils:select_msg(Msgs, Time),
       OldProc = Proc#proc{
-        hist = RestHist,
-        env  = OldEnv,
+        hist  = RestHist,
+        env   = OldEnv,
         exprs = OldExprs
       },
       TraceItem = #trace{
@@ -67,8 +66,8 @@ eval_step(System, Pid) ->
     {spawn, OldEnv, OldExprs, SpawnPid} ->
       {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
       OldProc = Proc#proc{
-        hist = RestHist,
-        env  = OldEnv,
+        hist  = RestHist,
+        env   = OldEnv,
         exprs = OldExprs
       },
       TraceItem = #trace{
@@ -105,10 +104,12 @@ eval_step(System, Pid) ->
       }
   end.
 
-%%--------------------------------------------------------------------
+
+%% =====================================================================
 %% @doc Performs an evaluation step in message Id, given System
-%% @end
-%%--------------------------------------------------------------------
+
+-spec eval_sched(cauder_types:system(), non_neg_integer()) -> cauder_types:system().
+
 eval_sched(System, Id) ->
   Procs = System#sys.procs,
   Msgs = System#sys.msgs,
@@ -116,79 +117,69 @@ eval_sched(System, Id) ->
   Pid = Proc#proc.pid,
   {_, RestProcs} = utils:select_proc(Procs, Pid),
   Mail = Proc#proc.mail,
-  {LastMsg,RestMail} = utils:last_msg_rest(Mail),
+  {LastMsg, RestMail} = utils:last_msg_rest(Mail),
   {Value, Id} = LastMsg,
   OldMsg = #msg{dest = Pid, val = Value, time = Id},
   OldProc = Proc#proc{mail = RestMail},
-  OldMsgs = [OldMsg|Msgs],
-  OldProcs = [OldProc|RestProcs],
+  OldMsgs = [OldMsg | Msgs],
+  OldProcs = [OldProc | RestProcs],
   System#sys{msgs = OldMsgs, procs = OldProcs}.
 
-%%--------------------------------------------------------------------
+
+%% =====================================================================
 %% @doc Gets the evaluation options for a given System
-%% @end
-%%--------------------------------------------------------------------
+
+-spec eval_opts(cauder_types:system()) -> [cauder_types:option()].
+
 eval_opts(System) ->
   SchedOpts = eval_sched_opts(System),
   ProcsOpts = eval_procs_opts(System),
   SchedOpts ++ ProcsOpts.
 
-eval_sched_opts(#sys{procs = Procs}) ->
-  Opts = [eval_sched_opt(Proc) || Proc <- Procs],
-  lists:filter(fun (X) ->
-                  case X of
-                    ?NULL_OPT -> false;
-                    _ -> true
-                  end
-                end, Opts).
+
+-spec eval_procs_opts(cauder_types:system()) -> [cauder_types:option()].
 
 eval_procs_opts(System) ->
   Procs = System#sys.procs,
   Msgs = System#sys.msgs,
-  ProcPairs = [utils:select_proc(Procs, Proc#proc.pid) || Proc <- Procs ],
-  Opts = [eval_proc_opt(#sys{msgs = Msgs, procs = RestProcs}, Proc) ||  {Proc, RestProcs} <- ProcPairs],
-  lists:filter( fun (X) ->
-                  case X of
-                    ?NULL_OPT -> false;
-                    _Other -> true
-                  end
-                end, Opts).
+  ProcPairs = [utils:select_proc(Procs, Proc#proc.pid) || Proc <- Procs],
+  Opts = [eval_proc_opt(#sys{msgs = Msgs, procs = RestProcs}, Proc) || {Proc, RestProcs} <- ProcPairs],
+  lists:filter(fun(Opt) -> Opt /= ?NULL_OPT end, Opts).
 
 eval_proc_opt(RestSystem, CurProc) ->
   RestProcs = RestSystem#sys.procs,
   Msgs = RestSystem#sys.msgs,
   Hist = CurProc#proc.hist,
   Rule =
-    case Hist of
-      [] ->
-        ?NULL_RULE;
-      [CurHist|_RestHist] ->
-        case CurHist of
-          {tau,_,_} ->  ?RULE_SEQ;
-          {self,_,_} -> ?RULE_SELF;
-          {send,_,_, DestPid, {MsgValue, Time}} ->
-            MsgList = [ M || M <- Msgs, M#msg.time == Time,
-                                        M#msg.dest == DestPid,
-                                        M#msg.val == MsgValue ],
-            case MsgList of
-              [] -> ?NULL_RULE;
-              _ -> ?RULE_SEND
-            end;
-          {spawn,_,_,SpawnPid} ->
-            {SpawnProc, _RestProcs} = utils:select_proc(RestProcs, SpawnPid),
-            #proc{hist = SpawnHist, mail = SpawnMail} = SpawnProc,
-            case {SpawnHist, SpawnMail} of
-              {[], []} -> ?RULE_SPAWN;
-              _ -> ?NULL_RULE
-            end;
-          {rec,_,_, ConsMsg, OldMail} ->
-            Mail = CurProc#proc.mail,
-            case utils:is_queue_minus_msg(OldMail, ConsMsg, Mail) of
-              true -> ?RULE_RECEIVE;
-              false -> ?NULL_RULE
-            end
-        end
-    end,
+  case Hist of
+    [] -> ?NULL_RULE;
+    [CurHist | _RestHist] ->
+      case CurHist of
+        {tau, _, _} -> ?RULE_SEQ;
+        {self, _, _} -> ?RULE_SELF;
+        {send, _, _, DestPid, {MsgValue, Time}} ->
+          MsgList = [M || M <- Msgs, M#msg.time == Time,
+                     M#msg.dest == DestPid,
+                     M#msg.val == MsgValue],
+          case MsgList of
+            [] -> ?NULL_RULE;
+            _ -> ?RULE_SEND
+          end;
+        {spawn, _, _, SpawnPid} ->
+          {SpawnProc, _RestProcs} = utils:select_proc(RestProcs, SpawnPid),
+          #proc{hist = SpawnHist, mail = SpawnMail} = SpawnProc,
+          case {SpawnHist, SpawnMail} of
+            {[], []} -> ?RULE_SPAWN;
+            _ -> ?NULL_RULE
+          end;
+        {rec, _, _, ConsMsg, OldMail} ->
+          Mail = CurProc#proc.mail,
+          case utils:is_queue_minus_msg(OldMail, ConsMsg, Mail) of
+            true -> ?RULE_RECEIVE;
+            false -> ?NULL_RULE
+          end
+      end
+  end,
   case Rule of
     ?NULL_RULE -> ?NULL_OPT;
     OtherRule ->
@@ -196,26 +187,32 @@ eval_proc_opt(RestSystem, CurProc) ->
       #opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:concrete(Pid), rule = OtherRule}
   end.
 
+
+-spec eval_sched_opts(cauder_types:system()) -> [cauder_types:option()].
+
+eval_sched_opts(#sys{procs = Procs}) ->
+  Opts = [eval_sched_opt(Proc) || Proc <- Procs],
+  lists:filter(fun(Opt) -> Opt /= ?NULL_OPT end, Opts).
+
 eval_sched_opt(Proc) ->
   #proc{hist = Hist, mail = Mail} = Proc,
   Rule =
-    case Mail of
-      [] -> ?NULL_RULE;
-      _ ->
-        {LastMsg,_} = utils:last_msg_rest(Mail),
-        {_,Time} = LastMsg,
-        TopRec = utils:topmost_rec(Hist),
-        case TopRec of
-          no_rec -> {?RULE_SCHED, Time};
-          {rec,_,_,OldMsg,OldMail} ->
-            case utils:is_queue_minus_msg(OldMail, OldMsg, Mail) of
-              false -> {?RULE_SCHED, Time};
-              true -> ?NULL_RULE
-            end
-        end
-    end,
+  case Mail of
+    [] -> ?NULL_RULE;
+    _ ->
+      {LastMsg, _} = utils:last_msg_rest(Mail),
+      {_, Time} = LastMsg,
+      TopRec = utils:topmost_rec(Hist),
+      case TopRec of
+        no_rec -> {?RULE_SCHED, Time};
+        {rec, _, _, OldMsg, OldMail} ->
+          case utils:is_queue_minus_msg(OldMail, OldMsg, Mail) of
+            false -> {?RULE_SCHED, Time};
+            true -> ?NULL_RULE
+          end
+      end
+  end,
   case Rule of
     ?NULL_RULE -> ?NULL_OPT;
-    {OtherRule, Id} ->
-      #opt{sem = ?MODULE, type = ?TYPE_MSG, id = Id, rule = OtherRule}
+    {OtherRule, Id} -> #opt{sem = ?MODULE, type = ?TYPE_MSG, id = Id, rule = OtherRule}
   end.

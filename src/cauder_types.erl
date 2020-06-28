@@ -13,6 +13,8 @@
               af_binary_op/1, af_unary_op/1, af_local_call/0, af_remote_call/0, af_if/0, af_case/0, af_receive/0]).
 -export_type([af_clause_seq/0, af_pattern/0, af_guard_seq/0, af_guard/0, af_guard_test/0]).
 
+-export_type([eval_result/0]).
+
 
 %% Record types
 
@@ -214,3 +216,20 @@
 %% Custom Abstract Format types
 
 -type af_boolean() :: af_lit_atom(boolean()).
+
+
+%% Eval types
+
+-type eval_result() :: {cauder_types:environment(), [cauder_types:abstract_expr()], label()}.
+
+-type label() :: label_tau()
+               | label_spawn()
+               | label_self()
+               | label_send()
+               | label_rec().
+
+-type label_tau() :: tau.
+-type label_spawn() :: {spawn, {cauder_types:af_variable(), cauder_types:af_atom(), list(cauder_types:abstract_expr())}}.
+-type label_self() :: {self, cauder_types:af_variable()}.
+-type label_send() :: {send, cauder_types:af_integer(), cauder_types:abstract_expr()}.
+-type label_rec() :: {rec, cauder_types:af_variable(), cauder_types:af_clause_seq()}.
