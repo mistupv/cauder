@@ -1,7 +1,7 @@
 -module(cauder_eval).
 
--export([expr/2, is_expr/2]).
--export([matchrec/3]).
+-export([seq/3, abstract/1, concrete/1, is_expr/2]).
+-export([match_rec/3]).
 
 -include("cauder.hrl").
 
@@ -11,344 +11,235 @@
 %% list and returns a tuple with an updated environment, the list of expressions
 %% that resulted from the evaluation, and a label.
 
--spec eval_expr_list(cauder_types:environment(), [cauder_types:abstract_expr()]) -> cauder_types:eval_result().
+-spec eval_list(cauder_types:environment(), [cauder_types:abstract_expr()], cauder_types:stack()) -> cauder_types:result().
 
-eval_expr_list(Env, [Expr | Exprs]) when is_tuple(Expr) ->
-  case is_expr(Expr, Env) of
+eval_list(Bs, [E | Es], Stk) ->
+  case is_expr(E, Bs) of
     true ->
-      {NewEnv, NewExprs, Label} = expr(Env, Expr),
-      {NewEnv, NewExprs ++ Exprs, Label};
+      R = #result{exprs = Es1} = expr(Bs, E, Stk),
+      R#result{exprs = Es1 ++ Es};
     false ->
-      {NewEnv, NewExprs, Label} = eval_expr_list(Env, Exprs),
-      {NewEnv, [Expr | NewExprs], Label}
+      R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
+      R#result{exprs = [E | Es1]}
   end.
+
+
+-spec seq(cauder_types:environment(), [cauder_types:abstract_expr()], cauder_types:stack()) -> cauder_types:result().
+
+seq(Bs, [E | Es], Stk) ->
+  io:format("seq0 - Stk: ~p\n", [Stk]),
+  X =
+  case is_expr(E, Bs) of
+    false ->
+      case Es of
+        [] ->
+          case Stk of
+            % Call entry
+            [{{_M, _F, _A}, Bs1, Es1, Var} | Stk1] ->
+              Es2 = utils:replace_variable(Es1, Var, E),
+              #result{env = Bs1, exprs = Es2, stack = Stk1};
+            % Block entry
+            [{_Type, Es1, Var} | Stk1] ->
+              Es2 = utils:replace_variable(Es1, Var, E),
+              #result{env = Bs, exprs = Es2, stack = Stk1}
+          end;
+        _ ->
+          #result{env = Bs, exprs = Es, stack = Stk}
+      end;
+    true ->
+      io:format("seq1 - Stk: ~p\n", [Stk]),
+      #result{env = Bs1, exprs = Es1, stack = Stk1, label = L} = expr(Bs, E, Stk),
+      case Stk1 of
+        [{{M, F, A}, Bs2, Es2, Var} | Stk] ->
+          #result{env = Bs2, exprs = Es2, stack = [{{M, F, A}, Bs1, Es1 ++ Es, Var} | Stk], label = L};
+        [{Type, Es2, Var} | Stk] ->
+          #result{env = Bs1, exprs = Es2, stack = [{Type, Es1 ++ Es, Var} | Stk], label = L};
+        _ ->
+          #result{env = Bs1, exprs = Es1 ++ Es, stack = Stk1, label = L}
+      end
+  end,
+%%  io:format("seq: ~p\n\n", [X]),
+  X.
 
 
 %% =====================================================================
 %% @doc Evaluates the given `Expression` and returns a tuple with an updated
 %% environment, the expression that resulted from the evaluation, and a label.
 
--spec expr(cauder_types:environment(), cauder_types:abstract_expr()) -> cauder_types:eval_result().
+-spec expr(cauder_types:environment(), cauder_types:abstract_expr(), cauder_types:stack()) -> cauder_types:result().
 
-expr(Env, Expr) when is_tuple(Expr) ->
-  case is_expr(Expr, Env) of
+expr(Bs, {var, _, Name}, Stk) when is_atom(Name) ->
+  {value, Val} = binding(Name, Bs),
+  #result{env = Bs, exprs = [abstract(Val)], stack = Stk};
+
+expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
+  case is_expr(Lhs, Bs0) of
+    true -> eval_and_update({Bs0, Lhs, Stk}, {3, E});
     false ->
-      % If we find a literal we just consume it.
-      {Env, [], tau};
-    true ->
-      case erl_syntax:type(Expr) of
-        variable -> variable(Env, Expr);
-        match_expr -> match_expr(Env, Expr);
-        infix_expr -> infix_expr(Env, Expr);
-        prefix_expr -> prefix_expr(Env, Expr);
-        application -> application(Env, Expr);
-        list -> list(Env, Expr);
-        tuple -> tuple(Env, Expr);
-        case_expr -> case_expr(Env, Expr);
-        if_expr -> if_expr(Env, Expr);
-        receive_expr -> receive_expr(Env, Expr)
-      end
-  end.
-
-
--spec variable(cauder_types:environment(), cauder_types:af_variable()) -> cauder_types:eval_result().
-
-variable(Env, {var, _, Name}) when is_atom(Name) ->
-  Value = orddict:fetch(Name, Env),
-  AbstractValue = abstract(Value),
-  {Env, [AbstractValue], tau}.
-
-
--spec match_expr(cauder_types:environment(), cauder_types:af_match(cauder_types:abstract_expr())) -> cauder_types:eval_result().
-
-match_expr(Env, MatchExpr = {match, Line, Pattern, Body}) ->
-  case is_expr(Pattern, Env) of
-    true ->
-      {NewEnv, [NewPattern], Label} = expr(Env, Pattern),
-      {NewEnv, [{match, Line, NewPattern, Body}], Label};
-    false ->
-      case is_expr(Body, Env) of
-        true ->
-          {NewEnv, [NewBody], Label} = expr(Env, Body),
-          {NewEnv, [{match, Line, Pattern, NewBody}], Label};
+      case is_expr(Rhs, Bs0) of
+        true -> eval_and_update({Bs0, Rhs, Stk}, {4, E});
         false ->
           % There should be no variables to evaluate so we pass no bindings
-          {value, Value, Bindings} = erl_eval:expr(MatchExpr, []),
-          NewEnv = utils:merge_env(Env, Bindings),
-          {NewEnv, [(abstract(Value))], tau}
+          {value, Val, Bs1} = erl_eval:expr(E, []),
+          Bs = utils:merge_env(Bs0, Bs1),
+          #result{env = Bs, exprs = [abstract(Val)], stack = Stk}
       end
-  end.
+  end;
 
-
--spec infix_expr(cauder_types:environment(), cauder_types:af_binary_op(cauder_types:abstract_expr())) -> cauder_types:eval_result().
-
-infix_expr(Env, {op, Line, Operator, Left, Right}) when is_atom(Operator) ->
-  case is_expr(Left, Env) of
-    true ->
-      {NewEnv, [NewLeft], Label} = expr(Env, Left),
-      {NewEnv, [{op, Line, Operator, NewLeft, Right}], Label};
+expr(Bs, E = {op, _, Op, Lhs, Rhs}, Stk) when is_atom(Op) ->
+  case is_expr(Lhs, Bs) of
+    true -> eval_and_update({Bs, Lhs, Stk}, {4, E});
     false ->
-      case {erl_parse:normalise(Left), Operator} of
-        {'false', 'andalso'} -> {Env, Left, tau};
-        {'true', 'orelse'} -> {Env, Left, tau};
+      case {concrete(Lhs), Op} of
+        {'false', 'andalso'} -> #result{env = Bs, exprs = [Lhs], stack = Stk};
+        {'true', 'orelse'} -> #result{env = Bs, exprs = [Lhs], stack = Stk};
         _ ->
-          case is_expr(Right, Env) of
-            true ->
-              {NewEnv, [NewRight], Label} = expr(Env, Right),
-              {NewEnv, [{op, Line, Operator, Left, NewRight}], Label};
+          case is_expr(Rhs, Bs) of
+            true -> eval_and_update({Bs, Rhs, Stk}, {5, E});
             false ->
-              case Operator of
-                '!' -> {Env, [Right], {send, Left, Right}};
+              case Op of
+                '!' -> #result{env = Bs, exprs = [Rhs], stack = Stk, label = {send, Lhs, Rhs}};
                 _ ->
                   % Infix operators are always built-in, so we just evaluate the expression
-                  Value = apply(erlang, Operator, [erl_parse:normalise(Left), erl_parse:normalise(Right)]),
-                  {Env, [(abstract(Value))], tau}
+                  Val = apply(erlang, Op, [concrete(Lhs), concrete(Rhs)]),
+                  #result{env = Bs, exprs = [(abstract(Val))], stack = Stk}
               end
           end
       end
-  end.
+  end;
 
-
--spec prefix_expr(cauder_types:environment(), cauder_types:af_unary_op(cauder_types:abstract_expr())) -> cauder_types:eval_result().
-
-prefix_expr(Env, {op, Pos, Operator, Argument}) when is_atom(Operator) ->
+expr(Bs, E = {op, _, Op, Arg}, Stk) when is_atom(Op) ->
   % FIXME The '-' prefix causes two steps the show the same expression,
   % however they have two different internal representations:
   %  - The number with the operator e.g -(42)
   %  - The negated number e.g (-42)
-  case is_expr(Argument, Env) of
-    true ->
-      {NewEnv, [NewArgument], Label} = expr(Env, Argument),
-      {NewEnv, [{op, Pos, Operator, NewArgument}], Label};
+  case is_expr(Arg, Bs) of
+    true -> eval_and_update({Bs, Arg, Stk}, {4, E});
     false ->
       % Prefix operators are always built-in, so we just evaluate the expression
-      Value = apply(erlang, Operator, [erl_parse:normalise(Argument)]),
-      {Env, [(abstract(Value))], tau}
-  end.
+      Val = apply(erlang, Op, [concrete(Arg)]),
+      #result{env = Bs, exprs = [abstract(Val)], stack = Stk}
+  end;
 
-
--spec application(cauder_types:environment(), cauder_types:af_local_call() | cauder_types:af_remote_call()) -> cauder_types:eval_result().
-
-application(Env, RemoteCall = {call, CallPos, RemoteFun = {remote, RemotePos, Module, Name}, Arguments}) ->
-  case is_expr(Module, Env) of
+expr(Bs0, E1 = {call, _, E2 = {remote, _, M0, F0}, As0}, Stk0) ->
+  case is_expr(M0, Bs0) of
     true ->
-      {NewEnv, [NewModule], Label} = expr(Env, Module),
-      {NewEnv, [{call, CallPos, {remote, RemotePos, NewModule, Name}, Arguments}], Label};
+      R = #result{exprs = [M]} = expr(Bs0, M0, Stk0),
+      R#result{exprs = [setelement(3, E1, setelement(3, E2, M))]};
     false ->
-      case is_expr(Name, Env) of
+      case is_expr(F0, Bs0) of
         true ->
-          {NewEnv, [NewName], Label} = expr(Env, Name),
-          {NewEnv, [{call, CallPos, {remote, RemotePos, Module, NewName}, Arguments}], Label};
+          R = #result{exprs = [F]} = expr(Bs0, F0, Stk0),
+          R#result{exprs = [setelement(3, E1, setelement(4, E2, F))]};
         false ->
-          case lists:any(fun(Arg) -> is_expr(Arg, Env) end, Arguments) of
+          case lists:any(fun(A) -> is_expr(A, Bs0) end, As0) of
             true ->
-              {NewEnv, NewArguments, Label} = eval_expr_list(Env, Arguments),
-              {NewEnv, [{call, CallPos, RemoteFun, NewArguments}], Label};
+              R = #result{exprs = As} = eval_list(Bs0, As0, Stk0),
+              R#result{exprs = [setelement(4, E1, As)]};
             false ->
-              case erl_syntax:atom_value(Module) of
-                'erlang' -> bif(Env, RemoteCall);
-                _ ->
-                  % TODO Check if module matches current one
-                  % TODO Handle calls to functions in other modules
-                  error(not_implemented)
-              end
+              M = concrete(M0),
+              F = concrete(F0),
+              remote_call(Bs0, {M, F, As0}, Stk0)
           end
       end
   end;
-application(Env, LocalCall = {call, Pos, LocalFun, Arguments}) ->
-  case is_expr(LocalFun, Env) of
-    true ->
-      {NewEnv, [NewLocalFun], Label} = expr(Env, LocalFun),
-      {NewEnv, [{call, Pos, NewLocalFun, Arguments}], Label};
+
+expr(Bs0, E = {call, _, F0, As0}, Stk0) ->
+  io:format("call - Stk0: ~p\n", [Stk0]),
+  case is_expr(F0, Bs0) of
+    true -> eval_and_update({Bs0, F0, Stk0}, {3, E});
     false ->
-      case lists:any(fun(Arg) -> is_expr(Arg, Env) end, Arguments) of
-        true ->
-          {NewEnv, NewArguments, Label} = eval_expr_list(Env, Arguments),
-          {NewEnv, [{call, Pos, LocalFun, NewArguments}], Label};
+      case lists:any(fun(A) -> is_expr(A, Bs0) end, As0) of
+        true -> eval_and_update({Bs0, As0, Stk0}, {4, E});
         false ->
-          Name = erl_syntax:atom_value(LocalFun),
-          % Check if the function is in this file
-          case utils:fundef_lookup({Name, length(Arguments)}, utils:ref_lookup(?FUN_DEFS)) of
-            {value, FunDef} ->
-              FunClauses = erl_syntax:function_clauses(utils:fundef_rename(FunDef)),
-              % There should be no variables to evaluate so we pass no bindings
-              {Bindings, Body} = match_clause([], FunClauses, Arguments),
-              NewEnv = utils:merge_env(Env, Bindings),
-              {NewEnv, Body, tau};
-            false ->
-              % TODO If the function name was a variable then BIF should not be evaluated
-              % TODO Look for function in other files in the same directory
-              bif(Env, LocalCall)
-          end
+          F = concrete(F0),
+          local_call(Bs0, {F, As0}, Stk0)
       end
-  end.
-
-
--spec bif(cauder_types:environment(), cauder_types:af_local_call() | cauder_types:af_remote_call()) -> cauder_types:eval_result().
-
-bif(Env, {call, CallPos, {atom, NamePos, Name}, Arguments}) ->
-  bif(Env, {call, CallPos, {remote, NamePos, erlang, Name}, Arguments});
-bif(Env, {call, _, {remote, _, erlang, 'spawn'}, Arguments}) ->
-  TmpVar = utils:temp_variable(),
-  case Arguments of
-    % TODO erlang:spawn/1,2,4
-    % erlang:spawn/3
-    [_SpawnModule, SpawnFunction, SpawnArgs] ->
-      % TODO Handle calls to functions in other modules
-      {Env, [TmpVar], {spawn, {TmpVar, SpawnFunction, erl_syntax:list_elements(SpawnArgs)}}}
   end;
-bif(Env, {call, _, {remote, _, erlang, 'self'}, {nil, _}}) ->
-  TmpVar = utils:temp_variable(),
-  {Env, [TmpVar], {self, TmpVar}};
-bif(Env, {call, _, {remote, _, erlang, FunName}, Arguments}) ->
-  ConcreteArgs = lists:map(fun erl_syntax:concrete/1, Arguments),
-  % BIF so we just evaluate it
-  Value = apply(erlang, FunName, ConcreteArgs),
-  {Env, [(abstract(Value))], tau}.
 
+expr(Bs, E = {cons, _, H, T}, Stk) ->
+  case is_expr(H, Bs) of
+    true -> eval_and_update({Bs, H, Stk}, {3, E});
+    false -> eval_and_update({Bs, T, Stk}, {4, E})
+  end;
 
--spec list(cauder_types:environment(), cauder_types:af_cons(cauder_types:abstract_expr())) -> cauder_types:eval_result().
+expr(Bs, E = {tuple, _, Es0}, Stk) ->
+  eval_and_update({Bs, Es0, Stk}, {3, E});
 
-list(Env, {cons, Pos, Head, Tail}) ->
-  case is_expr(Head, Env) of
-    true ->
-      {NewEnv, [NewHead], Label} = expr(Env, Head),
-      {NewEnv, [{cons, Pos, NewHead, Tail}], Label};
+expr(Bs0, E = {'case', _, A, Cs}, Stk0) ->
+  case is_expr(A, Bs0) of
+    true -> eval_and_update({Bs0, A, Stk0}, {3, E});
     false ->
-      {NewEnv, [NewTail], Label} = expr(Env, Tail),
-      {NewEnv, [{cons, Pos, Head, NewTail}], Label}
-  end.
-
-
--spec tuple(cauder_types:environment(), cauder_types:af_tuple(cauder_types:abstract_expr())) -> cauder_types:eval_result().
-
-tuple(Env, {tuple, Pos, Elements}) when is_list(Elements) ->
-  {NewEnv, NewElements, Label} = eval_expr_list(Env, Elements),
-  {NewEnv, [{tuple, Pos, NewElements}], Label}.
-
-
--spec case_expr(cauder_types:environment(), cauder_types:af_case()) -> cauder_types:eval_result().
-
-case_expr(Env, {'case', Pos, Argument, Clauses}) ->
-  case is_expr(Argument, Env) of
-    true ->
-      {NewEnv, [NewArgument], Label} = expr(Env, Argument),
-      {NewEnv, [{'case', Pos, NewArgument, Clauses}], Label};
-    false ->
-      {NewEnv, Body} = match_clause(Env, Clauses, [Argument]),
-      {NewEnv, Body, tau}
-  end.
-
-
--spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
-  {cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
-
-match_clause(Env, [{'clause', _, Ps, G, B} | Cs], Vs) ->
-  case match(Env, Ps, Vs) of
-    {match, Env1} ->
-      Bool = erl_syntax:atom_value(eval_guard_seq(Env1, G)),
-      case Bool of
-        true -> {Env1, B};
-        false -> match_clause(Env, Cs, Vs)
-      end;
-    nomatch -> match_clause(Env, Cs, Vs)
+      {match, Bs, Body} = match_case(Bs0, Cs, A),
+      Var = utils:temp_variable(),
+      Stk = [{'case', Body, Var} | Stk0],
+      #result{env = Bs, exprs = [Var], stack = Stk}
   end;
-match_clause(_Env, [], _Vs) -> nomatch.
 
-
-%% Tries to match a list of values against a list of patterns using the given environment.
-%% The list of values should have no variables.
-%% TODO Allow for variables in list of values
-
--spec match(cauder_types:environment(), [cauder_types:af_pattern()], [cauder_types:abstract_expr()]) ->
-  {match, cauder_types:environment()} | nomatch.
-
-match(Env, [], [])    -> {match, Env};
-match(Env, Ps, Vs) when length(Ps) == length(Vs) ->
-  Ps1 = eval_pattern(Env, erl_syntax:revert(erl_syntax:tuple(Ps))),
-  Vs1 = erl_syntax:revert(erl_syntax:tuple(Vs)),
-  try erl_eval:expr({match, erl_anno:new(0), Ps1, Vs1}, []) of
-    {value, _Val, Bs} ->
-      Env1 = utils:merge_env(Env, Bs),
-      {match, Env1}
-  catch
-    error:{badmatch, _Rhs} -> nomatch
-  end;
-match(_Env, _Ps, _Vs) -> nomatch.
-
-
--spec eval_pattern(cauder_types:environment(), cauder_types:af_pattern()) -> cauder_types:af_pattern().
-
-eval_pattern(Env, Pattern) ->
-  case is_expr(Pattern, Env) of
-    true ->
-      {NewEnv, [NewPattern], tau} = expr(Env, Pattern),
-      eval_pattern(NewEnv, NewPattern);
-    false -> Pattern
-  end.
-
-
--spec eval_guard_seq(cauder_types:environment(), cauder_types:af_guard_seq()) -> cauder_types:af_boolean().
-
-eval_guard_seq(_Env, []) -> abstract(true);
-eval_guard_seq(Env, GuardSeq) when is_list(GuardSeq) ->
-  % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
-  % See: https://erlang.org/doc/reference_manual/expressions.html#guard-sequences
-  AnyTrue = lists:any(fun(Guard) -> erl_syntax:atom_value(eval_guard(Env, Guard)) end, GuardSeq),
-  abstract(AnyTrue).
-
-
--spec eval_guard(cauder_types:environment(), cauder_types:af_guard()) -> cauder_types:af_boolean().
-
-eval_guard(Env, Guard) when is_list(Guard) ->
-  AllTrue = lists:all(fun(GuardTest) -> erl_syntax:atom_value(eval_guard_test(Env, GuardTest)) end, Guard),
-  {atom, erl_anno:new(0), AllTrue}.
-
-
--spec eval_guard_test(cauder_types:environment(), cauder_types:af_guard_test()) -> cauder_types:af_guard_test() | cauder_types:af_boolean().
-
-eval_guard_test(Env, GuardTest) ->
-  case erl_lint:is_guard_test(GuardTest) of
-    true ->
-      case is_expr(GuardTest, Env) of
-        true ->
-          % Environment should not change, and the label should be `tau`
-          {Env, [NewGuardTest], tau} = expr(Env, GuardTest),
-          eval_guard_test(Env, NewGuardTest);
-        false -> GuardTest
-      end;
-    false -> erlang:error(guard_expr) % TODO How to handle error in the interpreted code?
-  end.
-
-
--spec if_expr(cauder_types:environment(), cauder_types:af_if()) -> cauder_types:eval_result().
-
-if_expr(Env, {'if', _, Clauses}) ->
-  {NewEnv, Body} = match_clause(Env, Clauses, []),
-  {NewEnv, Body, tau}.
-
-
--spec receive_expr(cauder_types:environment(), cauder_types:af_receive()) -> cauder_types:eval_result().
+expr(Bs, {'if', _, Cs}, Stk0) ->
+  {match, Body} = match_if(Bs, Cs),
+  Var = utils:temp_variable(),
+  Stk = [{'if', Body, Var} | Stk0],
+  #result{env = Bs, exprs = [Var], stack = Stk};
 
 %% TODO Support receive with timeout
-receive_expr(Env, {'receive', _, Clauses}) ->
-  TmpVar = utils:temp_variable(),
-  {Env, [TmpVar], {rec, TmpVar, Clauses}}.
+expr(Bs, {'receive', _, Cs}, Stk0) ->
+  Var = utils:temp_variable(),
+  VarBody = utils:temp_variable(),
+  Stk = [{'receive', [VarBody], Var} | Stk0],
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}}.
 
 
--spec abstract(term()) -> cauder_types:abstract_expr().
 
-abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
+-spec bif(atom(), [cauder_types:abstract_expr()]) -> {cauder_types:abstract_expr(), cauder_types:label()}.
+
+bif(F, As) -> bif(erlang, F, As).
+
+
+-spec bif(atom(), atom(), [cauder_types:abstract_expr()]) -> {cauder_types:abstract_expr(), cauder_types:label()}.
+
+% TODO erlang:spawn/1
+bif(erlang, spawn, [SpawnM, SpawnF, SpawnAs]) ->
+  Var = utils:temp_variable(),
+  {Var, {spawn, Var, SpawnM, SpawnF, erl_syntax:list_elements(SpawnAs)}};
+bif(erlang, self, []) ->
+  Var = utils:temp_variable(),
+  {Var, {self, Var}};
+bif(M, F, As) ->
+  % BIF so we just evaluate it
+  As1 = lists:map(fun concrete/1, As),
+  Val = apply(M, F, As1),
+  {abstract(Val), tau}.
 
 
 %% =====================================================================
-%% @doc Tries to match each message, in time order, in the mailbox against every
-%% pattern from the `Clauses`, sequentially. If a match succeeds and the optional
-%% guard sequence is `true`, a tuple with the following form is returned:
-%% `{NewEnvironment, NewExpression, MatchedMessage, RestMessages}`
-%% Otherwise, the atom `nomatch` is returned.
 
--spec matchrec(Clauses, Mail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+
+-spec match_if(cauder_types:environment(), cauder_types:af_clause_seq()) ->
+  {match, [cauder_types:abstract_expr()]} | nomatch.
+
+match_if(_, []) -> nomatch;
+match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
+  {atom, _, Bool} = eval_guard_seq(Bs, G),
+  case Bool of
+    true -> {match, B};
+    false -> match_if(Bs, Cs)
+  end.
+
+
+-spec match_case(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:abstract_expr()) ->
+  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+
+match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
+
+
+-spec match_fun(cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
+  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+
+match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
+
+
+-spec match_rec(Clauses, Mail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Mail :: [cauder_types:process_message()],
   Environment :: cauder_types:environment(),
@@ -357,10 +248,10 @@ abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
   MatchedMessage :: cauder_types:process_message(),
   RestMessages :: [cauder_types:process_message()].
 
-matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
+match_rec(Cs, Mail, Bs) -> match_rec(Cs, Mail, [], Bs).
 
 
--spec matchrec(Clauses, RemainingMail, CheckedMail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+-spec match_rec(Clauses, RemainingMail, CheckedMail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   RemainingMail :: [cauder_types:process_message()],
   CheckedMail :: [cauder_types:process_message()],
@@ -370,13 +261,148 @@ matchrec(Clauses, Mail, Env) -> matchrec(Clauses, Mail, [], Env).
   MatchedMessage :: cauder_types:process_message(),
   RestMessages :: [cauder_types:process_message()].
 
-matchrec(_Clauses, [], _CheckedMsgs, _Env) -> nomatch;
-matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
-  {MsgValue, _MsgTime} = CurMsg,
-  case match_clause(Env, Clauses, [MsgValue]) of
-    {NewEnv, Body} -> {NewEnv, Body, CurMsg, lists:reverse(CheckedMsgs, RestMsgs)};
-    nomatch -> matchrec(Clauses, RestMsgs, [CurMsg | CheckedMsgs], Env)
+match_rec(_, [], _, _) -> nomatch;
+match_rec(Cs, [M | Ms0], Ms1, Bs0) ->
+  {Val, _Time} = M,
+  case match_clause(Bs0, Cs, [Val]) of
+    {match, Bs, Body} -> {Bs, Body, M, lists:reverse(Ms1, Ms0)};
+    nomatch -> match_rec(Cs, Ms0, [M | Ms1], Bs0)
   end.
+
+
+-spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
+  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+
+match_clause(_, [], _) -> nomatch;
+match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
+  case match(Bs0, Ps, Vs) of
+    {match, Bs} ->
+      case concrete(eval_guard_seq(Bs, G)) of
+        true -> {match, Bs, B};
+        false -> match_clause(Bs0, Cs, Vs)
+      end;
+    nomatch -> match_clause(Bs0, Cs, Vs)
+  end.
+
+
+%% Tries to match a list of values against a list of patterns using the given environment.
+%% The list of values should have no variables.
+%% TODO Allow for variables in list of values
+
+-spec match(cauder_types:environment(), [cauder_types:af_pattern()], [cauder_types:abstract_expr()]) ->
+  {match, cauder_types:environment()} | nomatch.
+
+match(Bs, [], [])    -> {match, Bs};
+match(Bs0, Ps0, Vs0) when length(Ps0) == length(Vs0) ->
+  Ps = eval_pattern(Bs0, erl_syntax:revert(erl_syntax:tuple(Ps0))),
+  Vs = erl_syntax:revert(erl_syntax:tuple(Vs0)),
+  try erl_eval:expr({match, erl_anno:new(0), Ps, Vs}, []) of
+    {value, _V, Bs} -> {match, utils:merge_env(Bs0, Bs)}
+  catch
+    error:{badmatch, _Rhs} -> nomatch
+  end;
+match(_Bs, _Ps, _Vs) -> nomatch.
+
+
+-spec eval_pattern(cauder_types:environment(), cauder_types:af_pattern()) -> cauder_types:af_pattern().
+
+eval_pattern(Bs0, Pt0) ->
+  case is_expr(Pt0, Bs0) of
+    true ->
+      #result{env = Bs, exprs = [Pt]} = expr(Bs0, Pt0, []),
+      eval_pattern(Bs, Pt);
+    false -> Pt0
+  end.
+
+
+-spec eval_guard_seq(cauder_types:environment(), cauder_types:af_guard_seq()) -> cauder_types:af_boolean().
+
+eval_guard_seq(_, []) -> abstract(true);
+eval_guard_seq(Bs, Gs) when is_list(Gs) ->
+  % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
+  % See: https://erlang.org/doc/reference_manual/expressions.html#guard-sequences
+  abstract(lists:any(fun(G) -> concrete(eval_guard(Bs, G)) end, Gs)).
+
+
+-spec eval_guard(cauder_types:environment(), cauder_types:af_guard()) -> cauder_types:af_boolean().
+
+eval_guard(Bs, G) when is_list(G) ->
+  abstract(lists:all(fun(Gt) -> concrete(eval_guard_test(Bs, Gt)) end, G)).
+
+
+-spec eval_guard_test(cauder_types:environment(), cauder_types:af_guard_test()) -> cauder_types:af_guard_test() | cauder_types:af_boolean().
+
+eval_guard_test(Bs, Gt) ->
+  case erl_lint:is_guard_test(Gt) of
+    true ->
+      case is_expr(Gt, Bs) of
+        true ->
+          #result{exprs = [Gt1]} = expr(Bs, Gt, []),
+          eval_guard_test(Bs, Gt1);
+        false -> Gt
+      end;
+    false -> erlang:error(guard_expr) % TODO How to handle error in the interpreted code?
+  end.
+
+
+-spec remote_call(cauder_types:environment(), {atom(), atom(), [cauder_types:abstract_expr()]}, cauder_types:stack()) -> cauder_types:result().
+
+remote_call(Bs0, {M, F, As}, Stk0) ->
+  A = length(As),
+  case utils:fundef_lookup(M, F, A) of
+    {ok, FunDef} ->
+      Cs = erl_syntax:function_clauses(utils:fundef_rename(FunDef)), % TODO Is necessary to rename?
+      % There should be no variables to evaluate so we pass no bindings
+      {match, Bs, Body} = match_fun(Cs, As),
+      Var = utils:temp_variable(),
+      Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
+      #result{env = Bs0, exprs = [Var], stack = Stk};
+    error ->
+      % TODO If the function name was a variable then BIF should not be evaluated
+      % TODO Look for function in other files in the same directory
+      {Val, L} = bif(M, F, As),
+      #result{env = Bs0, exprs = [Val], stack = Stk0, label = L}
+  end.
+
+-spec local_call(cauder_types:environment(), {atom(), [cauder_types:abstract_expr()]}, cauder_types:stack()) -> cauder_types:result().
+
+% Special case for guard calls
+local_call(Bs0, {F, As}, []) ->
+  {Val, tau} = bif(F, As),
+  #result{env = Bs0, exprs = [Val], stack = []};
+local_call(Bs0, {F, As}, Stk0) ->
+  {ok, M} = current_module(Stk0),
+  A = length(As),
+  case utils:fundef_lookup(M, F, A) of
+    {ok, FunDef} ->
+      Cs = erl_syntax:function_clauses(utils:fundef_rename(FunDef)), % TODO Is necessary to rename?
+      % There should be no variables to evaluate so we pass no bindings
+      {match, Bs, Body} = match_fun(Cs, As),
+      Var = utils:temp_variable(),
+      Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
+      #result{env = Bs0, exprs = [Var], stack = Stk};
+    error ->
+      % TODO If the function name was a variable then BIF should not be evaluated
+      % TODO Look for function in other files in the same directory
+      {Val, L} = bif(F, As),
+      #result{env = Bs0, exprs = [Val], stack = Stk0, label = L}
+  end.
+
+
+%% =====================================================================
+%% Converts the given Erlang data structure into an abstract expression.
+
+-spec abstract(term()) -> cauder_types:abstract_expr().
+
+abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
+
+
+%% =====================================================================
+%% Converts the given abstract expression of a term into a conventional Erlang data structure (that is, the term itself).
+
+-spec concrete(cauder_types:abstract_expr()) -> term().
+
+concrete(Value) -> erl_syntax:concrete(Value).
 
 
 %% =====================================================================
@@ -384,14 +410,40 @@ matchrec(Clauses, [CurMsg | RestMsgs], CheckedMsgs, Env) ->
 
 -spec is_expr(cauder_types:abstract_expr(), cauder_types:environment()) -> boolean().
 
-is_expr({atom, _, _}, _)      -> false;
-is_expr({char, _, _}, _)      -> false;
-is_expr({float, _, _}, _)     -> false;
-is_expr({integer, _, _}, _)   -> false;
-is_expr({nil, _}, _)          -> false;
-is_expr({string, _, _}, _)    -> false;
-is_expr({var, _, '_'}, _)     -> false;
-is_expr({var, _, Name}, Env)  -> erl_eval:binding(Name, Env) =/= unbound;
-is_expr({cons, _, H, T}, Env) -> is_expr(H, Env) orelse is_expr(T, Env);
-is_expr({tuple, _, Es}, Env)  -> lists:any(fun(E) -> is_expr(E, Env) end, Es);
-is_expr(_, _)                 -> true.
+is_expr({atom, _, _}, _)     -> false;
+is_expr({char, _, _}, _)     -> false;
+is_expr({float, _, _}, _)    -> false;
+is_expr({integer, _, _}, _)  -> false;
+is_expr({nil, _}, _)         -> false;
+is_expr({string, _, _}, _)   -> false;
+is_expr({var, _, '_'}, _)    -> false;
+is_expr({var, _, Name}, Bs)  -> binding(Name, Bs) =/= unbound;
+is_expr({cons, _, H, T}, Bs) -> is_expr(H, Bs) orelse is_expr(T, Bs);
+is_expr({tuple, _, Es}, Bs)  -> lists:any(fun(E) -> is_expr(E, Bs) end, Es);
+is_expr(_, _)                -> true.
+
+
+%% =====================================================================
+%% @doc Returns the binding for the given name in the given environment.
+
+-spec binding(atom(), cauder_types:environment()) -> {value, term()} | unbound.
+
+binding(Name, Bs) -> erl_eval:binding(Name, Bs).
+
+
+%% =====================================================================
+%% @doc Returns the current module according to the stack.
+
+-spec current_module(cauder_types:stack()) -> atom().
+
+current_module([{{M, _, _}, _, _, _} | _]) -> {ok, M};
+current_module([_ | Stk])                  -> current_module(Stk);
+current_module([])                         -> error.
+
+
+eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
+  R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
+  R#result{exprs = [setelement(Index, Tuple, Es1)]};
+eval_and_update({Bs, E, Stk}, {Index, Tuple}) ->
+  R = #result{exprs = [E1]} = expr(Bs, E, Stk),
+  R#result{exprs = [setelement(Index, Tuple, E1)]}.

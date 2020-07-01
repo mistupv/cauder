@@ -4,21 +4,21 @@
 %%%-------------------------------------------------------------------
 
 -module(utils).
--export([fundef_lookup/2, fundef_rename/1,
+-export([fundef_lookup/3, fundef_rename/1,
          temp_variable/0, fresh_time/0, pid_exists/2,
          select_proc/2, select_msg/2,
          select_proc_with_time/2, select_proc_with_send/2,
          select_proc_with_spawn/2, select_proc_with_rec/2,
          select_proc_with_var/2,
          merge_env/2,
-         replace_variable/3, replace_all/2,
-         funNames/1,
-         stringToNameAndArity/1, stringToArgs/1,
+         replace_variable/3,
+         funNames/2,
+         stringToMFA/1, stringToArgs/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
-         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0]).
+         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, ref_lookup/1, fresh_pid/0, parse_file/1]).
 
 -include("cauder.hrl").
 
@@ -28,10 +28,30 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec fundef_lookup({atom(), arity()}, [cauder_types:af_function_decl()]) -> {value, cauder_types:af_function_decl()} | false.
+-spec fundef_lookup(atom(), atom(), arity()) -> {ok, cauder_types:af_function_decl()} | error.
 
-fundef_lookup({Name, Arity}, FunDefs) ->
-  lists:search(fun({'function', _, N, A, _}) -> Name == N andalso Arity == A end, FunDefs).
+fundef_lookup(M, F, A) ->
+  % #{Module => #{{Function, Arity} => FunctionDeclaration}}
+  Ms = ref_lookup(?MODULE_DEFS),
+  Fs = case maps:find(M, Ms) of
+         {ok, Fs1} -> Fs1;
+         error ->
+           {ok, Dir} = file:get_cwd(),
+           File = io_lib:format("~s/~s.erl", [Dir, M]),
+           case parse_file(File) of
+             {ok, M, FunDefs, _} ->
+               % TODO Store only clauses instead of the full definition
+               Fs1 = maps:from_list(lists:map(fun(Def = {function, _, F1, A1, _}) -> {{F1, A1}, Def} end, FunDefs)),
+               Ms1 = Ms#{M => Fs1},
+               ref_add(?MODULE_DEFS, Ms1),
+               Fs1;
+             _Error ->
+               Ms1 = Ms#{M => #{}},
+               ref_add(?MODULE_DEFS, Ms1),
+               error
+           end
+       end,
+  maps:find({F, A}, Fs).
 
 
 %%--------------------------------------------------------------------
@@ -83,7 +103,7 @@ fundef_rename(FunDef) ->
 %%
 %% @see replace_variable/3
 
--spec temp_variable() -> {'var', erl_anno:anno(), atom()}.
+-spec temp_variable() -> cauder_types:af_variable().
 
 temp_variable() ->
   Number = fresh_variable_number(),
@@ -107,8 +127,9 @@ pid_exists([], _)                       -> false.
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns a tuple with a process with pid Pid from Procs and
-%% the rest of processes from Procs
+%% @doc Returns a tuple where the first element is the process whose
+%% Pid matches the given one, and the second element is a list with
+%% the rest of processes from `Procs`
 %% @end
 %%--------------------------------------------------------------------
 
@@ -199,46 +220,31 @@ merge_env(Env, [{Name, Value} | RestBindings]) ->
   merge_env(NewEnv, RestBindings).
 
 
-%%--------------------------------------------------------------------
-%% @doc A typical substitution application
-%% @end
-%%--------------------------------------------------------------------
-
-replace_all([], Exp) -> Exp;
-replace_all([{Var, Val} | R], Exp) ->
-  %io:format("replace: ~p~n~p~n~p~n",[Var,Val,Exp]),
-  NewExp = utils:replace_variable(Var, Val, Exp),
-  %io:format("--result: p~n",[NewExp]),
-  replace_all(R, NewExp).
-
-
 %% =====================================================================
 %% @doc Replaces all occurrences of the variable Target in each one of
 %% the Expressions with the literal value Replacement.
 
--spec replace_variable(Target, Replacement, Expressions) -> Result when
-  Target :: {'var', erl_anno:anno(), atom()},
-  Replacement :: erl_parse:abstract_expr() | [erl_parse:abstract_expr()], % erl_parse:af_literal()
-  Expressions :: [erl_parse:abstract_expr()],
-  Result :: [erl_parse:abstract_expr()].
+-spec replace_variable(Expressions, Variable, Replacement) -> NewExpressions when
+  Expressions :: [cauder_types:abstract_expr()],
+  Variable :: cauder_types:af_variable(),
+  Replacement :: cauder_types:abstract_expr(),
+  NewExpressions :: [cauder_types:abstract_expr()].
 
 % TODO Is necessary to accept a list of expression instead on a single expression?
-replace_variable(Target, Replacement, Expressions) when is_list(Expressions) ->
+replace_variable(Es, Var, E) when is_list(Es), not is_list(E) ->
   lists:map(
-    fun(Expr) ->
+    fun(E1) ->
       erl_syntax:revert(
         erl_syntax_lib:map(
-          fun(Node) ->
-            case Node of
-              Target -> Replacement;
-              Other -> Other
-            end
+          fun
+            (Node) when Node == Var -> E;
+            (Node) -> Node
           end,
-          Expr
+          E1
         )
       )
     end,
-    Expressions
+    Es
   ).
 
 
@@ -246,27 +252,24 @@ replace_variable(Target, Replacement, Expressions) when is_list(Expressions) ->
 %% @doc Returns a list with the names of the functions defined in the given FunForms
 %% @end
 %%--------------------------------------------------------------------
--spec funNames(FunForms) -> FunNames when
-  FunForms :: [erl_parse:abstract_form()], % [erl_parse:af_function_decl()]
-  FunNames :: [string()].
+-spec funNames(atom(), [cauder_types:af_function_decl()]) -> [string()].
 
-funNames(FunForms) ->
-  [atom_to_list(Name) ++ "/" ++ integer_to_list(Arity) || {function, _, Name, Arity, _} <- FunForms].
+funNames(M, FunDefs) ->
+  lists:map(fun({function, _, F, A, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, FunDefs).
 
 %%--------------------------------------------------------------------
-%% @doc Converts a String into tuple with the Name and Arity of a function
+%% @doc Converts a String into MFA tuple
 %% @end
 %%--------------------------------------------------------------------
--spec stringToNameAndArity(String) -> {Name, Arity} when
+-spec stringToMFA(String) -> {Module, Function, Arity} when
   String :: string(),
-  Name :: atom(),
+  Module :: atom(),
+  Function :: atom(),
   Arity :: arity().
 
-stringToNameAndArity(String) ->
-  FunParts = string:tokens(String, "/"),
-  Name = list_to_atom(lists:nth(1, FunParts)),
-  Arity = list_to_integer(lists:nth(2, FunParts)),
-  {Name, Arity}.
+stringToMFA(String) ->
+  [M, F, A] = string:lexemes(String, ":/"),
+  {list_to_atom(M), list_to_atom(F), list_to_integer(A)}.
 
 %%--------------------------------------------------------------------
 %% @doc Parses a string Str that represents a list of arguments
@@ -351,21 +354,21 @@ is_queue_minus_msg(Queue, Msg, OtherQueue) ->
 topmost_rec([]) -> no_rec;
 topmost_rec([CurHist | RestHist]) ->
   case CurHist of
-    {rec, _, _, _, _} -> CurHist;
+    {rec, _, _, _, _, _} -> CurHist;
     _Other -> topmost_rec(RestHist)
   end.
 
-has_send([], _)                                  -> false;
-has_send([{send, _, _, _, {_, Time}} | _], Time) -> true;
-has_send([_ | RestHist], Time)                   -> has_send(RestHist, Time).
+has_send([], _)                                     -> false;
+has_send([{send, _, _, _, _, {_, Time}} | _], Time) -> true;
+has_send([_ | RestHist], Time)                      -> has_send(RestHist, Time).
 
-has_spawn([], _)                         -> false;
-has_spawn([{spawn, _, _, Pid} | _], Pid) -> true;
-has_spawn([_ | RestHist], Pid)           -> has_spawn(RestHist, Pid).
+has_spawn([], _)                            -> false;
+has_spawn([{spawn, _, _, _, Pid} | _], Pid) -> true;
+has_spawn([_ | RestHist], Pid)              -> has_spawn(RestHist, Pid).
 
-has_rec([], _)                                 -> false;
-has_rec([{rec, _, _, {_, Time}, _} | _], Time) -> true;
-has_rec([_ | RestHist], Time)                  -> has_rec(RestHist, Time).
+has_rec([], _)                                    -> false;
+has_rec([{rec, _, _, _, {_, Time}, _} | _], Time) -> true;
+has_rec([_ | RestHist], Time)                     -> has_rec(RestHist, Time).
 
 has_var(Env, Var) ->
   case proplists:get_value(Var, Env) of
@@ -440,7 +443,7 @@ extract_replay_data(Path) ->
   % io:format("~p~n", [NReplayData]),
   file:close(FileHandler).
 
-parse_proc_data(Line) ->  Line.
+parse_proc_data(Line) -> Line.
 
 read_replay_proc_data(File, Data) ->
   case file:read_line(File) of
@@ -483,12 +486,36 @@ parse_expr(Func) ->
       {error, parse_error}
   end.
 
-ref_add(Id, Ref) ->  ets:insert(?APP_REF, {Id, Ref}).
+ref_add(Id, Ref) -> ets:insert(?APP_REF, {Id, Ref}).
 
-ref_lookup(Id) ->  ets:lookup_element(?APP_REF, Id, 2).
+ref_lookup(Id) -> ets:lookup_element(?APP_REF, Id, 2).
 
+
+-spec fresh_pid() -> cauder_types:af_integer().
 
 fresh_pid() ->
   Pid = ref_lookup(?FRESH_PID),
   ref_add(?FRESH_PID, Pid + 1),
-  Pid.
+  erl_syntax:revert(erl_syntax:abstract(Pid)).
+
+
+parse_file(File) ->
+  case epp:parse_file(File, [], []) of
+    {ok, Forms} ->
+      % Extract attributes, but removing the 'file' attribute so it doesn't appear in the 'Code' tab
+      Attributes = [Form || Form = {attribute, _, Name, _} <- Forms, Name /= file],
+      % Extract the name of the current module
+      {attribute, _, module, Module} = lists:keyfind(module, 3, Attributes),
+      % Extract function definitions
+      Functions = [Form || Form = {function, _, _, _, _} <- Forms],
+      % Extract comments from the file
+      Comments = erl_comment_scan:file(File),
+      % Generate forms that will appear in the 'Code' tab
+      FinalForms = erl_recomment:recomment_forms(Attributes ++ Functions, Comments),
+
+      % TODO erl_expand_records:module/2
+
+      {ok, Module, Functions, FinalForms};
+    Error ->
+      Error
+  end.

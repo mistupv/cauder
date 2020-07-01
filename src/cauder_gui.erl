@@ -439,20 +439,9 @@ setupMenu() ->
 %% Loads the specified '.erl' source file
 loadFile(File) ->
   % TODO Compiler optimizations option
-  case epp:parse_file(File, [], []) of
-    {ok, Forms} ->
-      % Extract function definitions
-      Functions = [Form || Form = {function, _, _, _, _} <- Forms],
-      % Extract attributes, but removing the 'file' attribute so it doesn't appear in the 'Code' tab
-      Attributes = [Form || Form = {attribute, _, Name, _} <- Forms, Name /= file],
-      % Extract comments from the file
-      Comments = erl_comment_scan:file(File),
-      % Generate forms that will appear in the 'Code' tab
-      FinalForms = erl_recomment:recomment_forms(Attributes ++ Functions, Comments),
-
-      % TODO erl_expand_records:module/2
-
-      wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), erl_prettypr:format(FinalForms)),
+  case utils:parse_file(File) of
+    {ok, Module, Functions, Forms} ->
+      wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), erl_prettypr:format(Forms)),
 
       Status = ref_lookup(?STATUS),
       ref_add(?STATUS, Status#status{loaded = {true, Functions}}),
@@ -461,7 +450,7 @@ loadFile(File) ->
       wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_CODE),
 
       % TODO Only allow to start system from an exported function?
-      utils_gui:set_choices(utils:funNames(Functions)),
+      utils_gui:set_choices(utils:funNames(Module, Functions)),
       utils_gui:disable_all_buttons(),
       utils_gui:clear_texts(),
 
@@ -469,7 +458,7 @@ loadFile(File) ->
       wxButton:enable(ref_lookup(?START_BUTTON)),
 
       utils_gui:update_status_text("Loaded file " ++ File);
-    _Other ->
+    _Error ->
       utils_gui:update_status_text("Error: Could not compile file " ++ File)
   end.
 
@@ -479,7 +468,7 @@ loadReplayData(Path) ->
   {_Mod, Fun, Args} = utils:get_mod_name(ReplayData#replay.call),
   MainPid = ReplayData#replay.main_pid,
   MainLog = utils:extract_pid_log_data(Path, MainPid),
-  start(cerl:c_var({Fun,length(Args)}), Args, MainPid, MainLog),
+  %start(cerl:c_var({Fun,length(Args)}), Args, MainPid, MainLog),
   cauder:eval_replay().
 
 openDialog(Parent) ->
@@ -548,23 +537,27 @@ zoomOut() ->
 %% @param Log Initial system log.
 %% @end
 %%--------------------------------------------------------------------
--spec init_system(Fun, Args, Pid, Log) -> no_return() when
-  Fun :: atom(),
-  Args :: [erl_parse:abstract_expr()],
-  Pid :: pos_integer(),
+-spec init_system(Module, Function, Args, Pid, Log) -> no_return() when
+  Module :: atom(),
+  Function :: atom(),
+  Args :: [cauder_types:abstract_expr()],
+  Pid :: cauder_types:af_integer(),
   Log :: list(). % TODO
 
-init_system(Fun, Args, Pid, Log) ->
+init_system(M, F, As, Pid, Log) ->
   % Store the new system
+  E = erl_syntax:revert(erl_syntax:application(cauder_eval:abstract(M), cauder_eval:abstract(F), As)),
+
   Proc = #proc{
-    pid   = erl_parse:abstract(Pid),
+    pid   = Pid,
     log   = Log,
-    exprs = [erl_syntax:revert(erl_syntax:application(erl_syntax:atom(Fun), Args))],
-    spf   = {Fun, length(Args)}
+    exprs = [E],
+    spf   = {M, F, length(As)}
   },
-  Procs = [Proc],
-  Sched = utils_gui:sched_opt(),
-  System = #sys{sched = Sched, procs = Procs},
+  System = #sys{
+    sched = utils_gui:sched_opt(),
+    procs = [Proc]
+  },
   ref_add(?SYSTEM, System),
 
   % Update system status
@@ -579,12 +572,15 @@ init_system(Fun, Args, Pid, Log) ->
 %% @param Args Arguments of the entry point.
 %% @end
 %%--------------------------------------------------------------------
--spec start(Fun, Args) -> no_return() when
-  Fun :: atom(),
+
+-spec start(Module, Function, Args) -> ok when
+  Module :: atom(),
+  Function :: atom(),
   Args :: [erl_parse:abstract_expr()].
 
-start(Fun, Args) ->
-  start(Fun, Args, 1, []).
+start(M, F, As) ->
+  start(M, F, As, 1, []).
+
 
 %%--------------------------------------------------------------------
 %% @doc Starts a new system.
@@ -595,27 +591,29 @@ start(Fun, Args) ->
 %% @param Log Initial system log.
 %% @end
 %%--------------------------------------------------------------------
--spec start(Fun, Args, Pid, Log) -> no_return() when
-  Fun :: atom(),
+
+-spec start(Module, Function, Args, Pid, Log) -> ok when
+  Module :: atom(),
+  Function :: atom(),
   Args :: [erl_parse:abstract_expr()],
   Pid :: pos_integer(),
   Log :: list(). % TODO
 
-start(Fun, Args, Pid, Log) ->
+start(M, F, As, Pid, Log) ->
   % Get current function definitions
   #status{loaded = {true, FunDefs}} = ref_lookup(?STATUS),
 
   % Initialize system
   utils_gui:stop_refs(),
-  cauder:start_refs(FunDefs),
-  init_system(Fun, Args, Pid, Log),
+  cauder:start_refs(M, FunDefs, Pid),
+  init_system(M, F, As, cauder_eval:abstract(Pid), Log),
   refresh(true),
 
   % Open the 'State' tab
   wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_STATE),
 
   % Update status bar message
-  StatusString = "Started system with " ++ atom_to_list(Fun) ++ "/" ++ integer_to_list(length(Args)) ++ " fun application!",
+  StatusString = "Started system with " ++ atom_to_list(F) ++ "/" ++ integer_to_list(length(As)) ++ " fun application!",
   utils_gui:update_status_text(StatusString).
 
 refresh_buttons(Options) ->
@@ -664,11 +662,11 @@ refresh(RefState) ->
 start() ->
   InputText = wxTextCtrl:getValue(ref_lookup(?INPUT_TEXT)),
   SelectedFun = wxChoice:getStringSelection(ref_lookup(?FUN_CHOICE)),
-  {FunName, Arity} = utils:stringToNameAndArity(SelectedFun),
-  Args = utils:stringToArgs(InputText),
-  case Arity == length(Args) of
+  {M, F, A} = utils:stringToMFA(SelectedFun),
+  As = utils:stringToArgs(InputText),
+  case A == length(As) of
     true ->
-      start(FunName, Args),
+      start(M, F, As),
       ?LOG("start fun " ++ SelectedFun ++ " with args " ++ InputText);
     false ->
       utils_gui:update_status_text(?ERROR_NUM_ARGS),

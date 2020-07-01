@@ -23,32 +23,35 @@ eval_step(System, Pid) ->
   {Proc, RestProcs} = utils:select_proc(Procs, Pid),
   #proc{pid = Pid, hist = [CurHist | RestHist]} = Proc,
   case CurHist of
-    {tau, OldEnv, OldExprs} ->
+    {tau, OldEnv, OldExprs, OldStack} ->
       OldProc = Proc#proc{
         hist  = RestHist,
         env   = OldEnv,
-        exprs = OldExprs
+        exprs = OldExprs,
+        stack = OldStack
       },
       System#sys{
         msgs  = Msgs,
         procs = [OldProc | RestProcs]
       };
-    {self, OldEnv, OldExprs} ->
+    {self, OldEnv, OldExprs, OldStack} ->
       OldProc = Proc#proc{
         hist  = RestHist,
         env   = OldEnv,
-        exprs = OldExprs
+        exprs = OldExprs,
+        stack = OldStack
       },
       System#sys{
         msgs  = Msgs,
         procs = [OldProc | RestProcs]
       };
-    {send, OldEnv, OldExprs, DestPid, {MsgValue, Time}} ->
+    {send, OldEnv, OldExprs, OldStack, DestPid, {MsgValue, Time}} ->
       {_Msg, RestMsgs} = utils:select_msg(Msgs, Time),
       OldProc = Proc#proc{
         hist  = RestHist,
         env   = OldEnv,
-        exprs = OldExprs
+        exprs = OldExprs,
+        stack = OldStack
       },
       TraceItem = #trace{
         type = ?RULE_SEND,
@@ -63,12 +66,13 @@ eval_step(System, Pid) ->
         procs = [OldProc | RestProcs],
         trace = OldTrace
       };
-    {spawn, OldEnv, OldExprs, SpawnPid} ->
+    {spawn, OldEnv, OldExprs, OldStack, SpawnPid} ->
       {_SpawnProc, OldRestProcs} = utils:select_proc(RestProcs, SpawnPid),
       OldProc = Proc#proc{
         hist  = RestHist,
         env   = OldEnv,
-        exprs = OldExprs
+        exprs = OldExprs,
+        stack = OldStack
       },
       TraceItem = #trace{
         type = ?RULE_SPAWN,
@@ -81,13 +85,14 @@ eval_step(System, Pid) ->
         procs = [OldProc | OldRestProcs],
         trace = OldTrace
       };
-    {rec, OldEnv, OldExprs, OldMsg, OldMail} ->
+    {rec, OldEnv, OldExprs, OldStack, OldMsg, OldMail} ->
       {MsgValue, Time} = OldMsg,
 
       OldProc = Proc#proc{
         hist  = RestHist,
         env   = OldEnv,
         exprs = OldExprs,
+        stack = OldStack,
         mail  = OldMail
       },
       TraceItem = #trace{
@@ -155,9 +160,9 @@ eval_proc_opt(RestSystem, CurProc) ->
     [] -> ?NULL_RULE;
     [CurHist | _RestHist] ->
       case CurHist of
-        {tau, _, _} -> ?RULE_SEQ;
-        {self, _, _} -> ?RULE_SELF;
-        {send, _, _, DestPid, {MsgValue, Time}} ->
+        {tau, _, _, _} -> ?RULE_SEQ;
+        {self, _, _, _} -> ?RULE_SELF;
+        {send, _, _, _, DestPid, {MsgValue, Time}} ->
           MsgList = [M || M <- Msgs, M#msg.time == Time,
                      M#msg.dest == DestPid,
                      M#msg.val == MsgValue],
@@ -165,14 +170,14 @@ eval_proc_opt(RestSystem, CurProc) ->
             [] -> ?NULL_RULE;
             _ -> ?RULE_SEND
           end;
-        {spawn, _, _, SpawnPid} ->
+        {spawn, _, _, _, SpawnPid} ->
           {SpawnProc, _RestProcs} = utils:select_proc(RestProcs, SpawnPid),
           #proc{hist = SpawnHist, mail = SpawnMail} = SpawnProc,
           case {SpawnHist, SpawnMail} of
             {[], []} -> ?RULE_SPAWN;
             _ -> ?NULL_RULE
           end;
-        {rec, _, _, ConsMsg, OldMail} ->
+        {rec, _, _, _, ConsMsg, OldMail} ->
           Mail = CurProc#proc.mail,
           case utils:is_queue_minus_msg(OldMail, ConsMsg, Mail) of
             true -> ?RULE_RECEIVE;
@@ -205,7 +210,7 @@ eval_sched_opt(Proc) ->
       TopRec = utils:topmost_rec(Hist),
       case TopRec of
         no_rec -> {?RULE_SCHED, Time};
-        {rec, _, _, OldMsg, OldMail} ->
+        {rec, _, _, _, OldMsg, OldMail} ->
           case utils:is_queue_minus_msg(OldMail, OldMsg, Mail) of
             false -> {?RULE_SCHED, Time};
             true -> ?NULL_RULE

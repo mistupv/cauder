@@ -42,17 +42,18 @@ processes(Procs, Opts) ->
 
 -spec process(cauder_types:process(), [{cauder_types:print_option(), boolean()}]) -> string().
 
-process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, mail = Mail, spf = Fun}, Opts) ->
-  header(Pid, Fun) ++
+process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, stack = Stack, mail = Mail, spf = MFA}, Opts) ->
+  header(Pid, MFA) ++
   process_messages(Mail, Opts) ++
   history(Hist, Opts) ++
   environment(Env, Exprs, Opts) ++
-  expressions(Exprs, Opts).
+  expressions(Exprs, Opts) ++
+  stack(Stack, Opts).
 
 
--spec header(cauder_types:af_integer(), undefined | {atom(), arity()}) -> string().
+-spec header(cauder_types:af_integer(), undefined | {atom(), atom(), arity()}) -> string().
 
-header(Pid, Fun) -> "=============== " ++ pid(Pid) ++ ": " ++ function(Fun) ++ " ===============\n".
+header(Pid, MFA) -> "=============== " ++ pid(Pid) ++ ": " ++ function(MFA) ++ " ===============\n".
 
 
 -spec pid(cauder_types:af_integer()) -> string().
@@ -62,8 +63,8 @@ pid(Pid) -> "Proc. " ++ expression(Pid).
 
 -spec function(undefined | {atom(), arity()}) -> string().
 
-function(undefined)     -> "";
-function({Name, Arity}) -> atom_to_list(Name) ++ "/" ++ integer_to_list(Arity).
+function(undefined) -> "";
+function({M, F, A}) -> io_lib:format("~s:~s/~p", [M, F, A]).
 
 
 -spec environment(cauder_types:environment(), [cauder_types:abstract_expr()], [{cauder_types:print_option(), boolean()}]) -> string().
@@ -122,19 +123,19 @@ history_1(Hist, Opts) ->
 
 -spec is_conc_item(cauder_types:history_entry()) -> boolean().
 
-is_conc_item({spawn, _, _, _})   -> true;
-is_conc_item({send, _, _, _, _}) -> true;
-is_conc_item({rec, _, _, _, _})  -> true;
-is_conc_item(_)                  -> false.
+is_conc_item({spawn, _, _, _, _})   -> true;
+is_conc_item({send, _, _, _, _, _}) -> true;
+is_conc_item({rec, _, _, _, _, _})  -> true;
+is_conc_item(_)                     -> false.
 
 
 -spec history_entry(cauder_types:history_entry()) -> string().
 
-history_entry({tau, _, _})                    -> "seq";
-history_entry({self, _, _})                   -> "self";
-history_entry({spawn, _, _, Pid})             -> "spawn(" ++ [{?CAUDER_GREEN, expression(Pid)}] ++ ")";
-history_entry({send, _, _, _, {Value, Time}}) -> "send(" ++ expression(Value) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
-history_entry({rec, _, _, {Value, Time}, _})  -> "rec(" ++ expression(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")".
+history_entry({tau, _, _, _})                    -> "seq";
+history_entry({self, _, _, _})                   -> "self";
+history_entry({spawn, _, _, _, Pid})             -> "spawn(" ++ [{?CAUDER_GREEN, expression(Pid)}] ++ ")";
+history_entry({send, _, _, _, _, {Value, Time}}) -> "send(" ++ expression(Value) ++ "," ++ [{?wxRED, integer_to_list(Time)}] ++ ")";
+history_entry({rec, _, _, _, {Value, Time}, _})  -> "rec(" ++ expression(Value) ++ "," ++ [{?wxBLUE, integer_to_list(Time)}] ++ ")".
 
 
 -spec process_messages([cauder_types:process_message()], [{cauder_types:print_option(), boolean()}]) -> string().
@@ -171,6 +172,17 @@ expressions(Exprs, Opts) ->
 -spec expression(cauder_types:abstract_expr()) -> string().
 
 expression(Expr) -> lists:flatten(erl_prettypr:format(Expr)).
+
+
+-spec stack(cauder_types:stack(), [{cauder_types:print_option(), boolean()}]) -> string().
+
+stack([], _Opts) -> "STK: []\n";
+stack(Stack, _Opts) ->
+  EntryToString = fun
+                    ({{M, F, A}, _, _, _}) -> io_lib:format("~s:~s/~p", [M, F, A]);
+                    ({Type, _, _}) -> atom_to_list(Type)
+                  end,
+  "STK: [" ++ lists:join(", ", lists:map(EntryToString, Stack)) ++ "]\n".
 
 
 %% =====================================================================

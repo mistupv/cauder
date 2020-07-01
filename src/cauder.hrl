@@ -31,7 +31,7 @@
 -define(FILE_PATH,   200).
 -define(REPLAY_DATA, 201).
 
--define(FUN_DEFS,   300).
+-define(MODULE_DEFS,   300).
 -define(FRESH_PID,  301).
 -define(FRESH_TIME, 302).
 -define(FRESH_VAR,  303).
@@ -82,10 +82,12 @@
   env = erl_eval:new_bindings() :: cauder_types:environment(),
   % List of expressions
   exprs :: [cauder_types:abstract_expr()],
+  % Call stack
+  stack = [] :: cauder_types:stack(),
   % Process mailbox
   mail = [] :: [cauder_types:process_message()],
   % The entry point function for this process
-  spf :: undefined | {atom(), arity()}
+  spf :: undefined | {atom(), atom(), arity()}
 }).
 
 %% Message
@@ -123,4 +125,12 @@
   call,
   main_pid,
   log_path
+}).
+
+% Evaluation step result
+-record(result, {
+  env :: cauder_types:environment(),
+  exprs :: [cauder_types:abstract_expr()],
+  stack :: cauder_types:stack(),
+  label = tau :: cauder_types:label()
 }).

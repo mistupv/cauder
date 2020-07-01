@@ -18,98 +18,97 @@
 
 -spec eval_step(cauder_types:system(), cauder_types:af_integer()) -> cauder_types:system().
 
-eval_step(System, Pid) ->
-  #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
-  {Proc, RestProcs} = utils:select_proc(Procs, Pid),
-  #proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, mail = Mail} = Proc,
-  [CurExpr | RestExpr] = Exprs,
-  {NewEnv, NewExprs, Label} = cauder_eval:expr(Env, CurExpr),
+eval_step(Sys, Pid) ->
+  #sys{msgs = Msgs, procs = Ps0, trace = Trace} = Sys,
+  {P, Ps} = utils:select_proc(Ps0, Pid),
+  #proc{pid = Pid, hist = H, env = Bs0, exprs = Es0, stack = Stk0, mail = Mail0} = P,
+%%  io:format("step_before: ~p\n", [Es0]),
+  #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
+%%  io:format("step_after: ~p\n", [Es]),
   case Label of
     tau ->
-      NewProc = Proc#proc{
-        hist  = [{tau, Env, Exprs} | Hist],
-        env   = NewEnv,
-        exprs = NewExprs ++ RestExpr
+      P1 = P#proc{
+        hist  = [{tau, Bs0, Es0, Stk0} | H],
+        env   = Bs,
+        exprs = Es,
+        stack = Stk
       },
-      System#sys{
-        procs = [NewProc | RestProcs]
+      Sys#sys{
+        procs = [P1 | Ps]
       };
-    {self, TmpVar} ->
-      RepExpr = utils:replace_variable(TmpVar, Pid, NewExprs),
-
-      NewProc = Proc#proc{
-        hist  = [{self, Env, Exprs} | Hist],
-        env   = NewEnv,
-        exprs = RepExpr ++ RestExpr
+    {self, VarPid} ->
+      P1 = P#proc{
+        hist  = [{self, Bs0, Es0, Stk0} | H],
+        env   = Bs,
+        exprs = utils:replace_variable(Es, VarPid, Pid),
+        stack = Stk
       },
-      System#sys{
-        procs = [NewProc | RestProcs]
+      Sys#sys{
+        procs = [P1 | Ps]
       };
-    {send, DestPid, MsgValue} ->
+    {send, Dest, Val} ->
       Time = utils:fresh_time(),
-      NewMsg = #msg{dest = DestPid, val = MsgValue, time = Time},
+      Msg = #msg{dest = Dest, val = Val, time = Time},
 
-      NewProc = Proc#proc{
-        hist  = [{send, Env, Exprs, DestPid, {MsgValue, Time}} | Hist],
-        env   = NewEnv,
-        exprs = NewExprs ++ RestExpr
+      P1 = P#proc{
+        hist  = [{send, Bs0, Es0, Stk0, Dest, {Val, Time}} | H],
+        env   = Bs,
+        exprs = Es,
+        stack = Stk
       },
       TraceItem = #trace{
         type = ?RULE_SEND,
         from = Pid,
-        to   = DestPid,
-        val  = MsgValue,
+        to   = Dest,
+        val  = Val,
         time = Time
       },
-      System#sys{
-        msgs  = [NewMsg | Msgs],
-        procs = [NewProc | RestProcs],
+      Sys#sys{
+        msgs  = [Msg | Msgs],
+        procs = [P1 | Ps],
         trace = [TraceItem | Trace]
       };
-    {spawn, {TmpVar, FunName, FunArgs}} ->
+    {spawn, VarPid, M, F, As} ->
       SpawnPid = utils:fresh_pid(),
       SpawnProc = #proc{
         pid   = SpawnPid,
-        exprs = [{call, erl_anno:new(0), FunName, FunArgs}],
-        spf   = {erl_syntax:atom_value(FunName), length(FunArgs)}
+        exprs = [erl_syntax:revert(erl_syntax:application(M, F, As))],
+        spf   = {cauder_eval:concrete(M), cauder_eval:concrete(F), length(As)}
       },
 
-      RepExpr = utils:replace_variable(TmpVar, SpawnPid, NewExprs),
-
-      NewProc = Proc#proc{
-        hist  = [{spawn, Env, Exprs, SpawnPid} | Hist],
-        env   = NewEnv,
-        exprs = RepExpr ++ RestExpr
+      P1 = P#proc{
+        hist  = [{spawn, Bs0, Es0, Stk0, SpawnPid} | H],
+        env   = Bs,
+        exprs = utils:replace_variable(Es, VarPid, SpawnPid),
+        stack = Stk
       },
       TraceItem = #trace{
         type = ?RULE_SPAWN,
         from = Pid,
         to   = SpawnPid
       },
-      System#sys{
-        procs = [NewProc | [SpawnProc | RestProcs]],
+      Sys#sys{
+        procs = [P1 | [SpawnProc | Ps]],
         trace = [TraceItem | Trace]
       };
-    {rec, TmpVar, ReceiveClauses} ->
-      {Bindings, RecExp, ConsMsg, NewMail} = cauder_eval:matchrec(ReceiveClauses, Mail, NewEnv),
-      {MsgValue, Time} = ConsMsg,
+    {rec, VarBody, Cs} when Es == [VarBody] ->
+      {Bs1, Body, Msg = {Val, Time}, Mail} = cauder_eval:match_rec(Cs, Mail0, Bs),
 
-      RepExpr = utils:replace_variable(TmpVar, RecExp, NewExprs),
-
-      NewProc = Proc#proc{
-        hist  = [{rec, Env, Exprs, ConsMsg, Mail} | Hist],
-        env   = utils:merge_env(NewEnv, Bindings),
-        exprs = RepExpr ++ RestExpr,
-        mail  = NewMail
+      P1 = P#proc{
+        hist  = [{rec, Bs0, Es0, Stk0, Msg, Mail0} | H],
+        env   = utils:merge_env(Bs, Bs1),
+        exprs = Body,
+        stack = Stk,
+        mail  = Mail
       },
       TraceItem = #trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val  = MsgValue,
+        val  = Val,
         time = Time
       },
-      System#sys{
-        procs = [NewProc | RestProcs],
+      Sys#sys{
+        procs = [P1 | Ps],
         trace = [TraceItem | Trace]
       }
   end.
@@ -146,8 +145,9 @@ eval_opts(System) ->
 
 eval_procs_opts(#sys{procs = []}) -> [];
 eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
-  #proc{pid = Pid, env = Env, exprs = Exprs, mail = Mail} = CurProc,
-  case eval_expr_opt(Exprs, Env, Mail) of
+  #proc{pid = Pid, env = Env, exprs = Exprs, stack = Stack, mail = Mail} = CurProc,
+%%  io:format("eval_procs_opts: Exprs: ~p\n", [Exprs]),
+  case eval_expr_opt(Exprs, Env, Stack, Mail) of
     ?NOT_EXP -> eval_procs_opts(System#sys{procs = RestProcs});
     Rule ->
       Option = #opt{
@@ -178,18 +178,19 @@ eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
   end.
 
 
--spec eval_expr_opt(Expressions, Environment, Mail) -> Options when
+-spec eval_expr_opt(Expressions, Environment, Stack, Mail) -> Options when
   Expressions :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
   Environment :: cauder_types:environment(),
+  Stack :: cauder_types:stack(),
   Mail :: [#msg{}],
   Options :: ?NOT_EXP | ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF.
 
-eval_expr_opt(Expr, Env, Mail) when is_tuple(Expr) -> eval_expr_opt([Expr], Env, Mail);
-eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
+eval_expr_opt(Expr, Env, Stack, Mail) when is_tuple(Expr) -> eval_expr_opt([Expr], Env, Stack, Mail);
+eval_expr_opt([Expr | Exprs], Env, Stack, Mail) when is_tuple(Expr), is_list(Exprs) ->
   case cauder_eval:is_expr(Expr, Env) of
     false ->
       case Exprs of
-        [] -> ?NOT_EXP;
+        [] when Stack == [] -> ?NOT_EXP;
         _ ->
           % If `Expr` is not an expression but there are still other expressions
           % to evaluate then it means we just found a literal in the middle of
@@ -202,22 +203,22 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
         match_expr ->
           Pattern = erl_syntax:match_expr_pattern(Expr),
           case cauder_eval:is_expr(Pattern, Env) of
-            true -> eval_expr_opt(Pattern, Env, Mail);
+            true -> eval_expr_opt(Pattern, Env, Stack, Mail);
             false ->
               Body = erl_syntax:match_expr_body(Expr),
               case cauder_eval:is_expr(Body, Env) of
-                true -> eval_expr_opt(Body, Env, Mail);
+                true -> eval_expr_opt(Body, Env, Stack, Mail);
                 false -> ?RULE_SEQ
               end
           end;
         infix_expr ->
           Left = erl_syntax:infix_expr_left(Expr),
           case cauder_eval:is_expr(Left, Env) of
-            true -> eval_expr_opt(Left, Env, Mail);
+            true -> eval_expr_opt(Left, Env, Stack, Mail);
             false ->
               Right = erl_syntax:infix_expr_right(Expr),
               case cauder_eval:is_expr(Right, Env) of
-                true -> eval_expr_opt(Right, Env, Mail);
+                true -> eval_expr_opt(Right, Env, Stack, Mail);
                 false ->
                   Op = erl_syntax:atom_value(erl_syntax:infix_expr_operator(Expr)),
                   case Op of
@@ -229,26 +230,26 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
         prefix_expr ->
           Arg = erl_syntax:prefix_expr_argument(Expr),
           case cauder_eval:is_expr(Arg, Env) of
-            true -> eval_expr_opt(Arg, Env, Mail);
+            true -> eval_expr_opt(Arg, Env, Stack, Mail);
             false -> ?RULE_SEQ
           end;
         application ->
           Args = erl_syntax:application_arguments(Expr),
           case lists:any(fun(Arg) -> cauder_eval:is_expr(Arg, Env) end, Args) of
-            true -> eval_expr_opt(Args, Env, Mail);
+            true -> eval_expr_opt(Args, Env, Stack, Mail);
             false ->
               Op = erl_syntax:application_operator(Expr),
               case erl_syntax:type(Op) of
                 module_qualifier ->
                   Module = erl_syntax:module_qualifier_argument(Op),
                   case cauder_eval:is_expr(Module, Env) of
-                    true -> eval_expr_opt(Module, Env, Mail);
+                    true -> eval_expr_opt(Module, Env, Stack, Mail);
                     false ->
                       case erl_syntax:atom_value(Module) of
                         'erlang' ->
                           Name = erl_syntax:module_qualifier_body(Op),
                           case cauder_eval:is_expr(Name, Env) of
-                            true -> eval_expr_opt(Name, Env, Mail);
+                            true -> eval_expr_opt(Name, Env, Stack, Mail);
                             false ->
                               case erl_syntax:atom_value(Name) of
                                 'spawn' -> ?RULE_SPAWN;
@@ -261,7 +262,7 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
                   end;
                 _ ->
                   case cauder_eval:is_expr(Op, Env) of
-                    true -> eval_expr_opt(Op, Env, Mail);
+                    true -> eval_expr_opt(Op, Env, Stack, Mail);
                     false ->
                       % TODO Check for clashes with functions in the same file and/or directory
                       case erl_syntax:atom_value(Op) of
@@ -272,18 +273,18 @@ eval_expr_opt([Expr | Exprs], Env, Mail) when is_tuple(Expr), is_list(Exprs) ->
                   end
               end
           end;
-        list -> eval_expr_opt(erl_syntax:list_elements(Expr), Env, Mail);
-        tuple -> eval_expr_opt(erl_syntax:tuple_elements(Expr), Env, Mail);
+        list -> eval_expr_opt(erl_syntax:list_elements(Expr), Env, Stack, Mail);
+        tuple -> eval_expr_opt(erl_syntax:tuple_elements(Expr), Env, Stack, Mail);
         case_expr ->
           Arg = erl_syntax:case_expr_argument(Expr),
           case cauder_eval:is_expr(Arg, Env) of
-            true -> eval_expr_opt(Arg, Env, Mail);
+            true -> eval_expr_opt(Arg, Env, Stack, Mail);
             false -> ?RULE_SEQ
           end;
         if_expr -> ?RULE_SEQ;
         receive_expr ->
           Clauses = erl_syntax:receive_expr_clauses(Expr),
-          case cauder_eval:matchrec(Clauses, Mail, Env) of
+          case cauder_eval:match_rec(Clauses, Mail, Env) of
             nomatch -> ?NOT_EXP;
             _Other -> ?RULE_RECEIVE
           end

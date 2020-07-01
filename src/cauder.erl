@@ -7,7 +7,7 @@
 
 -module(cauder).
 -export([start/0,
-         start_refs/1, stop_refs/0,
+         start_refs/3, stop_refs/0,
          eval_opts/1, eval_step/2, eval_mult/3, eval_norm/1,
          eval_roll/3, eval_roll_send/2, eval_roll_spawn/2,
          eval_roll_rec/2, eval_roll_var/2, eval_replay/0]).
@@ -26,13 +26,20 @@ start() ->
 %% @doc Starts the ETS servers and initializes them
 %% @end
 %%--------------------------------------------------------------------
-start_refs(FunDefs) ->
+
+-spec start_refs(atom(), [cauder_types:af_function_decl()], pos_integer()) -> ok.
+
+start_refs(Module, FunDefs, FirstPid) ->
   ?LOG("starting refs"),
+
+  Fs = maps:from_list(lists:map(fun(Def = {function, _, F, A, _}) -> {{F, A}, Def} end, FunDefs)),
+  Ms = #{Module => Fs},
+
   ref_start(),
-  ref_add(?FUN_DEFS,   FunDefs),
-  ref_add(?FRESH_PID,  2),
-  ref_add(?FRESH_TIME, 1),
-  ref_add(?FRESH_VAR,  1).
+  ref_add(?MODULE_DEFS, Ms),
+  ref_add(?FRESH_PID,   FirstPid + 1),
+  ref_add(?FRESH_TIME,  1),
+  ref_add(?FRESH_VAR,   1).
 
 %%--------------------------------------------------------------------
 %% @doc Stops the ETS servers
@@ -171,12 +178,13 @@ eval_replay() ->
   ok.
 
 ref_add(Id, Ref) ->
-    ets:insert(?APP_REF, {Id, Ref}).
+  ets:insert(?APP_REF, {Id, Ref}),
+  ok.
 
 ref_start() ->
-    ?APP_REF = ets:new(?APP_REF, [set, public, named_table]),
-    ok.
+  ?APP_REF = ets:new(?APP_REF, [set, public, named_table]),
+  ok.
 
 ref_stop() ->
-    ets:delete(?APP_REF).
+  ets:delete(?APP_REF).
 

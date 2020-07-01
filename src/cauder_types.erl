@@ -3,7 +3,7 @@
 -include("cauder.hrl").
 
 -export_type([system/0, process/0, message/0, trace/0, option/0]).
--export_type([history/0, history_entry/0, environment/0, binding/0, process_message/0]).
+-export_type([history/0, history_entry/0, environment/0, binding/0, stack/0, process_message/0]).
 -export_type([print_option/0]).
 
 % Abstract Forms
@@ -13,7 +13,7 @@
               af_binary_op/1, af_unary_op/1, af_local_call/0, af_remote_call/0, af_if/0, af_case/0, af_receive/0]).
 -export_type([af_clause_seq/0, af_pattern/0, af_guard_seq/0, af_guard/0, af_guard_test/0]).
 
--export_type([eval_result/0]).
+-export_type([result/0, label/0]).
 
 
 %% Record types
@@ -25,14 +25,18 @@
 -type option() :: #opt{}.
 
 -type history() :: [history_entry()].
--type history_entry() :: {tau, environment(), [abstract_expr()]}
-                       | {self, environment(), [abstract_expr()]}
-                       | {send, environment(), [abstract_expr()], af_integer(), process_message()}
-                       | {spawn, environment(), [abstract_expr()], af_integer()}
-                       | {rec, environment(), [abstract_expr()], process_message(), [process_message()]}.
+-type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
+                       | {self, environment(), [abstract_expr()], stack()}
+                       | {send, environment(), [abstract_expr()], stack(), af_integer(), process_message()}
+                       | {spawn, environment(), [abstract_expr()], stack(), af_integer()}
+                       | {rec, environment(), [abstract_expr()], stack(), process_message(), [process_message()]}.
 
 -type environment() :: [binding()].
 -type binding() :: {atom(), term()}.
+
+-type stack() :: [stack_call_entry() | stack_block_entry()].
+-type stack_call_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}.
+-type stack_block_entry() :: {atom(), [abstract_expr()], af_variable()}.
 
 -type process_message() :: {abstract_expr(), non_neg_integer()}. % {Value, Id}
 
@@ -220,7 +224,7 @@
 
 %% Eval types
 
--type eval_result() :: {cauder_types:environment(), [cauder_types:abstract_expr()], label()}.
+-type result() :: #result{}.
 
 -type label() :: label_tau()
                | label_spawn()
@@ -229,7 +233,7 @@
                | label_rec().
 
 -type label_tau() :: tau.
--type label_spawn() :: {spawn, {cauder_types:af_variable(), cauder_types:af_atom(), list(cauder_types:abstract_expr())}}.
--type label_self() :: {self, cauder_types:af_variable()}.
--type label_send() :: {send, cauder_types:af_integer(), cauder_types:abstract_expr()}.
--type label_rec() :: {rec, cauder_types:af_variable(), cauder_types:af_clause_seq()}.
+-type label_spawn() :: {spawn, af_variable(), af_atom(), af_atom(), list(abstract_expr())}.
+-type label_self() :: {self, af_variable()}.
+-type label_send() :: {send, af_integer(), abstract_expr()}.
+-type label_rec() :: {rec, af_variable(), af_clause_seq()}.
