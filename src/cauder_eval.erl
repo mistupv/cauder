@@ -27,8 +27,6 @@ eval_list(Bs, [E | Es], Stk) ->
 -spec seq(cauder_types:environment(), [cauder_types:abstract_expr()], cauder_types:stack()) -> cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
-  io:format("seq0 - Stk: ~p\n", [Stk]),
-  X =
   case is_expr(E, Bs) of
     false ->
       case Es of
@@ -47,7 +45,6 @@ seq(Bs, [E | Es], Stk) ->
           #result{env = Bs, exprs = Es, stack = Stk}
       end;
     true ->
-      io:format("seq1 - Stk: ~p\n", [Stk]),
       #result{env = Bs1, exprs = Es1, stack = Stk1, label = L} = expr(Bs, E, Stk),
       case Stk1 of
         [{{M, F, A}, Bs2, Es2, Var} | Stk] ->
@@ -57,9 +54,7 @@ seq(Bs, [E | Es], Stk) ->
         _ ->
           #result{env = Bs1, exprs = Es1 ++ Es, stack = Stk1, label = L}
       end
-  end,
-%%  io:format("seq: ~p\n\n", [X]),
-  X.
+  end.
 
 
 %% =====================================================================
@@ -79,10 +74,8 @@ expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
       case is_expr(Rhs, Bs0) of
         true -> eval_and_update({Bs0, Rhs, Stk}, {4, E});
         false ->
-          % There should be no variables to evaluate so we pass no bindings
-          {value, Val, Bs1} = erl_eval:expr(E, []),
-          Bs = utils:merge_env(Bs0, Bs1),
-          #result{env = Bs, exprs = [abstract(Val)], stack = Stk}
+          {match, Bs} = match(Bs0, [Lhs], [Rhs]),
+          #result{env = Bs, exprs = [Rhs], stack = Stk}
       end
   end;
 
@@ -145,7 +138,6 @@ expr(Bs0, E1 = {call, _, E2 = {remote, _, M0, F0}, As0}, Stk0) ->
   end;
 
 expr(Bs0, E = {call, _, F0, As0}, Stk0) ->
-  io:format("call - Stk0: ~p\n", [Stk0]),
   case is_expr(F0, Bs0) of
     true -> eval_and_update({Bs0, F0, Stk0}, {3, E});
     false ->
@@ -187,7 +179,15 @@ expr(Bs, {'receive', _, Cs}, Stk0) ->
   Var = utils:temp_variable(),
   VarBody = utils:temp_variable(),
   Stk = [{'receive', [VarBody], Var} | Stk0],
-  #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}}.
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
+
+expr(Bs, {'fun', Anno, {'clauses', Cs}}, Stk0) ->
+  {ok, M} = current_module(Stk0),
+  Info = {M, Bs, Cs},
+  % TODO Handle calls to interpreted fun() from uninterpreted module
+  Fun = fun() -> Info end,
+  io:format("fun_info: ~p\n", [erlang:fun_info(Fun)]),
+  #result{env = Bs, exprs = [{value, Anno, Fun}], stack = Stk0}.
 
 
 
@@ -293,15 +293,45 @@ match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
   {match, cauder_types:environment()} | nomatch.
 
 match(Bs, [], [])    -> {match, Bs};
-match(Bs0, Ps0, Vs0) when length(Ps0) == length(Vs0) ->
-  Ps = eval_pattern(Bs0, erl_syntax:revert(erl_syntax:tuple(Ps0))),
-  Vs = erl_syntax:revert(erl_syntax:tuple(Vs0)),
-  try erl_eval:expr({match, erl_anno:new(0), Ps, Vs}, []) of
-    {value, _V, Bs} -> {match, utils:merge_env(Bs0, Bs)}
-  catch
-    error:{badmatch, _Rhs} -> nomatch
+match(Bs0, [Pat | Ps0], [Val | Vs0]) when length(Ps0) == length(Vs0) ->
+  case catch match1(Pat, Val, Bs0) of
+    {match, Bs} -> match(Bs, Ps0, Vs0);
+    Result -> Result
   end;
 match(_Bs, _Ps, _Vs) -> nomatch.
+
+
+-spec match1(cauder_types:abstract_expr(), cauder_types:abstract_expr(), cauder_types:environment()) -> {match, cauder_types:environment()} | nomatch.
+
+match1({var, _, '_'}, _, Bs) -> {match, Bs};
+match1({var, _, Name}, E, Bs) ->
+  case binding(Name, Bs) of
+    {value, Val} ->
+      case concrete(E) of
+        Val -> {match, Bs};
+        _ -> throw(nomatch)
+      end;
+    unbound ->
+      {match, orddict:store(Name, concrete(E), Bs)} % Add the new binding
+  end;
+match1({match, _, Pat1, Pat2}, Term, Bs0) ->
+  {match, Bs1} = match1(Pat1, Term, Bs0),
+  match1(Pat2, Term, Bs1);
+match1({cons, _, H0, T0}, {cons, _, H1, T1}, Bs0) ->
+  {match, Bs} = match1(H0, H1, Bs0),
+  match1(T0, T1, Bs);
+match1({tuple, _, Es0}, {tuple, _, Es1}, Bs)
+  when length(Es0) =:= length(Es1) ->
+  match_elements(Es0, Es1, Bs);
+match1(_, _, _) ->
+  throw(nomatch).
+
+
+match_elements([E0 | Es0], [E1 | Es1], Bs0) ->
+  {match, Bs} = match1(E0, E1, Bs0),
+  match_elements(Es0, Es1, Bs);
+match_elements([], [], Bs) -> {match, Bs};
+match_elements(_, _, _)    -> throw(nomatch).
 
 
 -spec eval_pattern(cauder_types:environment(), cauder_types:af_pattern()) -> cauder_types:af_pattern().
@@ -364,19 +394,27 @@ remote_call(Bs0, {M, F, As}, Stk0) ->
       #result{env = Bs0, exprs = [Val], stack = Stk0, label = L}
   end.
 
+
 -spec local_call(cauder_types:environment(), {atom(), [cauder_types:abstract_expr()]}, cauder_types:stack()) -> cauder_types:result().
 
 % Special case for guard calls
 local_call(Bs0, {F, As}, []) ->
   {Val, tau} = bif(F, As),
   #result{env = Bs0, exprs = [Val], stack = []};
+local_call(Bs0, {Fun, As}, Stk0) when is_function(Fun) ->
+  {env, [{M, Bs, Cs}]} = erlang:fun_info(Fun, env),
+  {name, F} = erlang:fun_info(Fun, name),
+  A = length(As),
+  {match, Bs1, Body} = match_fun(Cs, As),
+  Var = utils:temp_variable(),
+  Stk = [{{M, F, A}, utils:merge_env(Bs, Bs1), Body, Var} | Stk0],
+  #result{env = Bs0, exprs = [Var], stack = Stk};
 local_call(Bs0, {F, As}, Stk0) ->
   {ok, M} = current_module(Stk0),
   A = length(As),
   case utils:fundef_lookup(M, F, A) of
     {ok, FunDef} ->
       Cs = erl_syntax:function_clauses(utils:fundef_rename(FunDef)), % TODO Is necessary to rename?
-      % There should be no variables to evaluate so we pass no bindings
       {match, Bs, Body} = match_fun(Cs, As),
       Var = utils:temp_variable(),
       Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
@@ -394,7 +432,8 @@ local_call(Bs0, {F, As}, Stk0) ->
 
 -spec abstract(term()) -> cauder_types:abstract_expr().
 
-abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
+abstract(Fun) when is_function(Fun) -> {value, erl_anno:new(0), Fun};
+abstract(Value)                     -> erl_syntax:revert(erl_syntax:abstract(Value)).
 
 
 %% =====================================================================
@@ -402,7 +441,8 @@ abstract(Value) -> erl_syntax:revert(erl_syntax:abstract(Value)).
 
 -spec concrete(cauder_types:abstract_expr()) -> term().
 
-concrete(Value) -> erl_syntax:concrete(Value).
+concrete({value, _, Val}) -> Val;
+concrete(Value)           -> erl_syntax:concrete(Value).
 
 
 %% =====================================================================
@@ -420,6 +460,7 @@ is_expr({var, _, '_'}, _)    -> false;
 is_expr({var, _, Name}, Bs)  -> binding(Name, Bs) =/= unbound;
 is_expr({cons, _, H, T}, Bs) -> is_expr(H, Bs) orelse is_expr(T, Bs);
 is_expr({tuple, _, Es}, Bs)  -> lists:any(fun(E) -> is_expr(E, Bs) end, Es);
+is_expr({value, _, _}, _)    -> false;
 is_expr(_, _)                -> true.
 
 

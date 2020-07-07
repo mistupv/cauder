@@ -18,7 +18,7 @@
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
-         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, ref_lookup/1, fresh_pid/0, parse_file/1]).
+         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, ref_lookup/1, fresh_pid/0, parse_file/1, to_erl_syntax/1]).
 
 -include("cauder.hrl").
 
@@ -518,4 +518,16 @@ parse_file(File) ->
       {ok, Module, Functions, FinalForms};
     Error ->
       Error
+  end.
+
+
+to_erl_syntax(Es) when is_list(Es) -> lists:map(fun to_erl_syntax1/1, Es).
+
+to_erl_syntax1({value, _, Fun}) when is_function(Fun) -> erl_syntax:text(io_lib:format("~p", [Fun]));
+to_erl_syntax1(Tree) ->
+  case erl_syntax:subtrees(Tree) of
+    [] -> Tree;
+    Gs ->
+      Tree1 = erl_syntax:make_tree(erl_syntax:type(Tree), [[to_erl_syntax1(T) || T <- G] || G <- Gs]),
+      erl_syntax:copy_attrs(Tree, Tree1)
   end.

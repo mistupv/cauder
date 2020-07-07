@@ -42,12 +42,14 @@ processes(Procs, Opts) ->
 
 -spec process(cauder_types:process(), [{cauder_types:print_option(), boolean()}]) -> string().
 
-process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Exprs, stack = Stack, mail = Mail, spf = MFA}, Opts) ->
+process(#proc{pid = Pid, hist = Hist, env = Env, exprs = Es0, stack = Stack, mail = Mail, spf = MFA}, Opts) ->
+  Es = utils:to_erl_syntax(Es0),
+
   header(Pid, MFA) ++
   process_messages(Mail, Opts) ++
   history(Hist, Opts) ++
-  environment(Env, Exprs, Opts) ++
-  expressions(Exprs, Opts) ++
+  environment(Env, Es, Opts) ++
+  expressions(Es, Opts) ++
   stack(Stack, Opts).
 
 
@@ -88,16 +90,16 @@ environment_1(Env, Exprs, Opts) ->
   "{" ++ string:join(PairsList, ", ") ++ "}".
 
 
--spec get_relevant_bindings(cauder_types:environment(), [cauder_types:abstract_expr()]) -> cauder_types:environment().
-
-get_relevant_bindings(Env, Exprs) ->
-  Vars = sets:union([erl_syntax_lib:variables(Expr) || Expr <- Exprs]),
-  [Bind || Bind = {Var, _} <- erl_eval:bindings(Env), sets:is_element(Var, Vars)].
-
-
 -spec binding(cauder_types:binding()) -> string().
 
 binding({Var, Val}) -> io_lib:format("~s -> ~p", [atom_to_list(Var), Val]).
+
+
+-spec get_relevant_bindings(cauder_types:environment(), [cauder_types:abstract_expr()]) -> cauder_types:environment().
+
+get_relevant_bindings(Bs, Es) ->
+  Vs = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es)),
+  lists:filter(fun({V, _}) -> sets:is_element(V, Vs) end, Bs).
 
 
 -spec history(cauder_types:history(), [{cauder_types:print_option(), boolean()}]) -> string().

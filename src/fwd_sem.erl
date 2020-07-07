@@ -239,15 +239,14 @@ eval_expr_opt([Expr | Exprs], Env, Stack, Mail) when is_tuple(Expr), is_list(Exp
             true -> eval_expr_opt(Args, Env, Stack, Mail);
             false ->
               Op = erl_syntax:application_operator(Expr),
-              case erl_syntax:type(Op) of
-                module_qualifier ->
-                  Module = erl_syntax:module_qualifier_argument(Op),
+              case Op of
+                {value, _, Fun} when is_function(Fun) -> ?RULE_SEQ;
+                {remote, _, Module, Name} ->
                   case cauder_eval:is_expr(Module, Env) of
                     true -> eval_expr_opt(Module, Env, Stack, Mail);
                     false ->
                       case erl_syntax:atom_value(Module) of
                         'erlang' ->
-                          Name = erl_syntax:module_qualifier_body(Op),
                           case cauder_eval:is_expr(Name, Env) of
                             true -> eval_expr_opt(Name, Env, Stack, Mail);
                             false ->
@@ -287,6 +286,7 @@ eval_expr_opt([Expr | Exprs], Env, Stack, Mail) when is_tuple(Expr), is_list(Exp
           case cauder_eval:match_rec(Clauses, Mail, Env) of
             nomatch -> ?NOT_EXP;
             _Other -> ?RULE_RECEIVE
-          end
+          end;
+        fun_expr -> ?RULE_SEQ
       end
   end.
