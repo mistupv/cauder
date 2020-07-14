@@ -10,13 +10,15 @@
 -export([eval_step/2, eval_sched/2]).
 -export([eval_opts/1, eval_procs_opts/1, eval_sched_opts/1]).
 
+-import(cauder_eval, [is_reducible/2]).
+
 -include("cauder.hrl").
 
 
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
--spec eval_step(cauder_types:system(), cauder_types:af_integer()) -> cauder_types:system().
+-spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
 eval_step(Sys, Pid) ->
   #sys{msgs = Msgs, procs = Ps0, trace = Trace} = Sys,
@@ -40,7 +42,7 @@ eval_step(Sys, Pid) ->
       P1 = P#proc{
         hist  = [{self, Bs0, Es0, Stk0} | H],
         env   = Bs,
-        exprs = utils:replace_variable(Es, VarPid, Pid),
+        exprs = cauder_syntax:replace_variable(Es, VarPid, cauder_eval:abstract(Pid)),
         stack = Stk
       },
       Sys#sys{
@@ -72,14 +74,14 @@ eval_step(Sys, Pid) ->
       SpawnPid = utils:fresh_pid(),
       SpawnProc = #proc{
         pid   = SpawnPid,
-        exprs = [erl_syntax:revert(erl_syntax:application(M, F, As))],
-        spf   = {cauder_eval:concrete(M), cauder_eval:concrete(F), length(As)}
+        exprs = [{remote_call, 0, M, F, lists:map(fun cauder_eval:abstract/1, As)}],
+        spf   = {M, F, length(As)}
       },
 
       P1 = P#proc{
         hist  = [{spawn, Bs0, Es0, Stk0, SpawnPid} | H],
         env   = Bs,
-        exprs = utils:replace_variable(Es, VarPid, SpawnPid),
+        exprs = cauder_syntax:replace_variable(Es, VarPid, cauder_eval:abstract(SpawnPid)),
         stack = Stk
       },
       TraceItem = #trace{
@@ -146,14 +148,13 @@ eval_opts(System) ->
 eval_procs_opts(#sys{procs = []}) -> [];
 eval_procs_opts(System = #sys{procs = [CurProc | RestProcs]}) ->
   #proc{pid = Pid, env = Env, exprs = Exprs, stack = Stack, mail = Mail} = CurProc,
-%%  io:format("eval_procs_opts: Exprs: ~p\n", [Exprs]),
   case eval_expr_opt(Exprs, Env, Stack, Mail) of
     ?NOT_EXP -> eval_procs_opts(System#sys{procs = RestProcs});
     Rule ->
       Option = #opt{
         sem  = ?MODULE,
         type = ?TYPE_PROC,
-        id   = erl_syntax:integer_value(Pid),
+        id   = Pid,
         rule = Rule
       },
       [Option | eval_procs_opts(System#sys{procs = RestProcs})]
@@ -185,108 +186,122 @@ eval_sched_opts(System = #sys{msgs = [CurMsg | RestMsgs], procs = Procs}) ->
   Mail :: [#msg{}],
   Options :: ?NOT_EXP | ?RULE_SEQ | ?RULE_CHECK | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF.
 
-eval_expr_opt(Expr, Env, Stack, Mail) when is_tuple(Expr) -> eval_expr_opt([Expr], Env, Stack, Mail);
-eval_expr_opt([Expr | Exprs], Env, Stack, Mail) when is_tuple(Expr), is_list(Exprs) ->
-  case cauder_eval:is_expr(Expr, Env) of
+eval_expr_opt(E, Bs, Stk, Mail) when not is_list(E) -> eval_expr_opt([E], Bs, Stk, Mail);
+eval_expr_opt([E0 | Es0], Bs, Stk, Mail) ->
+  case is_reducible(E0, Bs) of
     false ->
-      case Exprs of
-        [] when Stack == [] -> ?NOT_EXP;
-        _ ->
-          % If `Expr` is not an expression but there are still other expressions
-          % to evaluate then it means we just found a literal in the middle of
-          % the program, so we allow to continue.
-          ?RULE_SEQ
+      case {Es0, Stk} of
+        {[], []} -> ?NOT_EXP;
+        _ -> ?RULE_SEQ
       end;
     true ->
-      case erl_syntax:type(Expr) of
-        variable -> ?RULE_SEQ;
-        match_expr ->
-          Pattern = erl_syntax:match_expr_pattern(Expr),
-          case cauder_eval:is_expr(Pattern, Env) of
-            true -> eval_expr_opt(Pattern, Env, Stack, Mail);
+      case E0 of
+        {var, _, _} -> ?RULE_SEQ;
+        {cons, _, H, T} ->
+          case is_reducible(H, Bs) of
+            true -> eval_expr_opt(H, Bs, Stk, Mail);
+            false -> eval_expr_opt(T, Bs, Stk, Mail)
+          end;
+        {tuple, _, Es} -> eval_expr_opt(Es, Bs, Stk, Mail);
+        {'if', _, _} -> ?RULE_SEQ;
+        {'case', _, E, _} ->
+          case is_reducible(E, Bs) of
+            true -> eval_expr_opt(E, Bs, Stk, Mail);
+            false -> ?RULE_SEQ
+          end;
+        {'receive', _, Cs} ->
+          case cauder_eval:match_rec(Cs, Mail, Bs) of
+            nomatch -> ?NOT_EXP;
+            _ -> ?RULE_RECEIVE
+          end;
+        {'make_fun', _, _, _} -> ?RULE_SEQ;
+        {bif, _, _, _, As} ->
+          case is_reducible(As, Bs) of
+            true -> eval_expr_opt(As, Bs, Stk, Mail);
+            false -> ?RULE_SEQ
+          end;
+        {self, _} -> ?RULE_SELF;
+        {spawn, _, F} ->
+          case is_reducible(F, Bs) of
+            true -> eval_expr_opt(F, Bs, Stk, Mail);
+            false -> ?RULE_SPAWN
+          end;
+        {spawn, _, M, F, As} ->
+          case is_reducible(M, Bs) of
+            true -> eval_expr_opt(M, Bs, Stk, Mail);
             false ->
-              Body = erl_syntax:match_expr_body(Expr),
-              case cauder_eval:is_expr(Body, Env) of
-                true -> eval_expr_opt(Body, Env, Stack, Mail);
+              case is_reducible(F, Bs) of
+                true -> eval_expr_opt(F, Bs, Stk, Mail);
+                false ->
+                  case is_reducible(As, Bs) of
+                    true -> eval_expr_opt(As, Bs, Stk, Mail);
+                    false -> ?RULE_SPAWN
+                  end
+              end
+          end;
+        {send, _, L, R} ->
+          case is_reducible(L, Bs) of
+            true -> eval_expr_opt(L, Bs, Stk, Mail);
+            false ->
+              case is_reducible(R, Bs) of
+                true -> eval_expr_opt(R, Bs, Stk, Mail);
+                false -> ?RULE_SEND
+              end
+          end;
+        {local_call, _, _, As} ->
+          case is_reducible(As, Bs) of
+            true -> eval_expr_opt(As, Bs, Stk, Mail);
+            false -> ?RULE_SEQ
+          end;
+        {remote_call, _, _, _, As} ->
+          case is_reducible(As, Bs) of
+            true -> eval_expr_opt(As, Bs, Stk, Mail);
+            false -> ?RULE_SEQ
+          end;
+        {apply, _, M, F, As} ->
+          case is_reducible(M, Bs) of
+            true -> eval_expr_opt(M, Bs, Stk, Mail);
+            false ->
+              case is_reducible(F, Bs) of
+                true -> eval_expr_opt(F, Bs, Stk, Mail);
+                false ->
+                  case is_reducible(As, Bs) of
+                    true -> eval_expr_opt(As, Bs, Stk, Mail);
+                    false -> ?RULE_SEQ
+                  end
+              end
+          end;
+        {apply_fun, _, Fun, As} ->
+          case is_reducible(Fun, Bs) of
+            true -> eval_expr_opt(Fun, Bs, Stk, Mail);
+            false ->
+              case is_reducible(As, Bs) of
+                true -> eval_expr_opt(As, Bs, Stk, Mail);
                 false -> ?RULE_SEQ
               end
           end;
-        infix_expr ->
-          Left = erl_syntax:infix_expr_left(Expr),
-          case cauder_eval:is_expr(Left, Env) of
-            true -> eval_expr_opt(Left, Env, Stack, Mail);
+        {match, _, P, E} ->
+          case is_reducible(E, Bs) of
+            true -> eval_expr_opt(E, Bs, Stk, Mail);
             false ->
-              Right = erl_syntax:infix_expr_right(Expr),
-              case cauder_eval:is_expr(Right, Env) of
-                true -> eval_expr_opt(Right, Env, Stack, Mail);
-                false ->
-                  Op = erl_syntax:atom_value(erl_syntax:infix_expr_operator(Expr)),
-                  case Op of
-                    '!' -> ?RULE_SEND;
-                    _ -> ?RULE_SEQ
-                  end
+              case is_reducible(P, Bs) of
+                true -> eval_expr_opt(P, Bs, Stk, Mail);
+                false -> ?RULE_SEQ
               end
           end;
-        prefix_expr ->
-          Arg = erl_syntax:prefix_expr_argument(Expr),
-          case cauder_eval:is_expr(Arg, Env) of
-            true -> eval_expr_opt(Arg, Env, Stack, Mail);
+        {op, _, _, Es} ->
+          case is_reducible(Es, Bs) of
+            true -> eval_expr_opt(Es, Bs, Stk, Mail);
             false -> ?RULE_SEQ
           end;
-        application ->
-          Args = erl_syntax:application_arguments(Expr),
-          case lists:any(fun(Arg) -> cauder_eval:is_expr(Arg, Env) end, Args) of
-            true -> eval_expr_opt(Args, Env, Stack, Mail);
+        {Op, _, L, R} when Op =:= 'andalso'; Op =:= 'orelse' ->
+          case is_reducible(L, Bs) of
+            true -> eval_expr_opt(L, Bs, Stk, Mail);
             false ->
-              Op = erl_syntax:application_operator(Expr),
-              case Op of
-                {value, _, Fun} when is_function(Fun) -> ?RULE_SEQ;
-                {remote, _, Module, Name} ->
-                  case cauder_eval:is_expr(Module, Env) of
-                    true -> eval_expr_opt(Module, Env, Stack, Mail);
-                    false ->
-                      case erl_syntax:atom_value(Module) of
-                        'erlang' ->
-                          case cauder_eval:is_expr(Name, Env) of
-                            true -> eval_expr_opt(Name, Env, Stack, Mail);
-                            false ->
-                              case erl_syntax:atom_value(Name) of
-                                'spawn' -> ?RULE_SPAWN;
-                                'self' -> ?RULE_SELF;
-                                _ -> ?RULE_SEQ
-                              end
-                          end;
-                        _ -> ?RULE_SEQ
-                      end
-                  end;
-                _ ->
-                  case cauder_eval:is_expr(Op, Env) of
-                    true -> eval_expr_opt(Op, Env, Stack, Mail);
-                    false ->
-                      % TODO Check for clashes with functions in the same file and/or directory
-                      case erl_syntax:atom_value(Op) of
-                        'spawn' -> ?RULE_SPAWN;
-                        'self' -> ?RULE_SELF;
-                        _ -> ?RULE_SEQ
-                      end
-                  end
+              case is_reducible(R, Bs) of
+                true -> eval_expr_opt(R, Bs, Stk, Mail);
+                false -> ?RULE_SEQ
               end
-          end;
-        list -> eval_expr_opt(erl_syntax:list_elements(Expr), Env, Stack, Mail);
-        tuple -> eval_expr_opt(erl_syntax:tuple_elements(Expr), Env, Stack, Mail);
-        case_expr ->
-          Arg = erl_syntax:case_expr_argument(Expr),
-          case cauder_eval:is_expr(Arg, Env) of
-            true -> eval_expr_opt(Arg, Env, Stack, Mail);
-            false -> ?RULE_SEQ
-          end;
-        if_expr -> ?RULE_SEQ;
-        receive_expr ->
-          Clauses = erl_syntax:receive_expr_clauses(Expr),
-          case cauder_eval:match_rec(Clauses, Mail, Env) of
-            nomatch -> ?NOT_EXP;
-            _Other -> ?RULE_RECEIVE
-          end;
-        fun_expr -> ?RULE_SEQ
+          end
       end
   end.

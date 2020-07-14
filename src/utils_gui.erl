@@ -15,17 +15,12 @@
 -include_lib("wx/include/wx.hrl").
 
 is_app_loaded() ->
-  Status = ref_lookup(?STATUS),
-  #status{loaded = LoadedStatus} = Status,
-  case LoadedStatus of
-    {true, _} -> true;
-    _Other -> false
-  end.
+  #status{loaded = IsLoaded} = ref_lookup(?STATUS),
+  IsLoaded.
 
 is_app_running() ->
-  Status = ref_lookup(?STATUS),
-  #status{running = RunningStatus} = Status,
-  RunningStatus.
+  #status{running = IsRunning} = ref_lookup(?STATUS),
+  IsRunning.
 
 get_label_from_option(Option) ->
   case Option of
@@ -162,10 +157,8 @@ clear_texts() ->
   wxTextCtrl:clear(RollLogText).
 
 stop_refs() ->
-  case is_app_running() of
-    true ->
-      cauder:stop_refs(),
-      ok;
+  case is_app_loaded() of
+    true -> cauder:stop_refs();
     false -> ok
   end.
 

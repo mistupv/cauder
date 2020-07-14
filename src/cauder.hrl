@@ -73,7 +73,7 @@
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: cauder_types:af_integer(),
+  pid :: pos_integer(),
   % History
   hist = [] :: cauder_types:history(),
   % Log
@@ -93,9 +93,9 @@
 %% Message
 -record(msg, {
   % Target process identifier
-  dest :: cauder_types:af_integer(),
+  dest :: pos_integer(),
   % Message
-  val :: cauder_types:abstract_expr(),
+  val :: term(),
   % Timestamp
   time :: non_neg_integer()
 }).
@@ -115,10 +115,10 @@
 % Trace
 -record(trace, {
   type :: ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN,
-  from :: cauder_types:af_integer(),
-  to :: undefined | cauder_types:af_integer(),
-  val :: undefined | cauder_types:abstract_expr(),
-  time :: undefined | non_neg_integer()
+  from :: pos_integer(),
+  to :: undefined | pos_integer(),
+  val :: undefined | term(),
+  time :: undefined | pos_integer()
 }).
 
 -record(replay, {

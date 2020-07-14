@@ -16,7 +16,7 @@
 %% =====================================================================
 %% @doc Performs an evaluation step in process Pid, given System
 
--spec eval_step(cauder_types:system(), cauder_types:af_integer()) -> cauder_types:system().
+-spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
 eval_step(System, Pid) ->
   #sys{msgs = Msgs, procs = Procs, trace = Trace} = System,
@@ -189,7 +189,7 @@ eval_proc_opt(RestSystem, CurProc) ->
     ?NULL_RULE -> ?NULL_OPT;
     OtherRule ->
       Pid = CurProc#proc.pid,
-      #opt{sem = ?MODULE, type = ?TYPE_PROC, id = erl_syntax:concrete(Pid), rule = OtherRule}
+      #opt{sem = ?MODULE, type = ?TYPE_PROC, id = Pid, rule = OtherRule}
   end.
 
 

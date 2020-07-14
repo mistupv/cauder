@@ -6,12 +6,8 @@
 -export_type([history/0, history_entry/0, environment/0, binding/0, stack/0, process_message/0]).
 -export_type([print_option/0]).
 
-% Abstract Forms
--export_type([af_function_decl/0]).
-% Abstract Form Expressions
--export_type([abstract_expr/0, af_atom/0, af_boolean/0, af_integer/0, af_string/0, af_match/1, af_variable/0, af_tuple/1, af_nil/0, af_cons/1, af_bin/1,
-              af_binary_op/1, af_unary_op/1, af_local_call/0, af_remote_call/0, af_if/0, af_case/0, af_receive/0]).
--export_type([af_clause_seq/0, af_pattern/0, af_guard_seq/0, af_guard/0, af_guard_test/0]).
+% Abstract format types
+-export_type([abstract_expr/0, af_literal/0, af_boolean/0, af_variable/0, af_clause_seq/0, af_clause/0, af_guard_seq/0, af_guard/0, af_guard_test/0, af_pattern/0]).
 
 -export_type([result/0, label/0]).
 
@@ -27,18 +23,18 @@
 -type history() :: [history_entry()].
 -type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
                        | {self, environment(), [abstract_expr()], stack()}
-                       | {send, environment(), [abstract_expr()], stack(), af_integer(), process_message()}
-                       | {spawn, environment(), [abstract_expr()], stack(), af_integer()}
+                       | {send, environment(), [abstract_expr()], stack(), pos_integer(), process_message()}
+                       | {spawn, environment(), [abstract_expr()], stack(), pos_integer()}
                        | {rec, environment(), [abstract_expr()], stack(), process_message(), [process_message()]}.
 
 -type environment() :: [binding()].
 -type binding() :: {atom(), term()}.
 
--type stack() :: [stack_call_entry() | stack_block_entry()].
--type stack_call_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}.
--type stack_block_entry() :: {atom(), [abstract_expr()], af_variable()}.
+-type stack() :: [stack_entry()].
+-type stack_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}
+                     | {atom(), [abstract_expr()], af_variable()}.
 
--type process_message() :: {abstract_expr(), non_neg_integer()}. % {Value, Id}
+-type process_message() :: {term(), non_neg_integer()}. % {Value, Id}
 
 
 -type print_option() :: ?PRINT_MAIL
@@ -50,38 +46,95 @@
                       | ?PRINT_FULL_ENV.
 
 
-%% Type definitions copied from `erl_parse.erl`
+%% Custom of abstract format
 
-%% Start of Abstract Format
+-type line() :: non_neg_integer().
 
--type anno() :: erl_anno:anno().
-
--type af_function_decl() :: {'function', anno(), function_name(), arity(), af_clause_seq()}.
-
--type abstract_expr() :: erl_parse:abstract_expr().
-
--type af_local_call() :: {'call', anno(), af_local_function(), af_args()}.
-
--type af_remote_call() :: {'call', anno(), af_remote_function(), af_args()}.
+-type abstract_expr() :: af_literal()
+                       | af_variable()
+                       | af_variable()
+                       | af_cons(abstract_expr())
+                       | af_tuple(abstract_expr())
+                       | af_if()
+                       | af_case()
+                       | af_receive()
+                       | af_make_fun()
+                       | af_bif_call()
+                       | af_self_call()
+                       | af_spawn_1_call()
+                       | af_spawn_3_call()
+                       | af_send_call()
+                       | af_local_call()
+                       | af_remote_call()
+                       | af_apply()
+                       | af_apply_fun()
+                       | af_match(abstract_expr())
+                       | af_op(abstract_expr())
+                       | af_short_circuit_op(abstract_expr()).
 
 -type af_args() :: [abstract_expr()].
 
--type af_local_function() :: abstract_expr().
+-type af_literal() :: {value, line(), integer()}
+                    | {value, line(), float()}
+                    | {value, line(), atom()}
+                    | {value, line(), string()}
+                    | {value, line(), []}.
 
--type af_remote_function() :: {'remote', anno(), abstract_expr(), abstract_expr()}.
+-type af_boolean() :: {value, line(), true | false}.
 
--type af_if() :: {'if', anno(), af_clause_seq()}.
+-type af_variable() :: {var, line(), atom()}.
 
--type af_case() :: {'case', anno(), abstract_expr(), af_clause_seq()}.
+-type af_cons(T) :: {cons, line(), T, T}.
+
+-type af_tuple(T) :: {tuple, line(), [T]}.
+
+-type af_if() :: {'if', line(), af_clause_seq()}.
+
+-type af_case() :: {'case', line(), abstract_expr(), af_clause_seq()}.
+
+-type af_receive() :: {'receive', line(), af_clause_seq()}.
+
+-type af_make_fun() :: {make_fun, line(), atom(), af_clause_seq()}.
+
+-type af_bif_call() :: {bif, line(), atom(), atom(), af_args()}.
+
+-type af_self_call() :: {self, line()}.
+
+-type af_spawn_1_call() :: {spawn, line(), abstract_expr()}.
+
+-type af_spawn_3_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr()}.
+
+-type af_send_call() :: {send, line(), abstract_expr(), abstract_expr()}.
+
+-type af_local_call() :: {local_call, line(), atom(), af_args()}.
+
+-type af_remote_call() :: {remote_call, line(), atom(), atom(), af_args()}.
+
+-type af_apply() :: {apply, line(), abstract_expr(), abstract_expr(), af_args()}.
+
+-type af_apply_fun() :: {apply_fun, line(), abstract_expr(), af_args()}.
+
+-type af_match(T) :: {match, line(), af_pattern(), T}.
+
+-type af_op(T) :: {op, line(), unary_op() | binary_op(), [T]}.
+
+-type af_unary_arith_op(T) :: {op, line(), '+' | '-', [T]}.
+
+-type af_short_circuit_op(T) :: {'andalso' | 'orelse', line(), T, T}.
+
+
+%% Clauses
 
 -type af_clause_seq() :: [af_clause(), ...].
 
--type af_receive() :: {'receive', anno(), af_clause_seq()}
-                    | {'receive', anno(), af_clause_seq(), abstract_expr(), af_body()}.
+-type af_clause() :: {'clause', line(), [af_pattern()], af_guard_seq(), af_body()}.
 
--type af_clause() :: {'clause', anno(), [af_pattern()], af_guard_seq(), af_body()}.
-
--type af_body() :: [abstract_expr(), ...].
+-type af_pattern() :: af_literal()
+                    | af_variable()
+                    | af_cons(af_pattern())
+                    | af_tuple(af_pattern())
+                    | af_match(af_pattern())
+                    | af_unary_arith_op(af_pattern()).
 
 -type af_guard_seq() :: [af_guard()].
 
@@ -89,151 +142,42 @@
 
 -type af_guard_test() :: af_literal()
                        | af_variable()
-                       | af_tuple(af_guard_test())
-                       | af_nil()
                        | af_cons(af_guard_test())
-                       | af_bin(af_guard_test())
-                       | af_binary_op(af_guard_test())
-                       | af_unary_op(af_guard_test())
-                       | af_record_creation(af_guard_test())
-                       | af_record_index()
-                       | af_record_field_access(af_guard_test())
-                       | af_map_creation(abstract_expr())
-                       | af_map_update(abstract_expr())
+                       | af_tuple(af_guard_test())
+                       | af_unary_arith_op(af_guard_test())
+                       | af_short_circuit_op(af_guard_test())
                        | af_guard_call()
-                       | af_remote_guard_call().
+                       | af_self_call().
 
--type af_record_field_access(T) :: {'record_field', anno(), T, record_name(), af_field_name()}.
+-type af_guard_call() :: {'bif', line(), erlang, atom(), [af_guard_test()]}.
 
--type af_map_creation(T) :: {'map', anno(), [af_assoc(T)]}.
+-type af_body() :: [abstract_expr(), ...].
 
--type af_map_update(T) :: {'map', anno(), T, [af_assoc(T)]}.
 
--type af_assoc(T) :: {'map_field_assoc', anno(), T, T}
-                   | af_assoc_exact(T).
-
--type af_assoc_exact(T) :: {'map_field_exact', anno(), T, T}.
-
--type af_guard_call() :: {'call', anno(), function_name(), [af_guard_test()]}.
-
--type af_remote_guard_call() :: {'call', anno(), {'remote', anno(), af_lit_atom('erlang'), af_atom()}, [af_guard_test()]}.
-
--type af_pattern() :: af_literal()
-                    | af_match(af_pattern())
-                    | af_variable()
-                    | af_tuple(af_pattern())
-                    | af_nil()
-                    | af_cons(af_pattern())
-                    | af_bin(af_pattern())
-                    | af_binary_op(af_pattern())
-                    | af_unary_op(af_pattern())
-                    | af_record_creation(af_pattern())
-                    | af_record_index()
-                    | af_map_pattern().
-
--type af_record_index() :: {'record_index', anno(), record_name(), af_field_name()}.
-
--type af_record_creation(T) :: {'record', anno(), record_name(), [af_record_field(T)]}.
-
--type af_record_field(T) :: {'record_field', anno(), af_field_name(), T}.
-
--type af_map_pattern() :: {'map', anno(), [af_assoc_exact(abstract_expr())]}.
-
--type af_literal() :: af_atom()
-                    | af_character()
-                    | af_float()
-                    | af_integer()
-                    | af_string().
-
--type af_atom() :: af_lit_atom(atom()).
-
--type af_lit_atom(A) :: {'atom', anno(), A}.
-
--type af_character() :: {'char', anno(), char()}.
-
--type af_float() :: {'float', anno(), float()}.
-
--type af_integer() :: {'integer', anno(), non_neg_integer()}.
-
--type af_string() :: {'string', anno(), string()}.
-
--type af_match(T) :: {'match', anno(), af_pattern(), T}.
-
--type af_variable() :: {'var', anno(), atom()}.
-
--type af_tuple(T) :: {'tuple', anno(), [T]}.
-
--type af_nil() :: {'nil', anno()}.
-
--type af_cons(T) :: {'cons', anno(), T, T}.
-
--type af_bin(T) :: {'bin', anno(), [af_binelement(T)]}.
-
--type af_binelement(T) :: {'bin_element', anno(), T, af_binelement_size(), type_specifier_list()}.
-
--type af_binelement_size() :: 'default' | abstract_expr().
-
--type af_binary_op(T) :: {'op', anno(), binary_op(), T, T}.
+%% Operators
 
 -type binary_op() :: '/' | '*' | 'div' | 'rem' | 'band' | 'and' | '+' | '-'
                    | 'bor' | 'bxor' | 'bsl' | 'bsr' | 'or' | 'xor' | '++'
                    | '--' | '==' | '/=' | '=<' | '<'  | '>=' | '>' | '=:='
                    | '=/='.
 
--type af_unary_op(T) :: {'op', anno(), unary_op(), T}.
-
 -type unary_op() :: '+' | '-' | 'bnot' | 'not'.
 
-%% See also lib/stdlib/{src/erl_bits.erl,include/erl_bits.hrl}.
--type type_specifier_list() :: 'default' | [type_specifier(), ...].
+%% End of custom abstract format
 
--type type_specifier() :: type()
-                        | signedness()
-                        | endianness()
-                        | unit().
-
--type type() :: 'integer'
-              | 'float'
-              | 'binary'
-              | 'bytes'
-              | 'bitstring'
-              | 'bits'
-              | 'utf8'
-              | 'utf16'
-              | 'utf32'.
-
--type signedness() :: 'signed' | 'unsigned'.
-
--type endianness() :: 'big' | 'little' | 'native'.
-
--type unit() :: {'unit', 1..256}.
-
--type record_name() :: atom().
-
--type af_field_name() :: af_atom().
-
--type function_name() :: atom().
-
-%% End of Abstract Format
-
-
-%% Custom Abstract Format types
-
--type af_boolean() :: af_lit_atom(boolean()).
-
-
-%% Eval types
 
 -type result() :: #result{}.
 
 -type label() :: label_tau()
-               | label_spawn()
+               | label_spawn_1()
+               | label_spawn_3()
                | label_self()
                | label_send()
                | label_rec().
 
 -type label_tau() :: tau.
--type label_spawn() :: {spawn, af_variable(), af_atom(), af_atom(), list(abstract_expr())}.
+-type label_spawn_1() :: {spawn, af_variable(), fun()}.
+-type label_spawn_3() :: {spawn, af_variable(), atom(), atom(), [term()]}.
 -type label_self() :: {self, af_variable()}.
--type label_send() :: {send, af_integer(), abstract_expr()}.
+-type label_send() :: {send, pos_integer(), term()}.
 -type label_rec() :: {rec, af_variable(), af_clause_seq()}.

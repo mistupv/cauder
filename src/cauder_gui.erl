@@ -438,29 +438,30 @@ setupMenu() ->
 
 %% Loads the specified '.erl' source file
 loadFile(File) ->
-  % TODO Compiler optimizations option
-  case utils:parse_file(File) of
-    {ok, Module, Functions, Forms} ->
-      wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), erl_prettypr:format(Forms)),
+  utils_gui:stop_refs(),
+  cauder:start_refs(),
+  cauder:ref_add(?LAST_PATH, filename:dirname(File)),
 
-      Status = ref_lookup(?STATUS),
-      ref_add(?STATUS, Status#status{loaded = {true, Functions}}),
+  {ok, Src, _} = erl_prim_loader:get_file(File),
+  wxTextCtrl:setValue(ref_lookup(?CODE_TEXT), Src),
 
-      % Open the 'Code' tab
-      wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_CODE),
+  FunNames = cauder:load_file(File),
 
-      % TODO Only allow to start system from an exported function?
-      utils_gui:set_choices(utils:funNames(Module, Functions)),
-      utils_gui:disable_all_buttons(),
-      utils_gui:clear_texts(),
+  Status = ref_lookup(?STATUS),
+  ref_add(?STATUS, Status#status{loaded = true}),
 
-      wxSizer:layout(ref_lookup(?INPUT_SIZER)),
-      wxButton:enable(ref_lookup(?START_BUTTON)),
+  % Open the 'Code' tab
+  wxNotebook:setSelection(ref_lookup(?LEFT_NOTEBOOK), ?PAGEPOS_CODE),
 
-      utils_gui:update_status_text("Loaded file " ++ File);
-    _Error ->
-      utils_gui:update_status_text("Error: Could not compile file " ++ File)
-  end.
+  utils_gui:set_choices(FunNames),
+  utils_gui:disable_all_buttons(),
+  utils_gui:clear_texts(),
+
+  wxSizer:layout(ref_lookup(?INPUT_SIZER)),
+  wxButton:enable(ref_lookup(?START_BUTTON)),
+
+  utils_gui:update_status_text("Loaded file " ++ File).
+
 
 loadReplayData(Path) ->
   utils:extract_replay_data(Path),
@@ -483,12 +484,11 @@ openDialog(Parent) ->
                                      {style, ?wxFD_OPEN bor
                                           ?wxFD_FILE_MUST_EXIST}]),
   case wxDialog:showModal(Dialog) of
-      ?wxID_OK ->
-        File = wxFileDialog:getPath(Dialog),
-        Path = wxFileDialog:getDirectory(Dialog),
-	ref_add(?LAST_PATH,Path),
-	loadFile(File);
-      _Other -> continue
+    ?wxID_OK ->
+      File = wxFileDialog:getPath(Dialog),
+      Path = wxFileDialog:getDirectory(Dialog),
+      loadFile(File);
+    _Other -> continue
   end,
   wxDialog:destroy(Dialog).
 
@@ -541,17 +541,14 @@ zoomOut() ->
   Module :: atom(),
   Function :: atom(),
   Args :: [cauder_types:abstract_expr()],
-  Pid :: cauder_types:af_integer(),
+  Pid :: pos_integer(),
   Log :: list(). % TODO
 
 init_system(M, F, As, Pid, Log) ->
-  % Store the new system
-  E = erl_syntax:revert(erl_syntax:application(cauder_eval:abstract(M), cauder_eval:abstract(F), As)),
-
   Proc = #proc{
     pid   = Pid,
     log   = Log,
-    exprs = [E],
+    exprs = [{remote_call, 0, M, F, As}],
     spf   = {M, F, length(As)}
   },
   System = #sys{
@@ -600,13 +597,8 @@ start(M, F, As) ->
   Log :: list(). % TODO
 
 start(M, F, As, Pid, Log) ->
-  % Get current function definitions
-  #status{loaded = {true, FunDefs}} = ref_lookup(?STATUS),
-
-  % Initialize system
-  utils_gui:stop_refs(),
-  cauder:start_refs(M, FunDefs, Pid),
-  init_system(M, F, As, cauder_eval:abstract(Pid), Log),
+  cauder:reset_fresh_refs(Pid),
+  init_system(M, F, As, Pid, Log),
   refresh(true),
 
   % Open the 'State' tab

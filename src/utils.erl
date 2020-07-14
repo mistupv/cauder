@@ -5,20 +5,18 @@
 
 -module(utils).
 -export([fundef_lookup/3, fundef_rename/1,
-         temp_variable/0, fresh_time/0, pid_exists/2,
+         temp_variable/1, is_temp_variable_name/1, fresh_time/0, pid_exists/2,
          select_proc/2, select_msg/2,
          select_proc_with_time/2, select_proc_with_send/2,
          select_proc_with_spawn/2, select_proc_with_rec/2,
          select_proc_with_var/2,
          merge_env/2,
-         replace_variable/3,
-         funNames/2,
          stringToMFA/1, stringToArgs/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
-         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, ref_lookup/1, fresh_pid/0, parse_file/1, to_erl_syntax/1]).
+         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0, parse_file/1]).
 
 -include("cauder.hrl").
 
@@ -28,30 +26,27 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec fundef_lookup(atom(), atom(), arity()) -> {ok, cauder_types:af_function_decl()} | error.
+-spec fundef_lookup(Module, Function, Arity) -> {Exported, Clauses} | error when
+  Module :: atom(),
+  Function :: atom(),
+  Arity :: arity(),
+  Exported :: boolean(),
+  Clauses :: cauder_types:af_clause_seq().
 
 fundef_lookup(M, F, A) ->
-  % #{Module => #{{Function, Arity} => FunctionDeclaration}}
-  Ms = ref_lookup(?MODULE_DEFS),
-  Fs = case maps:find(M, Ms) of
-         {ok, Fs1} -> Fs1;
-         error ->
-           {ok, Dir} = file:get_cwd(),
-           File = io_lib:format("~s/~s.erl", [Dir, M]),
-           case parse_file(File) of
-             {ok, M, FunDefs, _} ->
-               % TODO Store only clauses instead of the full definition
-               Fs1 = maps:from_list(lists:map(fun(Def = {function, _, F1, A1, _}) -> {{F1, A1}, Def} end, FunDefs)),
-               Ms1 = Ms#{M => Fs1},
-               ref_add(?MODULE_DEFS, Ms1),
-               Fs1;
-             _Error ->
-               Ms1 = Ms#{M => #{}},
-               ref_add(?MODULE_DEFS, Ms1),
-               error
-           end
-       end,
-  maps:find({F, A}, Fs).
+  case cauder:ref_match_object({{M, F, A, '_'}, '_'}) of
+    [{{M, F, A, Exported}, Cs}] -> {Exported, Cs};
+    [] ->
+      Dir = cauder:ref_lookup(?LAST_PATH),
+      File = filename:join(Dir, atom_to_list(M) ++ ".erl"),
+      case filelib:is_regular(File) of
+        true ->
+          cauder_load:load_module(M, File),
+          [{{M, F, A, Exported}, Cs}] = cauder:ref_match_object({{M, F, A, '_'}, '_'}),
+          {Exported, Cs};
+        false -> error
+      end
+  end.
 
 
 %%--------------------------------------------------------------------
@@ -103,23 +98,31 @@ fundef_rename(FunDef) ->
 %%
 %% @see replace_variable/3
 
--spec temp_variable() -> cauder_types:af_variable().
+-spec temp_variable(non_neg_integer()) -> cauder_types:af_variable().
 
-temp_variable() ->
+temp_variable(Line) ->
   Number = fresh_variable_number(),
   Name = "k_" ++ integer_to_list(Number),
-  erl_syntax:revert(erl_syntax:variable(Name)).
+  {var, Line, list_to_atom(Name)}.
+
+-spec is_temp_variable_name(atom()) -> boolean().
+
+is_temp_variable_name(Name) ->
+  case atom_to_list(Name) of
+    "k_" ++ _ -> true
+    ;_ -> false
+  end.
 
 
 -spec fresh_time() -> non_neg_integer().
 
 fresh_time() ->
-  Time = ref_lookup(?FRESH_TIME),
-  ref_add(?FRESH_TIME, Time + 1),
+  Time = cauder:ref_lookup(?FRESH_TIME),
+  cauder:ref_add(?FRESH_TIME, Time + 1),
   Time.
 
 
--spec pid_exists([cauder_types:process()], cauder_types:af_integer()) -> boolean().
+-spec pid_exists([cauder_types:process()], pos_integer()) -> boolean().
 
 pid_exists([#proc{pid = Pid} | _], Pid) -> true;
 pid_exists([_ | Procs], Pid)            -> pid_exists(Procs, Pid);
@@ -133,7 +136,7 @@ pid_exists([], _)                       -> false.
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc([cauder_types:process()], cauder_types:af_integer()) -> {cauder_types:process(), [cauder_types:process()]}.
+-spec select_proc([cauder_types:process()], pos_integer()) -> {cauder_types:process(), [cauder_types:process()]}.
 
 select_proc(Procs, Pid) ->
   {[Proc], RestProcs} = lists:partition(fun(P) -> P#proc.pid == Pid end, Procs),
@@ -182,7 +185,7 @@ select_proc_with_send(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> ha
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc_with_spawn([cauder_types:process()], cauder_types:af_integer()) -> [cauder_types:process()].
+-spec select_proc_with_spawn([cauder_types:process()], pos_integer()) -> [cauder_types:process()].
 
 select_proc_with_spawn(Procs, Pid) -> lists:filter(fun(#proc{hist = Hist}) -> has_spawn(Hist, Pid) end, Procs).
 
@@ -220,42 +223,6 @@ merge_env(Env, [{Name, Value} | RestBindings]) ->
   merge_env(NewEnv, RestBindings).
 
 
-%% =====================================================================
-%% @doc Replaces all occurrences of the variable Target in each one of
-%% the Expressions with the literal value Replacement.
-
--spec replace_variable(Expressions, Variable, Replacement) -> NewExpressions when
-  Expressions :: [cauder_types:abstract_expr()],
-  Variable :: cauder_types:af_variable(),
-  Replacement :: cauder_types:abstract_expr(),
-  NewExpressions :: [cauder_types:abstract_expr()].
-
-% TODO Is necessary to accept a list of expression instead on a single expression?
-replace_variable(Es, Var, E) when is_list(Es), not is_list(E) ->
-  lists:map(
-    fun(E1) ->
-      erl_syntax:revert(
-        erl_syntax_lib:map(
-          fun
-            (Node) when Node == Var -> E;
-            (Node) -> Node
-          end,
-          E1
-        )
-      )
-    end,
-    Es
-  ).
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns a list with the names of the functions defined in the given FunForms
-%% @end
-%%--------------------------------------------------------------------
--spec funNames(atom(), [cauder_types:af_function_decl()]) -> [string()].
-
-funNames(M, FunDefs) ->
-  lists:map(fun({function, _, F, A, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, FunDefs).
 
 %%--------------------------------------------------------------------
 %% @doc Converts a String into MFA tuple
@@ -284,7 +251,7 @@ stringToArgs([]) -> [];
 stringToArgs(Str) ->
   {ok, Tokens, _} = erl_scan:string(Str ++ "."),
   {ok, Args} = erl_parse:parse_exprs(Tokens),
-  Args.
+  cauder_syntax:expr_list(Args).
 
 
 %%--------------------------------------------------------------------
@@ -381,8 +348,8 @@ fresh_variable_name(Name) ->
   list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(Number)).
 
 fresh_variable_number() ->
-  Number = ref_lookup(?FRESH_VAR),
-  ref_add(?FRESH_VAR, Number + 1),
+  Number = cauder:ref_lookup(?FRESH_VAR),
+  cauder:ref_add(?FRESH_VAR, Number + 1),
   Number.
 
 last_msg_rest(Mail) ->
@@ -391,7 +358,7 @@ last_msg_rest(Mail) ->
   {LastMsg, RestMail}.
 
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
-  [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:expression(MsgValue), " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
+  [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:to_string(MsgValue), " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
 
 gen_log_spawn(_Pid, OtherPid) ->
   % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
@@ -486,17 +453,14 @@ parse_expr(Func) ->
       {error, parse_error}
   end.
 
-ref_add(Id, Ref) -> ets:insert(?APP_REF, {Id, Ref}).
-
-ref_lookup(Id) -> ets:lookup_element(?APP_REF, Id, 2).
 
 
--spec fresh_pid() -> cauder_types:af_integer().
+-spec fresh_pid() -> pos_integer().
 
 fresh_pid() ->
-  Pid = ref_lookup(?FRESH_PID),
-  ref_add(?FRESH_PID, Pid + 1),
-  erl_syntax:revert(erl_syntax:abstract(Pid)).
+  Pid = cauder:ref_lookup(?FRESH_PID),
+  cauder:ref_add(?FRESH_PID, Pid + 1),
+  Pid.
 
 
 parse_file(File) ->
@@ -518,16 +482,4 @@ parse_file(File) ->
       {ok, Module, Functions, FinalForms};
     Error ->
       Error
-  end.
-
-
-to_erl_syntax(Es) when is_list(Es) -> lists:map(fun to_erl_syntax1/1, Es).
-
-to_erl_syntax1({value, _, Fun}) when is_function(Fun) -> erl_syntax:text(io_lib:format("~p", [Fun]));
-to_erl_syntax1(Tree) ->
-  case erl_syntax:subtrees(Tree) of
-    [] -> Tree;
-    Gs ->
-      Tree1 = erl_syntax:make_tree(erl_syntax:type(Tree), [[to_erl_syntax1(T) || T <- G] || G <- Gs]),
-      erl_syntax:copy_attrs(Tree, Tree1)
   end.

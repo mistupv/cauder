@@ -1,5 +1,7 @@
--record(status, {loaded  = false,
-                 running = false}).
+-record(status, {
+  loaded = false :: boolean(),
+  running = false :: boolean()
+}).
 
 -define(FRAME_SIZE_INIT, {800, 600}).
 -define(FRAME_SIZE_MIN,  {800, 600}).
