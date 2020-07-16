@@ -1,6 +1,6 @@
 -module(cauder_eval).
 
--export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
+-export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2, binding/2]).
 -export([match_rec/3]).
 
 -include("cauder.hrl").

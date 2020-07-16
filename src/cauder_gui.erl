@@ -58,22 +58,22 @@ setupLeftSizer(Parent) ->
 setupCodePanel(Parent) ->
   CodePanel = wxPanel:new(Parent),
   CodeText = wxTextCtrl:new(CodePanel, ?CODE_TEXT,
-                             [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
+                            [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY}]),
   wxWindow:setFont(CodeText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
-  ref_add(?CODE_TEXT,CodeText),
+  ref_add(?CODE_TEXT, CodeText),
 
 
   FundefStaticText = wxStaticText:new(CodePanel, ?wxID_ANY, "Funs: "),
   FunChoice = wxChoice:new(CodePanel, ?wxID_ANY),
-  ref_add(?FUN_CHOICE,FunChoice),
+  ref_add(?FUN_CHOICE, FunChoice),
   InputStaticText = wxStaticText:new(CodePanel, ?wxID_ANY, "Input args: "),
   InputTextCtrl = wxTextCtrl:new(CodePanel, ?INPUT_TEXT,
                                  [{style, ?wxBOTTOM},
                                   {value, ""}]),
-  ref_add(?INPUT_TEXT,InputTextCtrl),
+  ref_add(?INPUT_TEXT, InputTextCtrl),
   StartButton = wxButton:new(CodePanel, ?START_BUTTON,
                              [{label, "START"}]),
-  ref_add(?START_BUTTON,StartButton),
+  ref_add(?START_BUTTON, StartButton),
   wxButton:disable(StartButton),
 
   CodeSizer = wxBoxSizer:new(?wxVERTICAL),
@@ -99,11 +99,11 @@ setupCodePanel(Parent) ->
   wxWindow:setSizer(CodePanel, BorderSizer),
   CodePanel.
 
- setupStatePanel(Parent) ->
+setupStatePanel(Parent) ->
   StatePanel = wxPanel:new(Parent),
   StateText = wxTextCtrl:new(StatePanel, ?STATE_TEXT,
                              [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH}]),
-   wxWindow:setFont(StateText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
+  wxWindow:setFont(StateText, wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxFONTSTYLE_NORMAL, ?wxFONTWEIGHT_NORMAL)),
   ref_add(?STATE_TEXT, StateText),
   StateSizer = wxBoxSizer:new(?wxVERTICAL),
   BorderSizer = wxBoxSizer:new(?wxVERTICAL),
@@ -138,7 +138,7 @@ setupRollLogPanel(Parent) ->
   SizerFlags = [{proportion, 1}, {flag, ?wxEXPAND}],
   wxSizer:add(RollLogSizer, RollLogText, SizerFlags),
   wxSizer:add(BorderSizer, RollLogSizer, [{flag, ?wxALL bor ?wxEXPAND},
-                                       {proportion, 1}, {border, 10}]),
+                                          {proportion, 1}, {border, 10}]),
   wxWindow:setSizer(RollLogPanel, BorderSizer),
   RollLogPanel.
 
@@ -174,11 +174,11 @@ setupManualPanel(Parent) ->
   ForwIntButton = wxButton:new(ManuPanel, ?FORW_INT_BUTTON,
                                [{label, "Seq"}]),
   ForwSchButton = wxButton:new(ManuPanel, ?FORW_SCH_BUTTON,
-                                [{label, "Sched"}]),
+                               [{label, "Sched"}]),
   BackIntButton = wxButton:new(ManuPanel, ?BACK_INT_BUTTON,
                                [{label, "Seq"}]),
   BackSchButton = wxButton:new(ManuPanel, ?BACK_SCH_BUTTON,
-                                [{label, "Sched"}]),
+                               [{label, "Sched"}]),
   wxButton:disable(ForwIntButton),
   wxButton:disable(ForwSchButton),
   wxButton:disable(BackIntButton),
@@ -193,7 +193,7 @@ setupManualPanel(Parent) ->
   ForwardSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ManuPanel,
                                       [{label, "Forward rules"}]),
   BackwardSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ManuPanel,
-                                      [{label, "Backward rules"}]),
+                                       [{label, "Backward rules"}]),
   ButtonSizer = wxBoxSizer:new(?wxVERTICAL),
   BorderSizer = wxBoxSizer:new(?wxVERTICAL),
 
@@ -222,7 +222,7 @@ setupManualPanel(Parent) ->
 setupAutoPanel(Parent) ->
   AutoPanel = wxPanel:new(Parent),
   StepStaticText = wxStaticText:new(AutoPanel, ?wxID_ANY, "Steps:"),
-  StepTextCtrl = wxTextCtrl:new(AutoPanel, ?STEP_TEXT, [{style,?wxBOTTOM}]),
+  StepTextCtrl = wxTextCtrl:new(AutoPanel, ?STEP_TEXT, [{style, ?wxBOTTOM}]),
   ref_add(?STEP_TEXT, StepTextCtrl),
   HorizontalLine = wxStaticLine:new(AutoPanel, [{style, ?wxLI_HORIZONTAL},
                                                 {size, {200, -1}}]),
@@ -231,7 +231,7 @@ setupAutoPanel(Parent) ->
   BackwardButton = wxButton:new(AutoPanel, ?BACKWARD_BUTTON,
                                 [{label, "Backward"}]),
   NormalizeButton = wxButton:new(AutoPanel, ?NORMALIZE_BUTTON,
-                                [{label, "Normalize"}]),
+                                 [{label, "Normalize"}]),
 
   wxButton:disable(ForwardButton),
   wxButton:disable(BackwardButton),
@@ -263,7 +263,6 @@ setupAutoPanel(Parent) ->
   wxSizer:add(SchedButtonSizer, NormalizeButton),
 
 
-
   wxSizer:add(BorderSizer, AutoSizer, [{flag, ?wxALL bor ?wxALIGN_CENTER_HORIZONTAL}, {border, 10}]),
   wxWindow:setSizer(AutoPanel, BorderSizer),
   AutoPanel.
@@ -273,22 +272,22 @@ setupRollPanel(Parent) ->
   RollPidStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "Pid:"),
   RollStepStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "Steps:"),
   RollSpawnIdStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "Pid:"),
-  RollSendIdStaticText  = wxStaticText:new(RollPanel, ?wxID_ANY, "MsgId:"),
-  RollRecIdStaticText   = wxStaticText:new(RollPanel, ?wxID_ANY, "MsgId:"),
+  RollSendIdStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "MsgId:"),
+  RollRecIdStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "MsgId:"),
   RollVarIdStaticText = wxStaticText:new(RollPanel, ?wxID_ANY, "Name:"),
 
-  RollPidTextCtrl = wxTextCtrl:new(RollPanel, ?ROLL_PID_TEXT, [{style,?wxBOTTOM},
+  RollPidTextCtrl = wxTextCtrl:new(RollPanel, ?ROLL_PID_TEXT, [{style, ?wxBOTTOM},
                                                                {size, {40, -1}}]),
-  RollStepTextCtrl = wxTextCtrl:new(RollPanel, ?ROLL_STEP_TEXT, [{style,?wxBOTTOM},
+  RollStepTextCtrl = wxTextCtrl:new(RollPanel, ?ROLL_STEP_TEXT, [{style, ?wxBOTTOM},
                                                                  {size, {40, -1}}]),
   RollSpawnIdText = wxTextCtrl:new(RollPanel, ?ROLL_SPAWN_ID_TEXT, [{style, ?wxBOTTOM},
                                                                     {size, {40, -1}}]),
-  RollSendIdText  = wxTextCtrl:new(RollPanel, ?ROLL_SEND_ID_TEXT, [{style, ?wxBOTTOM},
+  RollSendIdText = wxTextCtrl:new(RollPanel, ?ROLL_SEND_ID_TEXT, [{style, ?wxBOTTOM},
                                                                   {size, {40, -1}}]),
-  RollRecIdText   = wxTextCtrl:new(RollPanel, ?ROLL_REC_ID_TEXT, [{style, ?wxBOTTOM},
+  RollRecIdText = wxTextCtrl:new(RollPanel, ?ROLL_REC_ID_TEXT, [{style, ?wxBOTTOM},
                                                                 {size, {40, -1}}]),
-  RollVarIdText   = wxTextCtrl:new(RollPanel, ?ROLL_VAR_ID_TEXT, [{style, ?wxBOTTOM},
-                                                                  {size, {80, -1}}]),
+  RollVarIdText = wxTextCtrl:new(RollPanel, ?ROLL_VAR_ID_TEXT, [{style, ?wxBOTTOM},
+                                                                {size, {80, -1}}]),
 
   ref_add(?ROLL_PID_TEXT, RollPidTextCtrl),
   ref_add(?ROLL_STEP_TEXT, RollStepTextCtrl),
@@ -298,14 +297,14 @@ setupRollPanel(Parent) ->
   ref_add(?ROLL_VAR_ID_TEXT, RollVarIdText),
 
   RollButton = wxButton:new(RollPanel, ?ROLL_BUTTON,
-                                [{label, "Roll"},
-                                 {size, {85, -1}}]),
+                            [{label, "Roll"},
+                             {size, {85, -1}}]),
   RollSpawnButton = wxButton:new(RollPanel, ?ROLL_SPAWN_BUTTON,
-                               [{label, "Roll spawn"},
-                                {size, {85, -1}}]),
+                                 [{label, "Roll spawn"},
+                                  {size, {85, -1}}]),
   RollSendButton = wxButton:new(RollPanel, ?ROLL_SEND_BUTTON,
-                               [{label, "Roll send"},
-                                {size, {85, -1}}]),
+                                [{label, "Roll send"},
+                                 {size, {85, -1}}]),
   RollRecButton = wxButton:new(RollPanel, ?ROLL_REC_BUTTON,
                                [{label, "Roll rec"},
                                 {size, {85, -1}}]),
@@ -378,7 +377,7 @@ setupMenu() ->
   File = wxMenu:new(),
   View = wxMenu:new(),
   Compile = wxMenu:new(),
-  Sched  = wxMenu:new(),
+  Sched = wxMenu:new(),
   Help = wxMenu:new(),
   ref_add(?MENU_VIEW, View),
   ref_add(?MENU_COMP, Compile),
@@ -388,21 +387,21 @@ setupMenu() ->
   wxMenuBar:append(MenuBar, Compile, "&Compiler"),
   wxMenuBar:append(MenuBar, Sched, "&Scheduler"),
   wxMenuBar:append(MenuBar, Help, "&Help"),
-  OpenItem = wxMenu:append(File, ?OPEN,     "Open\tCtrl-O"),
+  OpenItem = wxMenu:append(File, ?OPEN, "Open\tCtrl-O"),
   %ReplayItem = wxMenu:append(File, ?REPLAY, "Replay\tCtrl-R"),
-  QuitItem = wxMenu:append(File, ?EXIT,     "Quit\tCtrl-Q"),
-  ZoomInItem = wxMenu:append(View, ?ZOOM_IN,  "Zoom In\tCtrl-+"),
+  QuitItem = wxMenu:append(File, ?EXIT, "Quit\tCtrl-Q"),
+  ZoomInItem = wxMenu:append(View, ?ZOOM_IN, "Zoom In\tCtrl-+"),
   ZoomOutItem = wxMenu:append(View, ?ZOOM_OUT, "Zoom Out\tCtrl--"),
   wxMenu:appendSeparator(View),
   ToggleMail = wxMenu:appendCheckItem(View, ?TOGGLE_MAIL, "Toggle Mailboxes"),
   ToggleHist = wxMenu:appendCheckItem(View, ?TOGGLE_HIST, "Toggle Histories"),
-  ToggleEnv  = wxMenu:appendCheckItem(View, ?TOGGLE_ENV,  "Toggle Environments"),
-  ToggleExp  = wxMenu:appendCheckItem(View, ?TOGGLE_EXP,  "Toggle Expressions"),
+  ToggleEnv = wxMenu:appendCheckItem(View, ?TOGGLE_ENV, "Toggle Environments"),
+  ToggleExp = wxMenu:appendCheckItem(View, ?TOGGLE_EXP, "Toggle Expressions"),
   wxMenu:appendSeparator(View),
-  RadioConc  = wxMenu:appendRadioItem(View, ?RADIO_CONC, "Conc. History"),
+  RadioConc = wxMenu:appendRadioItem(View, ?RADIO_CONC, "Conc. History"),
   RadioFull = wxMenu:appendRadioItem(View, ?RADIO_FULL, "Full History"),
   wxMenu:appendSeparator(View),
-  RadioRelEnv   = wxMenu:appendRadioItem(View, ?RADIO_REL_ENV, "Relevant Environment"),
+  RadioRelEnv = wxMenu:appendRadioItem(View, ?RADIO_REL_ENV, "Relevant Environment"),
   RadioFullEnv = wxMenu:appendRadioItem(View, ?RADIO_FULL_ENV, "Full Environment"),
   wxMenu:appendSeparator(View),
   wxMenuItem:check(ToggleMail),
@@ -411,28 +410,28 @@ setupMenu() ->
   wxMenuItem:check(ToggleExp),
   wxMenuItem:check(RadioConc),
   wxMenuItem:check(RadioRelEnv),
-  ToggleComp  = wxMenu:appendCheckItem(Compile, ?TOGGLE_COMP,  "Compiler Optimizations"),
+  ToggleComp = wxMenu:appendCheckItem(Compile, ?TOGGLE_COMP, "Compiler Optimizations"),
   wxMenuItem:check(ToggleComp),
   RadioRand = wxMenu:appendRadioItem(Sched, ?RADIO_RAND, "Random"),
   RadioPrio = wxMenu:appendRadioItem(Sched, ?RADIO_PRIO, "Random (Prio. Proc.)"),
   wxMenuItem:check(RadioPrio),
   wxMenu:append(Help, ?ABOUT, "About"),
-  wxMenuItem:setHelp(OpenItem,     ?HELP_OPEN_ITEM),
+  wxMenuItem:setHelp(OpenItem, ?HELP_OPEN_ITEM),
   %wxMenuItem:setHelp(ReplayItem,   ?HELP_REPLAY_ITEM),
-  wxMenuItem:setHelp(QuitItem,     ?HELP_QUIT_ITEM),
-  wxMenuItem:setHelp(ZoomInItem,   ?HELP_ZOOM_IN_ITEM),
-  wxMenuItem:setHelp(ZoomOutItem,  ?HELP_ZOOM_OUT_ITEM),
-  wxMenuItem:setHelp(ToggleMail,   ?HELP_TOGGLE_MAIL),
-  wxMenuItem:setHelp(ToggleHist,   ?HELP_TOGGLE_HIST),
-  wxMenuItem:setHelp(ToggleEnv,    ?HELP_TOGGLE_ENV),
-  wxMenuItem:setHelp(ToggleExp,    ?HELP_TOGGLE_EXP),
-  wxMenuItem:setHelp(RadioConc,    ?HELP_RADIO_CONC),
-  wxMenuItem:setHelp(RadioFull,    ?HELP_RADIO_FULL),
-  wxMenuItem:setHelp(RadioRelEnv,  ?HELP_RADIO_REN_ENV),
+  wxMenuItem:setHelp(QuitItem, ?HELP_QUIT_ITEM),
+  wxMenuItem:setHelp(ZoomInItem, ?HELP_ZOOM_IN_ITEM),
+  wxMenuItem:setHelp(ZoomOutItem, ?HELP_ZOOM_OUT_ITEM),
+  wxMenuItem:setHelp(ToggleMail, ?HELP_TOGGLE_MAIL),
+  wxMenuItem:setHelp(ToggleHist, ?HELP_TOGGLE_HIST),
+  wxMenuItem:setHelp(ToggleEnv, ?HELP_TOGGLE_ENV),
+  wxMenuItem:setHelp(ToggleExp, ?HELP_TOGGLE_EXP),
+  wxMenuItem:setHelp(RadioConc, ?HELP_RADIO_CONC),
+  wxMenuItem:setHelp(RadioFull, ?HELP_RADIO_FULL),
+  wxMenuItem:setHelp(RadioRelEnv, ?HELP_RADIO_REN_ENV),
   wxMenuItem:setHelp(RadioFullEnv, ?HELP_RADIO_FULL_ENV),
-  wxMenuItem:setHelp(ToggleComp,   ?HELP_TOGGLE_COMP),
-  wxMenuItem:setHelp(RadioRand,    ?HELP_RADIO_RAND),
-  wxMenuItem:setHelp(RadioPrio,    ?HELP_RADIO_PRIO),
+  wxMenuItem:setHelp(ToggleComp, ?HELP_TOGGLE_COMP),
+  wxMenuItem:setHelp(RadioRand, ?HELP_RADIO_RAND),
+  wxMenuItem:setHelp(RadioPrio, ?HELP_RADIO_PRIO),
   Frame = ref_lookup(?FRAME),
   wxFrame:setMenuBar(Frame, MenuBar).
 
@@ -482,11 +481,10 @@ openDialog(Parent) ->
                                      {defaultFile, DefaultFile},
                                      {wildCard, Wildcard},
                                      {style, ?wxFD_OPEN bor
-                                          ?wxFD_FILE_MUST_EXIST}]),
+                                             ?wxFD_FILE_MUST_EXIST}]),
   case wxDialog:showModal(Dialog) of
     ?wxID_OK ->
       File = wxFileDialog:getPath(Dialog),
-      Path = wxFileDialog:getDirectory(Dialog),
       loadFile(File);
     _Other -> continue
   end,
@@ -499,10 +497,10 @@ openReplayDialog(Parent) ->
                                     {defaultPath, DefaultPath},
                                     {style, ?wxDD_DIR_MUST_EXIST}]),
   case wxDialog:showModal(Dialog) of
-      ?wxID_OK ->
-        Path = wxDirDialog:getPath(Dialog),
-        loadReplayData(Path);
-      _Other -> continue
+    ?wxID_OK ->
+      Path = wxDirDialog:getPath(Dialog),
+      loadReplayData(Path);
+    _Other -> continue
   end,
   wxDialog:destroy(Dialog).
 
@@ -575,8 +573,7 @@ init_system(M, F, As, Pid, Log) ->
   Function :: atom(),
   Args :: [erl_parse:abstract_expr()].
 
-start(M, F, As) ->
-  start(M, F, As, 1, []).
+start(M, F, As) -> start(M, F, As, 1, []).
 
 
 %%--------------------------------------------------------------------
@@ -620,7 +617,7 @@ refresh_buttons(Options) ->
       FiltOpts = utils:filter_options(Options, PidInt),
       FiltButtons = lists:map(fun utils_gui:option_to_button_label/1, FiltOpts),
       [utils_gui:set_button_label_if(Button, FiltButtons) ||
-                               Button <- ManualButtons]
+        Button <- ManualButtons]
   end,
   HasFwdOptions = utils:has_fwd(Options),
   HasBwdOptions = utils:has_bwd(Options),
@@ -637,15 +634,15 @@ refresh(RefState) ->
       Options = cauder:eval_opts(System),
       case RefState of
         false -> ok;
-        true  ->
+        true ->
           ToggleOpts = utils_gui:toggle_opts(),
           StateText = ref_lookup(?STATE_TEXT),
           TraceText = ref_lookup(?TRACE_TEXT),
           RollLogText = ref_lookup(?ROLL_LOG_TEXT),
           MarkedText = pretty_print:system(System, ToggleOpts),
           utils_gui:pp_marked_text(StateText, MarkedText),
-          wxTextCtrl:setValue(TraceText,pretty_print:system_trace(System)),
-          wxTextCtrl:setValue(RollLogText,pretty_print:roll_log(System))
+          wxTextCtrl:setValue(TraceText, pretty_print:system_trace(System)),
+          wxTextCtrl:setValue(RollLogText, pretty_print:roll_log(System))
       end,
       refresh_buttons(Options),
       utils_gui:enable_perm_buttons()
@@ -665,37 +662,48 @@ start() ->
       error
   end.
 
+
+-spec exec_with(Button) -> ok when
+  Button :: ?FORWARD_BUTTON | ?BACKWARD_BUTTON.
+
 exec_with(Button) ->
-  System = ref_lookup(?SYSTEM),
   PidTextCtrl = ref_lookup(?PID_TEXT),
   PidText = wxTextCtrl:getValue(PidTextCtrl),
   case string:to_integer(PidText) of
-    {error, _} ->
-      ok;
-    {PidInt, _} ->
-      PartOption = utils_gui:button_to_option(Button),
-      Option = PartOption#opt{id = PidInt},
-      NewSystem = cauder:eval_step(System, Option),
-      ref_add(?SYSTEM, NewSystem)
+    {error, _} -> ok;
+    {Pid, _} ->
+      Sys0 = ref_lookup(?SYSTEM),
+      Opt0 = utils_gui:button_to_option(Button),
+      Opt1 = Opt0#opt{id = Pid},
+      Sys1 = cauder:eval_step(Sys0, Opt1),
+      ref_add(?SYSTEM, Sys1)
   end.
 
+
+-spec eval_mult(Button) -> error | {StepsDone, Steps} when
+  Button :: ?FORWARD_BUTTON | ?BACKWARD_BUTTON,
+  StepsDone :: non_neg_integer(),
+  Steps :: pos_integer().
+
 eval_mult(Button) ->
-  System = ref_lookup(?SYSTEM),
   StepTextCtrl = ref_lookup(?STEP_TEXT),
   StepText = wxTextCtrl:getValue(StepTextCtrl),
   case string:to_integer(StepText) of
-    {error, _} ->
-      error;
+    {error, _} -> error;
     {Steps, _} ->
-      Option =
-        case Button of
-          ?FORWARD_BUTTON -> ?MULT_FWD;
-          ?BACKWARD_BUTTON -> ?MULT_BWD
-        end,
-      {NewSystem, StepsDone} = cauder:eval_mult(System, Option, Steps),
-      ref_add(?SYSTEM, NewSystem),
+      Sys0 = ref_lookup(?SYSTEM),
+      Dir =
+      case Button of
+        ?FORWARD_BUTTON -> ?MULT_FWD;
+        ?BACKWARD_BUTTON -> ?MULT_BWD
+      end,
+      {Sys1, StepsDone} = cauder:eval_mult(Sys0, Dir, Steps),
+      ref_add(?SYSTEM, Sys1),
       {StepsDone, Steps}
   end.
+
+
+-spec eval_norm() -> StepsDone :: non_neg_integer().
 
 eval_norm() ->
   System = ref_lookup(?SYSTEM),
@@ -703,8 +711,13 @@ eval_norm() ->
   ref_add(?SYSTEM, NewSystem),
   StepsDone.
 
+
+-spec eval_roll() -> {FocusLog, StepsDone, Steps} when
+  FocusLog :: boolean(),
+  StepsDone :: non_neg_integer(),
+  Steps :: pos_integer().
+
 eval_roll() ->
-  System = ref_lookup(?SYSTEM),
   PidTextCtrl = ref_lookup(?ROLL_PID_TEXT),
   PidText = wxTextCtrl:getValue(PidTextCtrl),
   StepTextCtrl = ref_lookup(?ROLL_STEP_TEXT),
@@ -715,84 +728,91 @@ eval_roll() ->
     {error, _} -> {false, 0, 0};
     {_, error} -> {false, 0, 0};
     _ ->
-      CorePid = cerl:c_int(Pid),
-      {FocusLog, NewSystem, StepsDone} = cauder:eval_roll(System, CorePid, Steps),
-      ref_add(?SYSTEM, NewSystem),
+      Sys0 = ref_lookup(?SYSTEM),
+      {FocusLog, Sys1, StepsDone} = cauder:eval_roll(Sys0, Pid, Steps),
+      ref_add(?SYSTEM, Sys1),
       {FocusLog, StepsDone, Steps}
   end.
 
+
+-spec eval_roll_send() -> {CanRoll, Id, FocusLog} when
+  CanRoll :: boolean(),
+  Id :: string(),
+  FocusLog :: boolean().
+
 eval_roll_send() ->
-  System = ref_lookup(?SYSTEM),
   IdTextCtrl = ref_lookup(?ROLL_SEND_ID_TEXT),
   IdText = wxTextCtrl:getValue(IdTextCtrl),
-  {Id, _} = string:to_integer(IdText),
-  case Id of
-    error -> {false, ok, false};
-    _ ->
-      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_send(System, Id),
-      ref_add(?SYSTEM, NewSystem),
+  case string:to_integer(IdText) of
+    {error, _} -> {false, ok, false};
+    {Id, _} ->
+      Sys0 = ref_lookup(?SYSTEM),
+      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_send(Sys0, Id),
+      ref_add(?SYSTEM, Sys1),
       {CanRoll, IdText, FocusLog}
   end.
+
+
+-spec eval_roll_spawn() -> {CanRoll, SpawnPid, FocusLog} when
+  CanRoll :: boolean(),
+  SpawnPid :: string(),
+  FocusLog :: boolean().
 
 eval_roll_spawn() ->
-  System = ref_lookup(?SYSTEM),
   IdTextCtrl = ref_lookup(?ROLL_SPAWN_ID_TEXT),
   IdText = wxTextCtrl:getValue(IdTextCtrl),
-  {Id, _} = string:to_integer(IdText),
-  case Id of
-    error -> {false, ok, false};
-    _ ->
-      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_spawn(System, cerl:c_int(Id)),
-      ref_add(?SYSTEM, NewSystem),
+  case string:to_integer(IdText) of
+    {error, _} -> {false, ok, false};
+    {Id, _} ->
+      Sys0 = ref_lookup(?SYSTEM),
+      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_spawn(Sys0, Id),
+      ref_add(?SYSTEM, Sys1),
       {CanRoll, IdText, FocusLog}
   end.
+
+
+-spec eval_roll_rec() -> {CanRoll, Id, FocusLog} when
+  CanRoll :: boolean(),
+  Id :: string(),
+  FocusLog :: boolean().
 
 eval_roll_rec() ->
-  System = ref_lookup(?SYSTEM),
   IdTextCtrl = ref_lookup(?ROLL_REC_ID_TEXT),
   IdText = wxTextCtrl:getValue(IdTextCtrl),
-  {Id, _} = string:to_integer(IdText),
-  case Id of
-    error -> {false, ok, false};
-    _ ->
-      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_rec(System, Id),
-      ref_add(?SYSTEM, NewSystem),
+  case string:to_integer(IdText) of
+    {error, _} -> {false, ok, false};
+    {Id, _} ->
+      Sys0 = ref_lookup(?SYSTEM),
+      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_rec(Sys0, Id),
+      ref_add(?SYSTEM, Sys1),
       {CanRoll, IdText, FocusLog}
   end.
 
+
+-spec eval_roll_var() -> {CanRoll, Name, FocusLog} when
+  CanRoll :: boolean(),
+  Name :: string(),
+  FocusLog :: boolean().
+
 eval_roll_var() ->
-  System = ref_lookup(?SYSTEM),
-  IdTextCtrl = ref_lookup(?ROLL_VAR_ID_TEXT),
-  IdText = wxTextCtrl:getValue(IdTextCtrl),
-  case IdText of
+  TextCtrl = ref_lookup(?ROLL_VAR_ID_TEXT),
+  case wxTextCtrl:getValue(TextCtrl) of
     "" -> {false, ok, false};
-    _ ->
-      % Variables such as '@c1_X' appear as '_@c1_X'
-      % This case removes the "_" from the variable
-      % name if it is the first character
-      VarName =
-        case string:find(IdText, "_") of
-          nomatch -> IdText;
-          Match when length(IdText) =:= length(Match) ->
-            string:slice(IdText, 1);
-          _ ->
-            IdText
-        end,
-      Var = cerl:c_var(list_to_atom(VarName)),
-      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_var(System, Var),
+    Text ->
+      System = ref_lookup(?SYSTEM),
+      VarName = list_to_atom(Text),
+      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_var(System, VarName),
       ref_add(?SYSTEM, NewSystem),
-      {CanRoll, VarName, FocusLog}
+      {CanRoll, Text, FocusLog}
   end.
 
 set_sched() ->
-  Status = ref_lookup(?STATUS),
-  Running = Status#status.running,
-  Sched   = utils_gui:sched_opt(),
+  #status{running = Running} = ref_lookup(?STATUS),
   case Running of
     true ->
-      System = ref_lookup(?SYSTEM),
-      NewSystem = System#sys{sched = Sched},
-      ref_add(?SYSTEM, NewSystem);
+      Sys0 = ref_lookup(?SYSTEM),
+      Sys1 = Sys0#sys{sched = utils_gui:sched_opt()},
+      ref_add(?SYSTEM, Sys1);
     false -> ok
   end.
 
@@ -802,158 +822,159 @@ focus_roll_log(true) ->
   wxNotebook:setSelection(RBotNotebook, ?PAGEPOS_ROLL).
 
 loop() ->
-    receive
-        %% ------------------- Button handlers ------------------- %%
-        #wx{id = ?START_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          start(),
-          loop();
-        #wx{id = ?NORMALIZE_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          StepsDone = eval_norm(),
-          utils_gui:sttext_norm(StepsDone),
-          refresh(true),
-          loop();
-        #wx{id = ?ROLL_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          {MustFocus, StepsDone, TotalSteps} = eval_roll(),
-          utils_gui:sttext_roll(StepsDone, TotalSteps),
-          focus_roll_log(MustFocus),
-          refresh(true),
-          loop();
-        #wx{id = RuleButton, event = #wxCommand{type = command_button_clicked}}
-          when (RuleButton >= ?FORW_INT_BUTTON) and (RuleButton =< ?BACK_SCH_BUTTON) ->
-          utils_gui:disable_all_buttons(),
-          exec_with(RuleButton),
-          utils_gui:sttext_single(RuleButton),
-          refresh(true),
-          loop();
-        #wx{id = RuleButton, event = #wxCommand{type = command_button_clicked}}
-          when (RuleButton == ?FORWARD_BUTTON) or (RuleButton == ?BACKWARD_BUTTON) ->
-          utils_gui:disable_all_buttons(),
-          case eval_mult(RuleButton) of
-            error ->
-              utils_gui:update_status_text(?ERROR_NUM_STEP);
-            {StepsDone, TotalSteps} ->
-              utils_gui:sttext_mult(StepsDone, TotalSteps)
-          end,
-          refresh(true),
-          loop();
-        #wx{id = ?ROLL_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          {HasRolled, SendId, MustFocus} = eval_roll_send(),
-          utils_gui:sttext_roll_send(HasRolled, SendId),
-          focus_roll_log(MustFocus),
-          refresh(HasRolled),
-          loop();
-        #wx{id = ?ROLL_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          {HasRolled, SpawnId, MustFocus} = eval_roll_spawn(),
-          utils_gui:sttext_roll_spawn(HasRolled, SpawnId),
-          focus_roll_log(MustFocus),
-          refresh(HasRolled),
-          loop();
-        #wx{id = ?ROLL_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          {HasRolled, RecId, MustFocus} = eval_roll_rec(),
-          utils_gui:sttext_roll_rec(HasRolled, RecId),
-          focus_roll_log(MustFocus),
-          refresh(HasRolled),
-          loop();
-        #wx{id = ?ROLL_VAR_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-          utils_gui:disable_all_buttons(),
-          {HasRolled, VarId, MustFocus} = eval_roll_var(),
-          utils_gui:sttext_roll_var(HasRolled, VarId),
-          focus_roll_log(MustFocus),
-          refresh(HasRolled),
-          loop();
-        %% -------------------- Text handlers -------------------- %%
-        #wx{id = ?PID_TEXT, event = #wxCommand{type = command_text_updated}} ->
-          refresh(false),
-          loop();
-        #wx{id = ?STEP_TEXT, event = #wxCommand{type = command_text_updated}} ->
-          refresh(false),
-          loop();
-        #wx{id = _RestIds, event = #wxCommand{type = command_text_updated}} ->
-          loop();
-        %% -------------------- Menu handlers -------------------- %%
-        #wx{id = ?ABOUT, event = #wxCommand{type = command_menu_selected}} ->
-          Caption = "About " ++ ?APP_STRING,
-          Frame = ref_lookup(?FRAME),
-          Dialog = wxMessageDialog:new(Frame, ?INFO_TEXT,
-                                       [{style, ?wxOK},
-                                        {caption, Caption}]),
-          wxDialog:showModal(Dialog),
-          wxWindow:destroy(Dialog),
-          loop();
-        #wx{id = ?OPEN, event = #wxCommand{type = command_menu_selected}} ->
-          Frame = ref_lookup(?FRAME),
-          openDialog(Frame),
-          loop();
-        %#wx{id = ?REPLAY, event = #wxCommand{type = command_menu_selected}} ->
-        %  Frame = ref_lookup(?FRAME),
-        %  openReplayDialog(Frame),
-        %  loop();
-        #wx{id = ?ZOOM_IN, event = #wxCommand{type = command_menu_selected}} ->
-          zoomIn(),
-          loop();
-        #wx{id = ?ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} ->
-          zoomOut(),
-          loop();
-        #wx{id = ?TOGGLE_MAIL, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?TOGGLE_HIST, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?TOGGLE_ENV, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?TOGGLE_EXP, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?RADIO_CONC, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?RADIO_FULL, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?RADIO_REL_ENV, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?RADIO_FULL_ENV, event = #wxCommand{type = command_menu_selected}} ->
-          refresh(true),
-          loop();
-        #wx{id = ?TOGGLE_COMP, event = #wxCommand{type = command_menu_selected}} ->
-          utils_gui:sttext_comp(),
-          loop();
-        #wx{id = ?RADIO_RAND, event = #wxCommand{type = command_menu_selected}} ->
-          set_sched(),
-          loop();
-        #wx{id = ?RADIO_PRIO, event = #wxCommand{type = command_menu_selected}} ->
-          set_sched(),
-          loop();
-        #wx{id = ?EXIT, event = #wxCommand{type = command_menu_selected}} ->
-          Frame = ref_lookup(?FRAME),
-          wxFrame:destroy(Frame);
-        %% ------------------- Other handlers -------------------- %%
-        #wx{event = #wxClose{type = close_window}} ->
-          Frame = ref_lookup(?FRAME),
-          wxFrame:destroy(Frame);
-        %% ---------------- Non-supported events ----------------- %%
-        Other ->
-          io:format("main loop does not implement ~p~n", [Other]),
-          loop()
-    end.
-
-ref_add(Id, Ref) ->
-    ets:insert(?GUI_REF, {Id, Ref}).
-
-ref_lookup(Id) ->
-    ets:lookup_element(?GUI_REF, Id, 2).
+  receive
+  %% ------------------- Button handlers ------------------- %%
+    #wx{id = ?START_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      start(),
+      loop();
+    #wx{id = ?NORMALIZE_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      StepsDone = eval_norm(),
+      utils_gui:sttext_norm(StepsDone),
+      refresh(true),
+      loop();
+    #wx{id = ?ROLL_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      {MustFocus, StepsDone, TotalSteps} = eval_roll(),
+      utils_gui:sttext_roll(StepsDone, TotalSteps),
+      focus_roll_log(MustFocus),
+      refresh(true),
+      loop();
+    #wx{id = RuleButton, event = #wxCommand{type = command_button_clicked}}
+      when (RuleButton >= ?FORW_INT_BUTTON) and (RuleButton =< ?BACK_SCH_BUTTON) ->
+      utils_gui:disable_all_buttons(),
+      exec_with(RuleButton),
+      utils_gui:sttext_single(RuleButton),
+      refresh(true),
+      loop();
+    #wx{id = RuleButton, event = #wxCommand{type = command_button_clicked}}
+      when (RuleButton == ?FORWARD_BUTTON) or (RuleButton == ?BACKWARD_BUTTON) ->
+      utils_gui:disable_all_buttons(),
+      case eval_mult(RuleButton) of
+        error ->
+          utils_gui:update_status_text(?ERROR_NUM_STEP);
+        {StepsDone, TotalSteps} ->
+          utils_gui:sttext_mult(StepsDone, TotalSteps)
+      end,
+      refresh(true),
+      loop();
+    #wx{id = ?ROLL_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      {HasRolled, SendId, MustFocus} = eval_roll_send(),
+      utils_gui:sttext_roll_send(HasRolled, SendId),
+      focus_roll_log(MustFocus),
+      refresh(HasRolled),
+      loop();
+    #wx{id = ?ROLL_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      {HasRolled, SpawnId, MustFocus} = eval_roll_spawn(),
+      utils_gui:sttext_roll_spawn(HasRolled, SpawnId),
+      focus_roll_log(MustFocus),
+      refresh(HasRolled),
+      loop();
+    #wx{id = ?ROLL_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      {HasRolled, RecId, MustFocus} = eval_roll_rec(),
+      utils_gui:sttext_roll_rec(HasRolled, RecId),
+      focus_roll_log(MustFocus),
+      refresh(HasRolled),
+      loop();
+    #wx{id = ?ROLL_VAR_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+      utils_gui:disable_all_buttons(),
+      {HasRolled, VarId, MustFocus} = eval_roll_var(),
+      utils_gui:sttext_roll_var(HasRolled, VarId),
+      focus_roll_log(MustFocus),
+      refresh(HasRolled),
+      loop();
+  %% -------------------- Text handlers -------------------- %%
+    #wx{id = ?PID_TEXT, event = #wxCommand{type = command_text_updated}} ->
+      refresh(false),
+      loop();
+    #wx{id = ?STEP_TEXT, event = #wxCommand{type = command_text_updated}} ->
+      refresh(false),
+      loop();
+    #wx{id = _RestIds, event = #wxCommand{type = command_text_updated}} ->
+      loop();
+  %% -------------------- Menu handlers -------------------- %%
+    #wx{id = ?ABOUT, event = #wxCommand{type = command_menu_selected}} ->
+      Caption = "About " ++ ?APP_STRING,
+      Frame = ref_lookup(?FRAME),
+      Dialog = wxMessageDialog:new(Frame, ?INFO_TEXT,
+                                   [{style, ?wxOK},
+                                    {caption, Caption}]),
+      wxDialog:showModal(Dialog),
+      wxWindow:destroy(Dialog),
+      loop();
+    #wx{id = ?OPEN, event = #wxCommand{type = command_menu_selected}} ->
+      Frame = ref_lookup(?FRAME),
+      openDialog(Frame),
+      loop();
+  %#wx{id = ?REPLAY, event = #wxCommand{type = command_menu_selected}} ->
+  %  Frame = ref_lookup(?FRAME),
+  %  openReplayDialog(Frame),
+  %  loop();
+    #wx{id = ?ZOOM_IN, event = #wxCommand{type = command_menu_selected}} ->
+      zoomIn(),
+      loop();
+    #wx{id = ?ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} ->
+      zoomOut(),
+      loop();
+    #wx{id = ?TOGGLE_MAIL, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?TOGGLE_HIST, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?TOGGLE_ENV, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?TOGGLE_EXP, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?RADIO_CONC, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?RADIO_FULL, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?RADIO_REL_ENV, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?RADIO_FULL_ENV, event = #wxCommand{type = command_menu_selected}} ->
+      refresh(true),
+      loop();
+    #wx{id = ?TOGGLE_COMP, event = #wxCommand{type = command_menu_selected}} ->
+      utils_gui:sttext_comp(),
+      loop();
+    #wx{id = ?RADIO_RAND, event = #wxCommand{type = command_menu_selected}} ->
+      set_sched(),
+      loop();
+    #wx{id = ?RADIO_PRIO, event = #wxCommand{type = command_menu_selected}} ->
+      set_sched(),
+      loop();
+    #wx{id = ?EXIT, event = #wxCommand{type = command_menu_selected}} ->
+      Frame = ref_lookup(?FRAME),
+      wxFrame:destroy(Frame);
+  %% ------------------- Other handlers -------------------- %%
+    #wx{event = #wxClose{type = close_window}} ->
+      Frame = ref_lookup(?FRAME),
+      wxFrame:destroy(Frame);
+  %% ---------------- Non-supported events ----------------- %%
+    Other ->
+      io:format("main loop does not implement ~p~n", [Other]),
+      loop()
+  end.
 
 ref_start() ->
-    ?GUI_REF = ets:new(?GUI_REF, [set, public, named_table]),
-    ok.
+  ?GUI_REF = ets:new(?GUI_REF, [set, public, named_table]),
+  ok.
 
 ref_stop() ->
-    ets:delete(?GUI_REF).
+  true = ets:delete(?GUI_REF),
+  ok.
+
+ref_add(Id, Ref) ->
+  true = ets:insert(?GUI_REF, {Id, Ref}),
+  ok.
+
+ref_lookup(Id) -> ets:lookup_element(?GUI_REF, Id, 2).

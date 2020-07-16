@@ -118,7 +118,7 @@ eval_step(System, Pid) ->
 eval_sched(System, Id) ->
   Procs = System#sys.procs,
   Msgs = System#sys.msgs,
-  {value, Proc} = utils:select_proc_with_time(Procs, Id),
+  {value, Proc} = utils:find_proc_with_time(Procs, Id),
   Pid = Proc#proc.pid,
   {_, RestProcs} = utils:select_proc(Procs, Pid),
   Mail = Proc#proc.mail,

@@ -4,12 +4,13 @@
 %%%-------------------------------------------------------------------
 
 -module(roll).
--export([can_roll/2, can_roll_send/2, can_roll_spawn/2,
-         can_roll_rec/2, can_roll_var/2,
-         eval_step/2, eval_roll_send/2, eval_roll_spawn/2,
-         eval_roll_rec/2, eval_roll_var/2]).
+-export([can_roll/2, can_roll_spawn/2, can_roll_send/2, can_roll_rec/2, can_roll_var/2]).
+-export([eval_step/2, eval_roll_spawn/2, eval_roll_send/2, eval_roll_rec/2, eval_roll_var/2]).
 
 -include("cauder.hrl").
+
+
+-spec can_roll(cauder_types:system(), pos_integer()) -> boolean().
 
 can_roll(#sys{procs = Procs}, Pid) ->
   case utils:pid_exists(Procs, Pid) of
@@ -24,187 +25,213 @@ can_roll(#sys{procs = Procs}, Pid) ->
       end
   end.
 
-eval_step(System, Pid) ->
-  Procs = System#sys.procs,
+
+-spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
+
+eval_step(Sys0, Pid) ->
+  Procs = Sys0#sys.procs,
   {Proc, _} = utils:select_proc(Procs, Pid),
-  [CurHist|_]= Proc#proc.hist,  
+  %io:format("eval_roll - hist: ~p\n",[Proc#proc.hist]),
+  [CurHist | _] = Proc#proc.hist,
   case CurHist of
-    {send, _, _, DestPid, {MsgValue, Time}} ->
-      NewLog = System#sys.roll ++ utils:gen_log_send(Pid, DestPid, MsgValue, Time),
-      LogSystem = System#sys{roll = NewLog},
-      ?LOG("ROLLing back SEND from " ++ ?TO_STRING(cerl:concrete(Pid)) ++ " to " ++ ?TO_STRING(cerl:concrete(DestPid))),
-      roll_send(LogSystem, Pid, DestPid, Time);
-    {spawn, _, _, SpawnPid} ->
-      NewLog = System#sys.roll ++ utils:gen_log_spawn(Pid, SpawnPid),
-      LogSystem = System#sys{roll = NewLog},
-      ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(cerl:concrete(SpawnPid))),
-      roll_spawn(LogSystem, Pid, SpawnPid);
+    {spawn, _Bs, _E, _Stk, SpawnPid} ->
+      Log = Sys0#sys.roll ++ utils:gen_log_spawn(Pid, SpawnPid),
+      Sys = Sys0#sys{roll = Log},
+      ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
+      roll_spawn(Sys, Pid, SpawnPid);
+    {send, _Bs, _E, _Stk, DestPid, {MsgValue, Time}} ->
+      Log = Sys0#sys.roll ++ utils:gen_log_send(Pid, DestPid, MsgValue, Time),
+      Sys = Sys0#sys{roll = Log},
+      ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(DestPid)),
+      roll_send(Sys, Pid, DestPid, Time);
     _ ->
-      RollOpts = roll_opts(System, Pid),
-      cauder:eval_step(System, hd(RollOpts))
+      [Opt | _] = roll_opts(Sys0, Pid),
+      cauder:eval_step(Sys0, Opt)
   end.
 
-roll_send(System, Pid, OtherPid, Time) ->
-  SendOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SEND end,
-                          roll_opts(System, Pid)),
-  case SendOpts of
+
+-spec roll_spawn(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
+
+roll_spawn(Sys0, Pid, SpawnPid) ->
+  Opts = roll_opts(Sys0, Pid),
+  case lists:dropwhile(fun(#opt{rule = Rule}) -> Rule =/= ?RULE_SPAWN end, Opts) of
+    [Opt | _] ->
+      cauder:eval_step(Sys0, Opt);
     [] ->
-      SchedOpts = [ X || X <- roll_sched_opts(System, OtherPid),
-                              X#opt.id == Time],
-      case SchedOpts of
-        [] ->
-          NewSystem = eval_step(System, OtherPid),
-          roll_send(NewSystem, Pid, OtherPid, Time);
-        _ ->
-          NewSystem = cauder:eval_step(System, hd(SchedOpts)),
-          roll_send(NewSystem, Pid, OtherPid, Time)
-      end;
-    _ ->
-      cauder:eval_step(System, hd(SendOpts))
+      Sys1 = eval_step(Sys0, SpawnPid),
+      roll_spawn(Sys1, Pid, SpawnPid)
   end.
 
-roll_spawn(System, Pid, OtherPid) ->
-  SpawnOpts = lists:filter(fun (X) -> X#opt.rule == ?RULE_SPAWN end,
-                           roll_opts(System, Pid)),
-  case SpawnOpts of
+
+-spec roll_send(cauder_types:system(), pos_integer(), pos_integer(), pos_integer()) -> cauder_types:system().
+
+roll_send(Sys0, Pid, DestPid, Time) ->
+  Opts1 = roll_opts(Sys0, Pid),
+  case lists:dropwhile(fun(#opt{rule = Rule}) -> Rule =/= ?RULE_SPAWN end, Opts1) of
+    [Opt | _] ->
+      cauder:eval_step(Sys0, Opt);
     [] ->
-      NewSystem = eval_step(System, OtherPid),
-      roll_spawn(NewSystem, Pid, OtherPid);
-    _ ->
-      cauder:eval_step(System, hd(SpawnOpts))
+      Opts2 = roll_sched_opts(Sys0, DestPid),
+      Sys1 =
+      case lists:dropwhile(fun(#opt{id = Id}) -> Id =/= Time end, Opts2) of
+        [Opt | _] -> cauder:eval_step(Sys0, Opt);
+        [] -> eval_step(Sys0, DestPid)
+      end,
+      roll_send(Sys1, Pid, DestPid, Time)
   end.
 
-can_roll_send(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithSend = utils:select_proc_with_send(Procs, Id),
-  case length(ProcsWithSend) of
-    0 -> false;
-    _ -> true
-  end.
 
-can_roll_spawn(System, SpawnPid) ->
-  Procs = System#sys.procs,
-  ProcsWithSpawn = utils:select_proc_with_spawn(Procs, SpawnPid),
-  case length(ProcsWithSpawn) of
-    0 -> false;
-    _ -> true
-  end.
+%% =====================================================================
 
-can_roll_rec(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithRec = utils:select_proc_with_rec(Procs, Id),
-  case length(ProcsWithRec) of
-    0 -> false;
-    _ -> true
-  end.
 
-can_roll_var(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithVar = utils:select_proc_with_var(Procs, Id),
-  case length(ProcsWithVar) of
-    0 -> false;
-    _ -> true
-  end.
+-spec can_roll_spawn(cauder_types:system(), pos_integer()) -> boolean().
 
-eval_roll_send(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithSend = utils:select_proc_with_send(Procs, Id),
-  Proc = hd(ProcsWithSend),
-  Pid = Proc#proc.pid,
-  eval_roll_until_send(System, Pid, Id).
+can_roll_spawn(#sys{procs = Procs}, SpawnPid) -> utils:find_proc_with_spawn(Procs, SpawnPid) =/= false.
 
-eval_roll_spawn(System, SpawnPid) ->
-  Procs = System#sys.procs,
-  ProcsWithSpawn = utils:select_proc_with_spawn(Procs, SpawnPid),
-  Proc = hd(ProcsWithSpawn),
-  Pid = Proc#proc.pid,
-  eval_roll_until_spawn(System, Pid, SpawnPid).
 
-eval_roll_rec(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithRec = utils:select_proc_with_rec(Procs, Id),
-  Proc = hd(ProcsWithRec),
-  Pid = Proc#proc.pid,
-  eval_roll_until_rec(System, Pid, Id).
+-spec can_roll_send(cauder_types:system(), pos_integer()) -> boolean().
 
-eval_roll_var(System, Id) ->
-  Procs = System#sys.procs,
-  ProcsWithVar = utils:select_proc_with_var(Procs, Id),
-  Proc = hd(ProcsWithVar),
-  Pid = Proc#proc.pid,
-  eval_roll_until_var(System, Pid, Id).
+can_roll_send(#sys{procs = Procs}, Time) -> utils:find_proc_with_send(Procs, Time) =/= false.
 
-eval_roll_until_send(System, Pid, Id) ->
-  Procs = System#sys.procs,
+
+-spec can_roll_rec(cauder_types:system(), pos_integer()) -> boolean().
+
+can_roll_rec(#sys{procs = Procs}, Time) -> utils:find_proc_with_rec(Procs, Time) =/= false.
+
+
+-spec can_roll_var(cauder_types:system(), atom()) -> boolean().
+
+can_roll_var(#sys{procs = Procs}, Name) -> utils:find_proc_with_var(Procs, Name) =/= false.
+
+
+%% =====================================================================
+
+
+-spec eval_roll_spawn(cauder_types:system(), pos_integer()) -> cauder_types:system().
+
+eval_roll_spawn(Sys, SpawnPid) ->
+  {value, #proc{pid = Pid}} = utils:find_proc_with_spawn(Sys#sys.procs, SpawnPid),
+  eval_roll_until_spawn(Sys, Pid, SpawnPid).
+
+
+-spec eval_roll_send(cauder_types:system(), pos_integer()) -> cauder_types:system().
+
+eval_roll_send(Sys, Id) ->
+  {value, #proc{pid = Pid}} = utils:find_proc_with_send(Sys#sys.procs, Id),
+  eval_roll_until_send(Sys, Pid, Id).
+
+
+-spec eval_roll_rec(cauder_types:system(), pos_integer()) -> cauder_types:system().
+
+eval_roll_rec(Sys, Id) ->
+  {value, #proc{pid = Pid}} = utils:find_proc_with_rec(Sys#sys.procs, Id),
+  eval_roll_until_rec(Sys, Pid, Id).
+
+
+-spec eval_roll_var(cauder_types:system(), atom()) -> cauder_types:system().
+
+eval_roll_var(Sys, Name) ->
+  {value, #proc{pid = Pid}} = utils:find_proc_with_var(Sys#sys.procs, Name),
+  eval_roll_until_var(Sys, Pid, Name).
+
+
+%% =====================================================================
+
+
+-spec eval_roll_until_spawn(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
+
+eval_roll_until_spawn(Sys0, Pid, SpawnPid) ->
+  Procs = Sys0#sys.procs,
   {Proc, _} = utils:select_proc(Procs, Pid),
-  [CurHist|_]= Proc#proc.hist,
+  [Hist | _] = Proc#proc.hist,
+  case Hist of
+    {spawn, _Bs, _E, _Stk, SpawnPid} ->
+      eval_step(Sys0, Pid);
+    _ ->
+      Sys1 = eval_step(Sys0, Pid),
+      eval_roll_until_spawn(Sys1, Pid, SpawnPid)
+  end.
+
+
+-spec eval_roll_until_send(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
+
+eval_roll_until_send(Sys0, Pid, Id) ->
+  Procs = Sys0#sys.procs,
+  {Proc, _} = utils:select_proc(Procs, Pid),
+  [CurHist | _] = Proc#proc.hist,
   case CurHist of
-    {send,_,_,_,{_, Id}} ->
-      eval_step(System, Pid);
+    {send, _Bs, _E, _Stk, _Dest, {_Val, Id}} ->
+      eval_step(Sys0, Pid);
     _ ->
-      NewSystem = eval_step(System, Pid),
-      eval_roll_until_send(NewSystem, Pid, Id)
+      Sys = eval_step(Sys0, Pid),
+      eval_roll_until_send(Sys, Pid, Id)
   end.
 
-eval_roll_until_spawn(System, Pid, SpawnPid) ->
-  Procs = System#sys.procs,
+
+-spec eval_roll_until_rec(cauder_types:system(), pos_integer(), non_neg_integer()) -> cauder_types:system().
+
+eval_roll_until_rec(Sys0, Pid, Id) ->
+  Procs = Sys0#sys.procs,
   {Proc, _} = utils:select_proc(Procs, Pid),
-  [CurHist|_]= Proc#proc.hist,
+  [CurHist | _] = Proc#proc.hist,
   case CurHist of
-    {spawn,_,_,SpawnPid} ->
-      eval_step(System, Pid);
+    {rec, _Bs, _E, _Stk, {_Val, Id}, _Msgs} ->
+      eval_roll_after_rec(Sys0, Pid, Id);
     _ ->
-      NewSystem = eval_step(System, Pid),
-      eval_roll_until_spawn(NewSystem, Pid, SpawnPid)
+      Sys1 = eval_step(Sys0, Pid),
+      eval_roll_until_rec(Sys1, Pid, Id)
   end.
 
-eval_roll_until_rec(System, Pid, Id) ->
-  Procs = System#sys.procs,
+
+-spec eval_roll_after_rec(cauder_types:system(), pos_integer(), non_neg_integer()) -> cauder_types:system().
+
+eval_roll_after_rec(Sys0, Pid, Id) ->
+  Sys1 = eval_step(Sys0, Pid),
+  Procs = Sys1#sys.procs,
   {Proc, _} = utils:select_proc(Procs, Pid),
-  [CurHist|_]= Proc#proc.hist,
+  [CurHist | _] = Proc#proc.hist,
   case CurHist of
-    {rec,_,_, {_, Id},_} ->
-      eval_roll_after_rec(System, Pid, Id);
-    _ ->
-      NewSystem = eval_step(System, Pid),
-      eval_roll_until_rec(NewSystem, Pid, Id)
+    {rec, _Bs, _E, _Stk, {_Val, Id}, _Msgs} ->
+      eval_roll_after_rec(Sys1, Pid, Id);
+    _ -> Sys1
   end.
 
-eval_roll_after_rec(System, Pid, Id) ->
-  NewSystem = eval_step(System, Pid),
-  Procs = NewSystem#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
-  [CurHist|_]= Proc#proc.hist,
-  case CurHist of
-    {rec,_,_, {_, Id},_} ->
-      eval_roll_after_rec(NewSystem, Pid, Id);
-    _ ->
-      NewSystem
-  end.
 
-eval_roll_until_var(System, Pid, Id) ->
-  Procs = System#sys.procs,
+-spec eval_roll_until_var(cauder_types:system(), pos_integer(), atom()) -> cauder_types:system().
+
+eval_roll_until_var(Sys0, Pid, Name) ->
+  Procs = Sys0#sys.procs,
   {Proc, _} = utils:select_proc(Procs, Pid),
-  Env = Proc#proc.env,
-  case utils:has_var(Env, Id) of
-    false ->
-      System;
+  Hist = Proc#proc.hist,
+  case utils:has_var(Hist, Name) of
     true ->
-      NewSystem = eval_step(System, Pid),
-      eval_roll_until_var(NewSystem, Pid, Id)
+      Sys = eval_step(Sys0, Pid),
+      eval_roll_until_var(Sys, Pid, Name);
+    false -> Sys0
   end.
+
+
+%% =====================================================================
+
+
+-spec roll_opts(cauder_types:system(), pos_integer()) -> [cauder_types:option()].
 
 roll_opts(System, Pid) ->
   ProcOpts = roll_procs_opts(System, Pid),
   SchedOpts = roll_sched_opts(System, Pid),
   SchedOpts ++ ProcOpts.
 
-roll_procs_opts(System, Pid) ->
-  ProcOpts = bwd_sem:eval_procs_opts(System),
-  utils:filter_options(ProcOpts, cerl:concrete(Pid)).
 
-roll_sched_opts(System, Pid) ->
-  #sys{procs = Procs} = System,
+-spec roll_procs_opts(cauder_types:system(), pos_integer()) -> [cauder_types:option()].
+
+roll_procs_opts(Sys, Pid) ->
+  Opts = bwd_sem:eval_procs_opts(Sys),
+  utils:filter_options(Opts, Pid).
+
+
+-spec roll_sched_opts(cauder_types:system(), pos_integer()) -> [cauder_types:option()].
+
+roll_sched_opts(#sys{procs = Procs}, Pid) ->
   {Proc, _} = utils:select_proc(Procs, Pid),
   SingleProcSys = #sys{procs = [Proc]},
   bwd_sem:eval_sched_opts(SingleProcSys).

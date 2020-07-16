@@ -24,9 +24,8 @@ eval_step(Sys, Pid) ->
   #sys{msgs = Msgs, procs = Ps0, trace = Trace} = Sys,
   {P, Ps} = utils:select_proc(Ps0, Pid),
   #proc{pid = Pid, hist = H, env = Bs0, exprs = Es0, stack = Stk0, mail = Mail0} = P,
-%%  io:format("step_before: ~p\n", [Es0]),
+  io:format("eval_step: ~p\n", [P]),
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
-%%  io:format("step_after: ~p\n", [Es]),
   case Label of
     tau ->
       P1 = P#proc{

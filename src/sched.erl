@@ -21,7 +21,7 @@ select_opt(Sem, System, ?SCHED_PRIO_RANDOM) ->
 select_rand(Opts) ->
    case Opts of
       [] -> none;
-      _ -> 
+      _ ->
       RandIdx = rand:uniform(length(Opts)),
       lists:nth(RandIdx, Opts)
    end.

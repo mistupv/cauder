@@ -7,15 +7,15 @@
 -export([fundef_lookup/3, fundef_rename/1,
          temp_variable/1, is_temp_variable_name/1, fresh_time/0, pid_exists/2,
          select_proc/2, select_msg/2,
-         select_proc_with_time/2, select_proc_with_send/2,
-         select_proc_with_spawn/2, select_proc_with_rec/2,
-         select_proc_with_var/2,
+         find_proc_with_time/2, find_proc_with_send/2,
+         find_proc_with_spawn/2, find_proc_with_rec/2,
+         find_proc_with_var/2,
          merge_env/2,
          stringToMFA/1, stringToArgs/1,
          filter_options/2, filter_procs_opts/1,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
-         gen_log_send/4, gen_log_spawn/2, empty_log/1, must_focus_log/1,
+         gen_log_send/4, gen_log_spawn/2, clear_log/1, must_focus_log/1,
          extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0, parse_file/1]).
 
 -include("cauder.hrl").
@@ -156,58 +156,66 @@ select_msg(Messages, Time) ->
   {Message, RestMessages}.
 
 
-%%--------------------------------------------------------------------
-%% @doc Returns the process that contains a message with id Time
-%% from Procs
-%% @end
-%%--------------------------------------------------------------------
+%% =====================================================================
+%% @doc Returns the process that contains a message with id `Time`
 
--spec select_proc_with_time([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
+-spec find_proc_with_time([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
 
-select_proc_with_time(Procs, Time) ->
+find_proc_with_time(Procs, Time) ->
   CheckTime = fun({_, MsgTime}) -> MsgTime == Time end,
   CheckProc = fun(#proc{mail = Mail}) -> lists:any(CheckTime, Mail) end,
   lists:search(CheckProc, Procs).
 
-%%--------------------------------------------------------------------
-%% @doc Returns the processes that contain a send item in history
-%% with time Time
-%% @end
-%%--------------------------------------------------------------------
 
--spec select_proc_with_send([cauder_types:process()], non_neg_integer()) -> [cauder_types:process()].
+%% =====================================================================
+%% @doc Returns the processes that contain a send item in history with
+%% time `Time`
 
-select_proc_with_send(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> has_send(Hist, Time) end, Procs).
+-spec find_proc_with_send([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
 
-%%--------------------------------------------------------------------
-%% @doc Returns the processes that contain a spawn item in history
-%% with pid Pid
-%% @end
-%%--------------------------------------------------------------------
+find_proc_with_send(Procs, Time) ->
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Procs) of
+    [Proc | _] -> {value, Proc};
+    [] -> false
+  end.
 
--spec select_proc_with_spawn([cauder_types:process()], pos_integer()) -> [cauder_types:process()].
 
-select_proc_with_spawn(Procs, Pid) -> lists:filter(fun(#proc{hist = Hist}) -> has_spawn(Hist, Pid) end, Procs).
+%% =====================================================================
+%% @doc Returns the processes that contain a spawn item in history with
+%% pid `Pid`
 
-%%--------------------------------------------------------------------
-%% @doc Returns the processes that contain a spawn item in history
-%% with pid Pid
-%% @end
-%%--------------------------------------------------------------------
+-spec find_proc_with_spawn([cauder_types:process()], pos_integer()) -> {value, cauder_types:process()} | false.
 
--spec select_proc_with_rec([cauder_types:process()], non_neg_integer()) -> [cauder_types:process()].
+find_proc_with_spawn(Procs, Pid) ->
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_spawn(H, Pid) end, Procs) of
+    [Proc | _] -> {value, Proc};
+    [] -> false
+  end.
 
-select_proc_with_rec(Procs, Time) -> lists:filter(fun(#proc{hist = Hist}) -> has_rec(Hist, Time) end, Procs).
 
-%%--------------------------------------------------------------------
-%% @doc Returns the processes that contain a binding for Var in
-%% its environment Env
-%% @end
-%%--------------------------------------------------------------------
+%% =====================================================================
+%% @doc Returns the processes that contain a rec item in history with
+%% time `Time`
 
--spec select_proc_with_var([cauder_types:process()], cauder_types:binding()) -> [cauder_types:process()].
+-spec find_proc_with_rec([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
 
-select_proc_with_var(Procs, Var) -> lists:filter(fun(#proc{env = Env}) -> has_var(Env, Var) end, Procs).
+find_proc_with_rec(Procs, Time) ->
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_rec(H, Time) end, Procs) of
+    [Proc | _] -> {value, Proc};
+    [] -> false
+  end.
+
+%% =====================================================================
+%% @doc Returns the process that contain a binding for Var in its
+%% environment
+
+-spec find_proc_with_var([cauder_types:process()], atom()) -> {value, cauder_types:process()} | false.
+
+find_proc_with_var(Procs, Name) ->
+  case lists:dropwhile(fun(#proc{env = Bs}) -> not has_var(Bs, Name) end, Procs) of
+    [Proc | _] -> {value, Proc};
+    [] -> false
+  end.
 
 
 %%--------------------------------------------------------------------
@@ -221,7 +229,6 @@ merge_env(Env, []) -> Env;
 merge_env(Env, [{Name, Value} | RestBindings]) ->
   NewEnv = erl_eval:add_binding(Name, Value, Env),
   merge_env(NewEnv, RestBindings).
-
 
 
 %%--------------------------------------------------------------------
@@ -337,11 +344,8 @@ has_rec([], _)                                    -> false;
 has_rec([{rec, _, _, _, {_, Time}, _} | _], Time) -> true;
 has_rec([_ | RestHist], Time)                     -> has_rec(RestHist, Time).
 
-has_var(Env, Var) ->
-  case proplists:get_value(Var, Env) of
-    undefined -> false;
-    _ -> true
-  end.
+has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
+
 
 fresh_variable_name(Name) ->
   Number = fresh_variable_number(),
@@ -364,7 +368,7 @@ gen_log_spawn(_Pid, OtherPid) ->
   % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
   [["Roll spawn of ", pretty_print:pid(OtherPid)]].
 
-empty_log(System) -> System#sys{roll = []}.
+clear_log(System) -> System#sys{roll = []}.
 
 must_focus_log(System) ->
   Trace = System#sys.roll,
