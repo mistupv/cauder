@@ -1,7 +1,7 @@
 -module(cauder_eval).
 
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2, binding/2]).
--export([match_rec/3]).
+-export([match_rec/4]).
 
 -include("cauder.hrl").
 
@@ -359,35 +359,26 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
 
 
--spec match_rec(Clauses, Mail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+-spec match_rec(Clauses, Environment, Log, Mail) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
-  Mail :: [cauder_types:process_message()],
   Environment :: cauder_types:environment(),
+  Log :: cauder_types:log(),
+  Mail :: [cauder_types:message()],
   NewEnvironment :: cauder_types:environment(),
   MatchedBranch :: [cauder_types:abstract_expr()],
-  MatchedMessage :: cauder_types:process_message(),
-  RestMessages :: [cauder_types:process_message()].
+  MatchedMessage :: cauder_types:message(),
+  RestMessages :: [cauder_types:message()].
 
-match_rec(Cs, Mail, Bs) -> match_rec(Cs, Mail, [], Bs).
-
-
--spec match_rec(Clauses, RemainingMail, CheckedMail, Environment) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
-  Clauses :: cauder_types:af_clause_seq(),
-  RemainingMail :: [cauder_types:process_message()],
-  CheckedMail :: [cauder_types:process_message()],
-  Environment :: cauder_types:environment(),
-  NewEnvironment :: cauder_types:environment(),
-  MatchedBranch :: [cauder_types:abstract_expr()],
-  MatchedMessage :: cauder_types:process_message(),
-  RestMessages :: [cauder_types:process_message()].
-
-match_rec(_, [], _, _) -> nomatch;
-match_rec(Cs, [M | Ms0], Ms1, Bs0) ->
-  {Val, _Time} = M,
-  case match_clause(Bs0, Cs, [abstract(Val)]) of
-    {match, Bs, Body} -> {Bs, Body, M, lists:reverse(Ms1, Ms0)};
-    nomatch -> match_rec(Cs, Ms0, [M | Ms1], Bs0)
-  end.
+match_rec(Cs, Bs0, [{'receive', Stamp} | _], Mail) ->
+  case utils:check_msg(Mail, Stamp) of
+    none -> nomatch;
+    Msg ->
+      case match_clause(Bs0, Cs, [abstract(Msg#msg.val)]) of
+        {match, Bs, Body} -> {Bs, Body, Msg, lists:delete(Msg, Mail)};
+        nomatch -> nomatch
+      end
+  end;
+match_rec(_, _, _, _) -> nomatch.
 
 
 -spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->

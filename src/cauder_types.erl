@@ -3,7 +3,7 @@
 -include("cauder.hrl").
 
 -export_type([system/0, process/0, message/0, trace/0, option/0]).
--export_type([history/0, history_entry/0, environment/0, binding/0, stack/0, process_message/0]).
+-export_type([log/0, log_entry/0, history/0, history_entry/0, stack/0, stack_entry/0, environment/0, binding/0]).
 -export_type([print_option/0]).
 
 % Abstract format types
@@ -17,33 +17,39 @@
 -type system() :: #sys{}.
 -type process() :: #proc{}.
 -type message() :: #msg{}.
--type trace() :: #trace{}.
 -type option() :: #opt{}.
+-type trace() :: #trace{}.
+
+
+-type log() :: [log_entry()].
+-type log_entry() :: {spawn, pos_integer()}
+                   | {send, pos_integer()}
+                   | {'receive', pos_integer()}.
 
 -type history() :: [history_entry()].
 -type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
                        | {self, environment(), [abstract_expr()], stack()}
-                       | {send, environment(), [abstract_expr()], stack(), pos_integer(), process_message()}
                        | {spawn, environment(), [abstract_expr()], stack(), pos_integer()}
-                       | {rec, environment(), [abstract_expr()], stack(), process_message(), [process_message()]}.
-
--type environment() :: [binding()].
--type binding() :: {atom(), term()}.
+                       | {send, environment(), [abstract_expr()], stack(), message()}
+                       | {rec, environment(), [abstract_expr()], stack(), message()}.
 
 -type stack() :: [stack_entry()].
 -type stack_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}
                      | {atom(), [abstract_expr()], af_variable()}.
 
--type process_message() :: {term(), non_neg_integer()}. % {Value, Id}
+-type environment() :: [binding()].
+-type binding() :: {atom(), term()}.
 
 
 -type print_option() :: ?PRINT_MAIL
+                      | ?PRINT_LOG
                       | ?PRINT_HIST
+                      | ?PRINT_STACK
                       | ?PRINT_ENV
                       | ?PRINT_EXP
-                      | ?PRINT_FULL
-                      | ?COMP_OPT
-                      | ?PRINT_FULL_ENV.
+                      | ?FULL_HIST
+                      | ?FULL_ENV
+                      | ?COMP_OPT.
 
 
 %% Custom of abstract format

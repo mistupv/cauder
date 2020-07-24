@@ -7,16 +7,16 @@
 -export([fundef_lookup/3, fundef_rename/1,
          temp_variable/1, is_temp_variable_name/1, fresh_time/0, pid_exists/2,
          select_proc/2, select_msg/2,
-         find_proc_with_time/2, find_proc_with_send/2,
+         find_proc_with_send/2,
          find_proc_with_spawn/2, find_proc_with_rec/2,
          find_proc_with_var/2,
          merge_env/2,
          stringToMFA/1, stringToArgs/1,
-         filter_options/2, filter_procs_opts/1,
+         filter_options/2,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
-         gen_log_send/4, gen_log_spawn/2, clear_log/1, must_focus_log/1,
-         extract_replay_data/1, extract_pid_log_data/2, get_mod_name/1, fresh_pid/0, parse_file/1]).
+         gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1,
+         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2]).
 
 -include("cauder.hrl").
 
@@ -37,7 +37,7 @@ fundef_lookup(M, F, A) ->
   case cauder:ref_match_object({{M, F, A, '_'}, '_'}) of
     [{{M, F, A, Exported}, Cs}] -> {Exported, Cs};
     [] ->
-      Dir = cauder:ref_lookup(?LAST_PATH),
+      Dir = cauder:ref_lookup(?MODULE_PATH),
       File = filename:join(Dir, atom_to_list(M) ++ ".erl"),
       case filelib:is_regular(File) of
         true ->
@@ -151,44 +151,75 @@ select_proc(Procs, Pid) ->
 
 -spec select_msg([cauder_types:message()], non_neg_integer()) -> {cauder_types:message(), [cauder_types:message()]}.
 
-select_msg(Messages, Time) ->
-  {[Message | []], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Messages),
+select_msg(Mail, Time) ->
+  io:format("select_msg\n\tMail: ~p\n\tTime: ~p\n",[Mail, Time]),
+  {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Mail),
   {Message, RestMessages}.
 
 
-%% =====================================================================
-%% @doc Returns the process that contains a message with id `Time`
+-spec check_msg([cauder_types:message()], pos_integer()) -> cauder_types:message() | none.
 
--spec find_proc_with_time([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
-
-find_proc_with_time(Procs, Time) ->
-  CheckTime = fun({_, MsgTime}) -> MsgTime == Time end,
-  CheckProc = fun(#proc{mail = Mail}) -> lists:any(CheckTime, Mail) end,
-  lists:search(CheckProc, Procs).
-
-
-%% =====================================================================
-%% @doc Returns the processes that contain a send item in history with
-%% time `Time`
-
--spec find_proc_with_send([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
-
-find_proc_with_send(Procs, Time) ->
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Procs) of
-    [Proc | _] -> {value, Proc};
-    [] -> false
+check_msg(Msgs, Time) ->
+  MsgsT = [M || M <- Msgs, M#msg.time == Time],
+  case MsgsT of
+    [] -> none;
+    [Msg] -> Msg
   end.
+
+
+-spec check_log([cauder_types:log_entry()]) -> cauder_types:log_entry() | none.
+
+check_log([])         -> none;
+check_log([Item | _]) -> Item.
+
+
+-spec find_item([cauder_types:process()], {spawn | send | 'receive', pos_integer()}) -> [pos_integer()].
+
+find_item(Procs, Item) ->
+  lists:filtermap(
+    fun(#proc{pid = Pid, log = Log}) ->
+      case lists:member(Item, Log) of
+        true -> {true, Pid};
+        false -> false
+      end
+    end, Procs).
+
+
+-spec find_spawn_parent([cauder_types:process()], pos_integer()) -> [pos_integer()].
+
+find_spawn_parent(Procs, Pid) -> find_item(Procs, {spawn, Pid}).
+
+-spec find_msg_sender([cauder_types:process()], pos_integer()) -> [pos_integer()].
+
+find_msg_sender(Procs, Stamp) -> find_item(Procs, {send, Stamp}).
+
+-spec find_msg_receiver([cauder_types:process()], pos_integer()) -> [pos_integer()].
+
+find_msg_receiver(Procs, Stamp) -> find_item(Procs, {'receive', Stamp}).
 
 
 %% =====================================================================
 %% @doc Returns the processes that contain a spawn item in history with
 %% pid `Pid`
 
--spec find_proc_with_spawn([cauder_types:process()], pos_integer()) -> {value, cauder_types:process()} | false.
+-spec find_proc_with_spawn([cauder_types:process()], pos_integer()) -> cauder_types:process() | false.
 
 find_proc_with_spawn(Procs, Pid) ->
   case lists:dropwhile(fun(#proc{hist = H}) -> not has_spawn(H, Pid) end, Procs) of
-    [Proc | _] -> {value, Proc};
+    [Proc | _] -> Proc;
+    [] -> false
+  end.
+
+
+%% =====================================================================
+%% @doc Returns the processes that contain a send item in history with
+%% time `Time`
+
+-spec find_proc_with_send([cauder_types:process()], non_neg_integer()) -> cauder_types:process() | false.
+
+find_proc_with_send(Procs, Time) ->
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Procs) of
+    [Proc | _] -> Proc;
     [] -> false
   end.
 
@@ -197,11 +228,11 @@ find_proc_with_spawn(Procs, Pid) ->
 %% @doc Returns the processes that contain a rec item in history with
 %% time `Time`
 
--spec find_proc_with_rec([cauder_types:process()], non_neg_integer()) -> {value, cauder_types:process()} | false.
+-spec find_proc_with_rec([cauder_types:process()], non_neg_integer()) -> cauder_types:process() | false.
 
 find_proc_with_rec(Procs, Time) ->
   case lists:dropwhile(fun(#proc{hist = H}) -> not has_rec(H, Time) end, Procs) of
-    [Proc | _] -> {value, Proc};
+    [Proc | _] -> Proc;
     [] -> false
   end.
 
@@ -209,19 +240,18 @@ find_proc_with_rec(Procs, Time) ->
 %% @doc Returns the process that contain a binding for Var in its
 %% environment
 
--spec find_proc_with_var([cauder_types:process()], atom()) -> {value, cauder_types:process()} | false.
+-spec find_proc_with_var([cauder_types:process()], atom()) -> cauder_types:process() | false.
 
 find_proc_with_var(Procs, Name) ->
   case lists:dropwhile(fun(#proc{env = Bs}) -> not has_var(Bs, Name) end, Procs) of
-    [Proc | _] -> {value, Proc};
+    [Proc | _] -> Proc;
     [] -> false
   end.
 
 
 %%--------------------------------------------------------------------
 %% @doc Update the environment Env with multiple bindings
-%% @end
-%%--------------------------------------------------------------------
+
 
 -spec merge_env(cauder_types:environment(), cauder_types:environment()) -> cauder_types:environment().
 
@@ -233,8 +263,7 @@ merge_env(Env, [{Name, Value} | RestBindings]) ->
 
 %%--------------------------------------------------------------------
 %% @doc Converts a String into MFA tuple
-%% @end
-%%--------------------------------------------------------------------
+
 -spec stringToMFA(String) -> {Module, Function, Arity} when
   String :: string(),
   Module :: atom(),
@@ -248,8 +277,7 @@ stringToMFA(String) ->
 %%--------------------------------------------------------------------
 %% @doc Parses a string Str that represents a list of arguments
 %% and transforms these arguments to their equivalent in Abstract Syntax
-%% @end
-%%--------------------------------------------------------------------
+
 -spec stringToArgs(String) -> Args when
   String :: string(),
   Args :: [erl_parse:abstract_expr()].
@@ -263,68 +291,48 @@ stringToArgs(Str) ->
 
 %%--------------------------------------------------------------------
 %% @doc Filters the options with identifier Id
-%% @end
-%%--------------------------------------------------------------------
-filter_options([], _) -> [];
-filter_options([CurOpt | RestOpts], Id) ->
-  #opt{id = OptId} = CurOpt,
-  case (OptId == Id) of
-    true -> [CurOpt | filter_options(RestOpts, Id)];
-    false -> filter_options(RestOpts, Id)
-  end.
 
-%%--------------------------------------------------------------------
-%% @doc Filters the process options from a list of Options
-%% @end
-%%--------------------------------------------------------------------
-filter_procs_opts([]) -> [];
-filter_procs_opts([CurOpt | RestOpts]) ->
-  #opt{type = Type} = CurOpt,
-  case Type of
-    ?TYPE_MSG -> filter_procs_opts(RestOpts);
-    ?TYPE_PROC -> [CurOpt | filter_procs_opts(RestOpts)]
-  end.
+filter_options([Opt | Opts], Id) when Opt#opt.id =:= Id -> [Opt | filter_options(Opts, Id)];
+filter_options([_ | Opts], Id)                          -> filter_options(Opts, Id);
+filter_options([], _)                                   -> [].
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns true if a list of Options has a forward option,
 %% and false otherwise
-%% @end
-%%--------------------------------------------------------------------
-has_fwd([])                                 -> false;
-has_fwd([#opt{sem = ?FWD_SEM} | _RestOpts]) -> true;
-has_fwd([_CurOpt | RestOpts])               -> has_fwd(RestOpts).
+
+has_fwd([])                         -> false;
+has_fwd([#opt{sem = ?FWD_SEM} | _]) -> true;
+has_fwd([_ | Opts])                 -> has_fwd(Opts).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns true if a list of Options has a backward option,
 %% and false otherwise
-%% @end
-%%--------------------------------------------------------------------
-has_bwd([])                                 -> false;
-has_bwd([#opt{sem = ?BWD_SEM} | _RestOpts]) -> true;
-has_bwd([_CurOpt | RestOpts])               -> has_bwd(RestOpts).
+
+has_bwd([])                         -> false;
+has_bwd([#opt{sem = ?BWD_SEM} | _]) -> true;
+has_bwd([_ | Opts])                 -> has_bwd(Opts).
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns true if a list of Options has a normalizing option,
 %% and false otherwise
-%% @end
-%%--------------------------------------------------------------------
-has_norm([])                                                    -> false;
-has_norm([#opt{sem = ?FWD_SEM, rule = ?RULE_SCHED} | RestOpts]) -> has_norm(RestOpts);
-has_norm([#opt{sem = ?FWD_SEM} | _RestOpts])                    -> true;
-has_norm([_CurOpt | RestOpts])                                  -> has_norm(RestOpts).
+
+has_norm(Opts) -> has_fwd(Opts). % TODO Remove?
+
 
 %%--------------------------------------------------------------------
 %% @doc Returns true if Queue\Msg == OtherQueue, and false otherwise
-%% @end
-%%--------------------------------------------------------------------
+
 is_queue_minus_msg(Queue, Msg, OtherQueue) ->
   ThisQueue = lists:delete(Msg, Queue),
   ThisQueue == OtherQueue.
 
+
 %%--------------------------------------------------------------------
 %% @doc Retrieves the topmost item in a history
-%% @end
-%%--------------------------------------------------------------------
+
 topmost_rec([]) -> no_rec;
 topmost_rec([CurHist | RestHist]) ->
   case CurHist of
@@ -332,17 +340,18 @@ topmost_rec([CurHist | RestHist]) ->
     _Other -> topmost_rec(RestHist)
   end.
 
-has_send([], _)                                     -> false;
-has_send([{send, _, _, _, _, {_, Time}} | _], Time) -> true;
-has_send([_ | RestHist], Time)                      -> has_send(RestHist, Time).
 
-has_spawn([], _)                            -> false;
-has_spawn([{spawn, _, _, _, Pid} | _], Pid) -> true;
-has_spawn([_ | RestHist], Pid)              -> has_spawn(RestHist, Pid).
+has_spawn([], _)                                             -> false;
+has_spawn([{spawn, _Bs, _Es, _Stk, SpawnPid} | _], SpawnPid) -> true;
+has_spawn([_ | RestHist], Pid)                               -> has_spawn(RestHist, Pid).
 
-has_rec([], _)                                    -> false;
-has_rec([{rec, _, _, _, {_, Time}, _} | _], Time) -> true;
-has_rec([_ | RestHist], Time)                     -> has_rec(RestHist, Time).
+has_send([], _)                                                 -> false;
+has_send([{send, _Bs, _Es, _Stk, #msg{time = Time}} | _], Time) -> true;
+has_send([_ | RestHist], Time)                                  -> has_send(RestHist, Time).
+
+has_rec([], _)                                                -> false;
+has_rec([{rec, _Bs, _Es, _Stk, #msg{time = Time}} | _], Time) -> true;
+has_rec([_ | RestHist], Time)                                 -> has_rec(RestHist, Time).
 
 has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
 
@@ -361,12 +370,13 @@ last_msg_rest(Mail) ->
   RestMail = lists:droplast(Mail),
   {LastMsg, RestMail}.
 
+
+gen_log_spawn(OtherPid) ->
+  [["Roll spawn of ", pretty_print:pid(OtherPid)]].
+
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
   [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:to_string(MsgValue), " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
 
-gen_log_spawn(_Pid, OtherPid) ->
-  % [["Roll SPAWN of ",pp_pid(OtherPid)," from ",pp_pid(Pid)]].
-  [["Roll spawn of ", pretty_print:pid(OtherPid)]].
 
 clear_log(System) -> System#sys{roll = []}.
 
@@ -377,86 +387,98 @@ must_focus_log(System) ->
     _ -> true
   end.
 
-parse_replay_info(Line) ->
-  Words = string:split(Line, " "),
-  case hd(Words) of
-    "call" ->
-      {call, lists:nth(2, Words)};
-    "main_pid" ->
-      {pid, lists:nth(2, Words)};
-    _ ->
-      none
-  end.
 
-add_replay_info({pid, Pid}, Data) -> Data#replay{main_pid = Pid};
-add_replay_info({call, Call}, Data) ->
-  NCall = lists:flatten(string:replace(Call, "\n", "")),
-  ECall = lists:flatten(string:replace(NCall, "\"", "", all)),
-  Data#replay{call = ECall};
-add_replay_info(_, Data)          -> Data.
+-spec load_replay_data(file:filename()) -> ok.
 
-read_replay_data(File, Data) ->
+load_replay_data(Path) ->
+  ResultFile = filename:join(Path, "trace_result.log"),
+  {ok, FileHandler} = file:open(ResultFile, [read]),
+  [CallLine, PidLine, _Result] = get_all_lines(FileHandler),
+  file:close(FileHandler),
+  Call = parse_call_line(CallLine),
+  Pid = parse_pid_line(PidLine),
+  Data = #replay{log_path = Path, call = Call, main_pid = Pid},
+  put(replay_data, Data),
+  ok.
+
+
+-spec get_all_lines(file:io_device()) -> [string()].
+
+get_all_lines(File) ->
   case file:read_line(File) of
-    eof ->
-      Data;
-    {ok, Line} ->
-      ReplayInfo = parse_replay_info(Line),
-      NData = add_replay_info(ReplayInfo, Data),
-      read_replay_data(File, NData)
+    eof -> [];
+    {ok, Line} -> [string:chomp(Line) | get_all_lines(File)]
   end.
 
-extract_replay_data(Path) ->
-  ReplayData = #replay{log_path = Path},
-  ResPath = Path ++ "/trace_result.log",
-  {ok, FileHandler} = file:open(ResPath, [read]),
-  NReplayData = read_replay_data(FileHandler, ReplayData),
-  put(replay_data, NReplayData),
-  % io:format("~p~n", [NReplayData]),
-  file:close(FileHandler).
 
-parse_proc_data(Line) -> Line.
+-spec parse_call_line(string()) -> {atom(), atom(), [cauder_types:abstract_expr()]}.
 
-read_replay_proc_data(File, Data) ->
-  case file:read_line(File) of
-    eof ->
-      lists:reverse(Data);
-    {ok, Line} ->
-      ProcData = parse_proc_data(Line),
-      NData = [ProcData | Data],
-      read_replay_proc_data(File, NData)
+parse_call_line("call " ++ Str0) ->
+  Str1 = string:replace(Str0, "\"", "", leading),
+  Str2 = string:replace(Str1, "\"", "", trailing),
+  Str3 = lists:flatten(Str2),
+  parse_call(Str3 ++ ".").
+
+
+-spec parse_pid_line(string()) -> pos_integer().
+
+parse_pid_line("main_pid " ++ Pid) -> list_to_integer(Pid).
+
+
+-spec parse_call(string()) -> {atom(), atom(), [cauder_types:abstract_expr()]}.
+
+parse_call(Func) ->
+  case erl_scan:string(Func) of
+    {ok, Tokens, _} ->
+      case erl_parse:parse_exprs(Tokens) of
+        {ok, Exprs} ->
+          [{remote_call, _, M, F, As}] = cauder_syntax:expr_list(Exprs),
+          {M, F, As};
+        _Err -> error({parse_error, Func, Tokens})
+      end;
+    _Err -> error({parse_error, Func})
   end.
 
-extract_pid_log_data(Path, Pid) ->
-  PidPath = Path ++ "/trace_" ++ Pid ++ ".log",
-  {ok, FileHandler} = file:open(PidPath, [read]),
-  ReplayProcData = read_replay_proc_data(FileHandler, []),
+
+-spec get_log_data(file:filename(), pos_integer()) -> cauder_types:log().
+
+get_log_data(Path, Pid) ->
+  PidFile = filename:join(Path, "trace_" ++ integer_to_list(Pid) ++ ".log"),
+  {ok, FileHandler} = file:open(PidFile, [read]),
+  ReplayProcData = read_replay_proc_data(FileHandler, Pid),
   file:close(FileHandler),
   ReplayProcData.
 
-get_mod_name(Call) ->
-  AExpr =
-  case is_list(Call) of
-    true ->
-      hd(parse_expr(Call ++ "."));
-    false ->
-      Call
-  end,
-  {call, _, {remote, _, {atom, _, ModName}, {atom, _, FunName}}, Args} = AExpr,
-  {ModName, FunName, Args}.
 
-parse_expr(Func) ->
-  case erl_scan:string(Func) of
-    {ok, Toks, _} ->
-      case erl_parse:parse_exprs(Toks) of
-        {ok, _Term} ->
-          _Term;
-        _Err ->
-          {error, parse_error}
-      end;
-    _Err ->
-      {error, parse_error}
+-spec read_replay_proc_data(file:io_device(), pos_integer()) -> cauder_types:log().
+
+read_replay_proc_data(FileHandler, Pid) -> read_replay_proc_data(FileHandler, Pid, []).
+
+
+-spec read_replay_proc_data(file:io_device(), pos_integer(), cauder_types:log()) -> cauder_types:log().
+
+read_replay_proc_data(FileHandler, Pid, Data) ->
+  case file:read_line(FileHandler) of
+    eof -> lists:reverse(Data);
+    {ok, Line} ->
+      Entry = parse_log_entry(string:chomp(Line), Pid),
+      read_replay_proc_data(FileHandler, Pid, [Entry | Data])
   end.
 
+
+-spec parse_log_entry(string(), pos_integer()) -> cauder_types:log_entry().
+
+parse_log_entry(String, Pid) ->
+  case erl_scan:string(String ++ ".") of
+    {ok, Tokens, _} ->
+      case erl_parse:parse_exprs(Tokens) of
+        {ok, Exprs} ->
+          [{value, _, {Pid, Action, Id}}] = cauder_syntax:expr_list(Exprs),
+          {Action, Id};
+        _Err -> error({parse_error, String, Tokens})
+      end;
+    _Err -> error({parse_error, String})
+  end.
 
 
 -spec fresh_pid() -> pos_integer().
@@ -466,24 +488,3 @@ fresh_pid() ->
   cauder:ref_add(?FRESH_PID, Pid + 1),
   Pid.
 
-
-parse_file(File) ->
-  case epp:parse_file(File, [], []) of
-    {ok, Forms} ->
-      % Extract attributes, but removing the 'file' attribute so it doesn't appear in the 'Code' tab
-      Attributes = [Form || Form = {attribute, _, Name, _} <- Forms, Name /= file],
-      % Extract the name of the current module
-      {attribute, _, module, Module} = lists:keyfind(module, 3, Attributes),
-      % Extract function definitions
-      Functions = [Form || Form = {function, _, _, _, _} <- Forms],
-      % Extract comments from the file
-      Comments = erl_comment_scan:file(File),
-      % Generate forms that will appear in the 'Code' tab
-      FinalForms = erl_recomment:recomment_forms(Attributes ++ Functions, Comments),
-
-      % TODO erl_expand_records:module/2
-
-      {ok, Module, Functions, FinalForms};
-    Error ->
-      Error
-  end.

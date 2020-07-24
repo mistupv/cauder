@@ -3,74 +3,168 @@
   running = false :: boolean()
 }).
 
+-define(FRAME, 500).
+
 -define(FRAME_SIZE_INIT, {800, 600}).
--define(FRAME_SIZE_MIN,  {800, 600}).
--define(FRAME_SIZE_MAX,  {800, 600}).
+-define(FRAME_SIZE_MIN, {800, 600}).
+-define(FRAME_SIZE_MAX, {800, 600}).
 
--define(FONT_SIZES, [8, 10, 12, 13, 14, 16, 20, 24, 32, 36, 42, 48]).
+-define(DEFAULT_FONT_SIZE, 9).
+-define(FONT_SIZES, [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]).
 
--define(ABOUT,       ?wxID_ABOUT).
--define(EXIT,        ?wxID_EXIT).
--define(OPEN,        ?wxID_OPEN).
--define(ZOOM_IN,     100).
--define(ZOOM_OUT,    101).
--define(TOGGLE_MAIL, 102).
--define(TOGGLE_HIST, 103).
--define(TOGGLE_ENV,  104).
--define(TOGGLE_EXP,  105).
--define(RADIO_CONC,  106).
--define(RADIO_FULL,  107).
--define(TOGGLE_COMP, 108).
--define(RADIO_RAND,  109).
--define(RADIO_PRIO,  110).
--define(RADIO_REL_ENV,  111).
--define(RADIO_FULL_ENV, 112).
--define(REPLAY,      113).
+%% =====================================================================
+
+%% ========== Menu Bar ========== %%
+
+%% File Menu
+
+-define(OPEN,             ?wxID_OPEN).
+-define(REPLAY,           1000).
+-define(EXIT,             ?wxID_EXIT).
+
+%% View Menu
+
+-define(MENU_VIEW,        1100).
+
+-define(ZOOM_IN,          ?wxID_ZOOM_IN).
+-define(ZOOM_OUT,         ?wxID_ZOOM_OUT).
+-define(ZOOM_100,         ?wxID_ZOOM_100).
+
+-define(TOGGLE_MAIL,      1110).
+-define(TOGGLE_LOG,       1111).
+-define(TOGGLE_HIST,      1112).
+-define(TOGGLE_STACK,     1113).
+-define(TOGGLE_ENV,       1114).
+-define(TOGGLE_EXP,       1115).
+
+-define(RADIO_CONC_HIST,  1120).
+-define(RADIO_FULL_HIST,  1121).
+
+-define(RADIO_REL_ENV,    1130).
+-define(RADIO_FULL_ENV,   1131).
+
+%% Compiler Menu
+
+-define(MENU_COMP,        1200).
+
+-define(TOGGLE_COMP,      1201).
+
+%% Help Menu
+
+-define(ABOUT,            ?wxID_ABOUT).
 
 
--define(START_BUTTON,        400).
+%% ==================== Left notebook ==================== %%
 
--define(FORW_INT_BUTTON,     410).
--define(FORW_SCH_BUTTON,     411).
--define(BACK_INT_BUTTON,     412).
--define(BACK_SCH_BUTTON,     413).
+-define(LEFT_NOTEBOOK,    2000).
 
--define(FORWARD_BUTTON,    422).
--define(BACKWARD_BUTTON,   423).
--define(NORMALIZE_BUTTON,  424).
--define(ROLL_BUTTON,       425).
+%% ========== Code Panel ========== %%
 
--define(ROLL_SEND_BUTTON,  426).
--define(ROLL_SPAWN_BUTTON, 427).
--define(ROLL_REC_BUTTON,   428).
--define(ROLL_VAR_BUTTON,   429).
+-define(CODE_TEXT,        2001).
 
--define(SYSTEM,         500).
--define(STATUS,         501).
--define(FRAME,          502).
--define(MENU_VIEW,      503).
--define(MENU_COMP,      504).
--define(MENU_SCHED,     505).
--define(INPUT_TEXT,     510).
--define(PID_TEXT,       511).
--define(STEP_TEXT,      512).
--define(STATE_TEXT,     513).
--define(CODE_TEXT,      514).
--define(ROLL_PID_TEXT,  515).
--define(ROLL_STEP_TEXT, 516).
--define(STATUS_BAR,     520).
--define(INPUT_SIZER,    530).
--define(FUN_CHOICE,     531).
--define(LEFT_NOTEBOOK,  540).
--define(RIGHT_NOTEBOOK, 541).
--define(RBOT_NOTEBOOK,  542).
--define(TRACE_TEXT,     550).
--define(ROLL_LOG_TEXT,  551).
+-define(FUN_SIZER,        2002).
+-define(FUN_CHOICE,       2003).
+-define(ARGS_TEXT,        2004).
+-define(START_BUTTON,     2005).
 
--define(ROLL_SEND_ID_TEXT,  560).
--define(ROLL_SPAWN_ID_TEXT, 561).
--define(ROLL_REC_ID_TEXT,   562).
--define(ROLL_VAR_ID_TEXT,   563).
+%% ========== State Panel ========== %%
+
+-define(STATE_TEXT,       2006).
+
+
+%% ==================== Right top notebook ==================== %%
+
+-define(RIGHT_TOP_NOTEBOOK,     2100).
+
+%% ========== Manual Panel ========== %%
+
+-define(MANUAL_PID_TEXT,        2101).
+
+-define(FWD_INT_BUTTON,         2102).
+-define(BWD_INT_BUTTON,         2104).
+
+%% ========== Automatic Panel ========== %%
+
+-define(AUTO_STEP_TEXT,         2106).
+
+-define(FORWARD_BUTTON,         2107).
+-define(BACKWARD_BUTTON,        2108).
+-define(NORMALIZE_BUTTON,       2109).
+
+%% ========== Replay Panel ========== %%
+
+-define(REPLAY_PID_TEXT,        2110).
+-define(REPLAY_STEPS_TEXT,      2111).
+-define(REPLAY_SEND_ID_TEXT,    2112).
+-define(REPLAY_SPAWN_PID_TEXT,  2113).
+-define(REPLAY_REC_ID_TEXT,     2114).
+
+-define(REPLAY_BUTTON,          2115).
+-define(REPLAY_SEND_BUTTON,     2116).
+-define(REPLAY_SPAWN_BUTTON,    2117).
+-define(REPLAY_REC_BUTTON,      2118).
+
+%% ========== Rollback Panel ========== %%
+
+-define(ROLL_PID_TEXT,          2119).
+-define(ROLL_STEP_TEXT,         2120).
+-define(ROLL_SEND_ID_TEXT,      2121).
+-define(ROLL_SPAWN_PID_TEXT,    2122).
+-define(ROLL_REC_ID_TEXT,       2123).
+-define(ROLL_VAR_NAME_TEXT,     2124).
+
+-define(ROLL_BUTTON,            2125).
+-define(ROLL_SEND_BUTTON,       2126).
+-define(ROLL_SPAWN_BUTTON,      2127).
+-define(ROLL_REC_BUTTON,        2128).
+-define(ROLL_VAR_BUTTON,        2129).
+
+
+%% ==================== Right bottom notebook ==================== %%
+
+-define(RIGHT_BOTTOM_NOTEBOOK,  2200).
+
+%% ========== Trace panel ========== %%
+
+-define(TRACE_TEXT,             2201).
+
+%% ========== Roll log panel ========== %%
+
+-define(ROLL_LOG_TEXT,          2202).
+
+
+%% ==================== Status bar ==================== %%
+
+-define(STATUS_BAR,             2300).
+
+
+%% =====================================================================
+
+-define(ALL_BUTTONS, [
+  ?FWD_INT_BUTTON,
+  ?BWD_INT_BUTTON,
+  ?FORWARD_BUTTON,
+  ?BACKWARD_BUTTON,
+  ?NORMALIZE_BUTTON,
+  ?REPLAY_BUTTON,
+  ?REPLAY_SEND_BUTTON,
+  ?REPLAY_SPAWN_BUTTON,
+  ?REPLAY_REC_BUTTON,
+  ?ROLL_BUTTON,
+  ?ROLL_SEND_BUTTON,
+  ?ROLL_SPAWN_BUTTON,
+  ?ROLL_REC_BUTTON,
+  ?ROLL_VAR_BUTTON
+]).
+
+
+%% =====================================================================
+
+-define(SYSTEM, 601).
+-define(STATUS, 602).
+
+
+%% =====================================================================
 
 -define(PAGEPOS_CODE,  0).
 -define(PAGEPOS_STATE, 1).
@@ -80,8 +174,6 @@
 -define(PAGEPOS_TRACE, 0).
 -define(PAGEPOS_ROLL,  1).
 
--define(NULL_LABEL, null_label).
-
 -define(INFO_TEXT, "A Causal-consistent Debugger for Erlang. More info at: https://github.com/mistupv/cauder").
 
 -define(ERROR_NUM_STEP, "The number of steps is not correct.").
@@ -90,11 +182,14 @@
 -define(HELP_OPEN_ITEM,      "Open and compile an Erlang file").
 -define(HELP_REPLAY_ITEM,    "Replay an execution from a log file").
 -define(HELP_QUIT_ITEM,      "Quit this program").
+-define(HELP_ZOOM_100_ITEM,  "Reset text font size").
 -define(HELP_ZOOM_IN_ITEM,   "Increase text font size").
 -define(HELP_ZOOM_OUT_ITEM,  "Decrease text font size").
--define(HELP_TOGGLE_MAIL,    "Show or hide process mailboxes").
--define(HELP_TOGGLE_HIST,    "Show or hide process histories").
--define(HELP_TOGGLE_ENV,     "Show or hide process environments").
+-define(HELP_TOGGLE_MAIL,    "Show or hide process mailbox").
+-define(HELP_TOGGLE_HIST,    "Show or hide process history").
+-define(HELP_TOGGLE_LOG,     "Show or hide process logs").
+-define(HELP_TOGGLE_STACK,   "Show or hide process stack").
+-define(HELP_TOGGLE_ENV,     "Show or hide process environment").
 -define(HELP_TOGGLE_EXP,     "Show or hide process expressions").
 -define(HELP_RADIO_CONC,     "Show only concurrent history").
 -define(HELP_RADIO_FULL,     "Show complete history").

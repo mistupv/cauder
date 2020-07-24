@@ -7,9 +7,17 @@
 
 -module(cauder).
 -export([start/0, load_file/1]).
--export([eval_opts/1, eval_step/2, eval_mult/3, eval_norm/1]).
--export([eval_roll/3, eval_roll_send/2, eval_roll_spawn/2, eval_roll_rec/2, eval_roll_var/2, eval_replay/0]).
+%% Manual evaluation functions
+-export([eval_opts/1, eval_step/2]).
+%% Automatic evaluation functions
+-export([eval_mult/3, eval_norm/1]).
+%% Replay evaluation functions
+-export([eval_replay/3, eval_replay_send/2, eval_replay_spawn/2, eval_replay_rec/2]).
+%% Rollback evaluation functions
+-export([eval_roll/3, eval_roll_send/2, eval_roll_spawn/2, eval_roll_rec/2, eval_roll_var/2]).
+%% ETS functions
 -export([start_refs/0, stop_refs/0, reset_fresh_refs/1, ref_add/2, ref_lookup/1, ref_match_object/1]).
+
 
 -include("cauder.hrl").
 
@@ -37,7 +45,10 @@ load_file(File) ->
   lists:map(fun({{M, F, A, _}, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, Defs1).
 
 
-%% =====================================================================
+%% ==================== Manual evaluation ==================== %%
+
+
+%% ---------------------------------------------------------------------
 %% @doc Returns all the evaluation options for a given System
 
 -spec eval_opts(cauder_types:system()) -> [cauder_types:option()].
@@ -45,16 +56,18 @@ load_file(File) ->
 eval_opts(Sys) -> fwd_sem:eval_opts(Sys) ++ bwd_sem:eval_opts(Sys).
 
 
-%% =====================================================================
+%% ---------------------------------------------------------------------
 %% @doc Performs a single evaluation step in the given System
 
 -spec eval_step(cauder_types:system(), cauder_types:option()) -> cauder_types:system().
 
-eval_step(Sys, #opt{sem = Sem, type = ?TYPE_MSG, id = Id})  -> Sem:eval_sched(Sys, Id);
-eval_step(Sys, #opt{sem = Sem, type = ?TYPE_PROC, id = Id}) -> Sem:eval_step(Sys, Id).
+eval_step(Sys, #opt{sem = Sem, id = Id}) -> Sem:eval_step(Sys, Id).
 
 
-%% =====================================================================
+%% ==================== Automatic evaluation ==================== %%
+
+
+%% ---------------------------------------------------------------------
 %% @doc Performs Steps evaluation steps in the given System in the
 %% specified Direction
 
@@ -72,15 +85,15 @@ eval_mult_1(Sys, Dir, Steps, StepsDone) ->
     ?MULT_FWD -> fwd_sem;
     ?MULT_BWD -> bwd_sem
   end,
-  case sched:select_opt(Sem, Sys) of
-    none -> {Sys, StepsDone};
-    Opt ->
+  case Sem:eval_opts(Sys) of
+    [] -> {Sys, StepsDone};
+    [Opt | _] ->
       Sys1 = eval_step(Sys, Opt),
       eval_mult_1(Sys1, Dir, Steps, StepsDone + 1)
   end.
 
 
-%% =====================================================================
+%% ---------------------------------------------------------------------
 %% @doc Performs evaluation steps (except for sched steps) in System
 %% until the system becomes "normalized" (more info on the paper)
 
@@ -92,7 +105,7 @@ eval_norm(Sys) -> eval_norm_1(Sys, 0).
 -spec eval_norm_1(cauder_types:system(), non_neg_integer()) -> {cauder_types:system(), non_neg_integer()}.
 
 eval_norm_1(Sys, Steps) ->
-  case fwd_sem:eval_procs_opts(Sys) of
+  case fwd_sem:eval_opts(Sys) of
     [] -> {Sys, Steps};
     Opts ->
       Idx = rand:uniform(length(Opts)),
@@ -100,6 +113,70 @@ eval_norm_1(Sys, Steps) ->
       Sys1 = eval_step(Sys, Opt),
       eval_norm_1(Sys1, Steps + 1)
   end.
+
+
+%% ==================== Replay evaluation ==================== %%
+
+
+-spec eval_replay(System, Pid, Steps) -> {NewSystem, StepsDone} when
+  System :: cauder_types:system(),
+  Pid :: pos_integer(),
+  Steps :: pos_integer(),
+  NewSystem :: cauder_types:system(),
+  StepsDone :: non_neg_integer().
+
+eval_replay(Sys, Pid, Steps) -> eval_replay_1(Sys, Pid, Steps, 0).
+
+
+-spec eval_replay_1(cauder_types:system(), pos_integer(), pos_integer(), non_neg_integer()) -> {cauder_types:system(), non_neg_integer()}.
+
+eval_replay_1(Sys0, _Pid, Steps, Steps) -> {Sys0, Steps};
+eval_replay_1(Sys0, Pid, Steps, StepsDone) ->
+  case replay:can_replay(Sys0, Pid) of
+    false -> {Sys0, StepsDone};
+    true ->
+      Sys1 = replay:replay_step(Sys0, Pid),
+      eval_replay_1(Sys1, Pid, Steps, StepsDone + 1)
+  end.
+
+
+-spec eval_replay_spawn(System, SpawnPid) -> NewSystem when
+  System :: cauder_types:system(),
+  SpawnPid :: pos_integer(),
+  NewSystem :: cauder_types:system().
+
+eval_replay_spawn(Sys, SpawnPid) ->
+  case replay:can_replay_spawn(Sys, SpawnPid) of
+    false -> Sys;
+    true -> replay:replay_spawn(Sys, SpawnPid)
+  end.
+
+
+-spec eval_replay_send(System, Time) -> NewSystem when
+  System :: cauder_types:system(),
+  Time :: pos_integer(),
+  NewSystem :: cauder_types:system().
+
+eval_replay_send(Sys, Time) ->
+  case replay:can_replay_send(Sys, Time) of
+    false -> Sys;
+    true -> replay:replay_send(Sys, Time)
+  end.
+
+
+-spec eval_replay_rec(System, Time) -> NewSystem when
+  System :: cauder_types:system(),
+  Time :: pos_integer(),
+  NewSystem :: cauder_types:system().
+
+eval_replay_rec(Sys, Time) ->
+  case replay:can_replay_rec(Sys, Time) of
+    false -> Sys;
+    true -> replay:replay_rec(Sys, Time)
+  end.
+
+
+%% ==================== Rollback evaluation ==================== %%
 
 
 -spec eval_roll(System, Pid, Steps) -> {FocusLog, NewSystem, StepsDone} when
@@ -110,8 +187,8 @@ eval_norm_1(Sys, Steps) ->
   NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-eval_roll(Sys, Pid, Steps) ->
-  Sys1 = utils:clear_log(Sys),
+eval_roll(Sys0, Pid, Steps) ->
+  Sys1 = utils:clear_log(Sys0),
   {Sys2, StepsDone} = eval_roll_1(Sys1, Pid, Steps, 0),
   FocusLog = utils:must_focus_log(Sys2),
   {FocusLog, Sys2, StepsDone}.
@@ -122,15 +199,11 @@ eval_roll(Sys, Pid, Steps) ->
 eval_roll_1(Sys0, _Pid, Steps, Steps) -> {Sys0, Steps};
 eval_roll_1(Sys0, Pid, Steps, StepsDone) ->
   case roll:can_roll(Sys0, Pid) of
+    false -> {Sys0, StepsDone};
     true ->
-      Sys1 = roll:eval_step(Sys0, Pid),
-      eval_roll_1(Sys1, Pid, Steps, StepsDone + 1);
-    false ->
-      {Sys0, StepsDone}
+      Sys1 = roll:roll_step(Sys0, Pid),
+      eval_roll_1(Sys1, Pid, Steps, StepsDone + 1)
   end.
-
-
-%% =====================================================================
 
 
 -spec eval_roll_spawn(System, SpawnPid) -> {CanRoll, FocusLog, NewSystem} when
@@ -142,13 +215,12 @@ eval_roll_1(Sys0, Pid, Steps, StepsDone) ->
 
 eval_roll_spawn(Sys0, SpawnPid) ->
   case roll:can_roll_spawn(Sys0, SpawnPid) of
+    false -> {false, false, Sys0};
     true ->
       Sys1 = utils:clear_log(Sys0),
-      Sys2 = roll:eval_roll_spawn(Sys1, SpawnPid),
+      Sys2 = roll:roll_spawn(Sys1, SpawnPid),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2};
-    false ->
-      {false, false, Sys0}
+      {true, FocusLog, Sys2}
   end.
 
 
@@ -161,13 +233,12 @@ eval_roll_spawn(Sys0, SpawnPid) ->
 
 eval_roll_send(Sys0, Time) ->
   case roll:can_roll_send(Sys0, Time) of
+    false -> {false, false, Sys0};
     true ->
       Sys1 = utils:clear_log(Sys0),
-      Sys2 = roll:eval_roll_send(Sys1, Time),
+      Sys2 = roll:roll_send(Sys1, Time),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2};
-    false ->
-      {false, false, Sys0}
+      {true, FocusLog, Sys2}
   end.
 
 
@@ -180,13 +251,12 @@ eval_roll_send(Sys0, Time) ->
 
 eval_roll_rec(Sys0, Time) ->
   case roll:can_roll_rec(Sys0, Time) of
+    false -> {false, false, Sys0};
     true ->
       Sys1 = utils:clear_log(Sys0),
-      Sys2 = roll:eval_roll_rec(Sys1, Time),
+      Sys2 = roll:roll_rec(Sys1, Time),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2};
-    false ->
-      {false, false, Sys0}
+      {true, FocusLog, Sys2}
   end.
 
 
@@ -199,20 +269,16 @@ eval_roll_rec(Sys0, Time) ->
 
 eval_roll_var(Sys0, Name) ->
   case roll:can_roll_var(Sys0, Name) of
+    false -> {false, false, Sys0};
     true ->
       Sys1 = utils:clear_log(Sys0),
-      Sys2 = roll:eval_roll_var(Sys1, Name),
+      Sys2 = roll:roll_var(Sys1, Name),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2};
-    false ->
-      {false, false, Sys0}
+      {true, FocusLog, Sys2}
   end.
 
 
 %% =====================================================================
-
-
-eval_replay() -> ok.
 
 
 %% =====================================================================
