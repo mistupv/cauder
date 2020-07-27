@@ -140,39 +140,48 @@ eval_replay_1(Sys0, Pid, Steps, StepsDone) ->
   end.
 
 
--spec eval_replay_spawn(System, SpawnPid) -> NewSystem when
+-spec eval_replay_spawn(System, SpawnPid) -> {CanReplay, NewSystem} when
   System :: cauder_types:system(),
   SpawnPid :: pos_integer(),
+  CanReplay :: boolean(),
   NewSystem :: cauder_types:system().
 
-eval_replay_spawn(Sys, SpawnPid) ->
-  case replay:can_replay_spawn(Sys, SpawnPid) of
-    false -> Sys;
-    true -> replay:replay_spawn(Sys, SpawnPid)
+eval_replay_spawn(Sys0, SpawnPid) ->
+  case replay:can_replay_spawn(Sys0, SpawnPid) of
+    false -> {false, Sys0};
+    true ->
+      Sys1 = replay:replay_spawn(Sys0, SpawnPid),
+      {true, Sys1}
   end.
 
 
--spec eval_replay_send(System, Time) -> NewSystem when
+-spec eval_replay_send(System, Time) -> {CanReplay, NewSystem} when
   System :: cauder_types:system(),
   Time :: pos_integer(),
+  CanReplay :: boolean(),
   NewSystem :: cauder_types:system().
 
-eval_replay_send(Sys, Time) ->
-  case replay:can_replay_send(Sys, Time) of
-    false -> Sys;
-    true -> replay:replay_send(Sys, Time)
+eval_replay_send(Sys0, Time) ->
+  case replay:can_replay_send(Sys0, Time) of
+    false -> {false, Sys0};
+    true ->
+      Sys1 = replay:replay_send(Sys0, Time),
+      {true, Sys1}
   end.
 
 
--spec eval_replay_rec(System, Time) -> NewSystem when
+-spec eval_replay_rec(System, Time) -> {CanReplay, NewSystem} when
   System :: cauder_types:system(),
   Time :: pos_integer(),
+  CanReplay :: boolean(),
   NewSystem :: cauder_types:system().
 
-eval_replay_rec(Sys, Time) ->
-  case replay:can_replay_rec(Sys, Time) of
-    false -> Sys;
-    true -> replay:replay_rec(Sys, Time)
+eval_replay_rec(Sys0, Time) ->
+  case replay:can_replay_rec(Sys0, Time) of
+    false -> {false, Sys0};
+    true ->
+      Sys1 = replay:replay_rec(Sys0, Time),
+      {true, Sys1}
   end.
 
 

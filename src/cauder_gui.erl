@@ -948,9 +948,7 @@ eval_norm() ->
 %% ==================== Replay evaluation ==================== %%
 
 
--spec eval_replay() -> {StepsDone, Steps} when
-  StepsDone :: non_neg_integer(),
-  Steps :: pos_integer().
+-spec eval_replay() -> {StepsDone :: non_neg_integer(), Steps :: non_neg_integer()}.
 
 eval_replay() ->
   PidText = wxTextCtrl:getValue(ref_lookup(?REPLAY_PID_TEXT)),
@@ -968,9 +966,7 @@ eval_replay() ->
   end.
 
 
--spec eval_replay_spawn() -> {CanReplay, SpawnPid} when
-  CanReplay :: boolean(),
-  SpawnPid :: string() | none.
+-spec eval_replay_spawn() -> {Success :: boolean(), SpawnPid :: none | string()}.
 
 eval_replay_spawn() ->
   PidText = wxTextCtrl:getValue(ref_lookup(?REPLAY_SPAWN_PID_TEXT)),
@@ -979,14 +975,13 @@ eval_replay_spawn() ->
     {error, _} -> {false, none};
     {SpawnPid, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      Sys1 = cauder:eval_replay_spawn(Sys0, SpawnPid),
-      ref_add(?SYSTEM, Sys1)
+      {Success, Sys1} = cauder:eval_replay_spawn(Sys0, SpawnPid),
+      ref_add(?SYSTEM, Sys1),
+      {Success, PidText}
   end.
 
 
--spec eval_replay_send() -> {CanReplay, Id} when
-  CanReplay :: boolean(),
-  Id :: string() | none.
+-spec eval_replay_send() -> {Success :: boolean(), Id :: none | string()}.
 
 eval_replay_send() ->
   IdText = wxTextCtrl:getValue(ref_lookup(?REPLAY_SEND_ID_TEXT)),
@@ -995,14 +990,13 @@ eval_replay_send() ->
     {error, _} -> {false, none};
     {Id, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      Sys1 = cauder:eval_replay_send(Sys0, Id),
-      ref_add(?SYSTEM, Sys1)
+      {Success, Sys1} = cauder:eval_replay_send(Sys0, Id),
+      ref_add(?SYSTEM, Sys1),
+      {Success, IdText}
   end.
 
 
--spec eval_replay_rec() -> {CanReplay, Id} when
-  CanReplay :: boolean(),
-  Id :: string() | none.
+-spec eval_replay_rec() -> {Success :: boolean(), Id :: none | string()}.
 
 eval_replay_rec() ->
   IdText = wxTextCtrl:getValue(ref_lookup(?REPLAY_REC_ID_TEXT)),
@@ -1011,8 +1005,9 @@ eval_replay_rec() ->
     {error, _} -> {false, none};
     {Id, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      Sys1 = cauder:eval_replay_rec(Sys0, Id),
-      ref_add(?SYSTEM, Sys1)
+      {Success, Sys1} = cauder:eval_replay_rec(Sys0, Id),
+      ref_add(?SYSTEM, Sys1),
+      {Success, IdText}
   end.
 
 
@@ -1185,19 +1180,19 @@ loop() ->
       refresh(true);
     #wx{id = ?REPLAY_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
       utils_gui:disable_all_buttons(),
-      {HasRolled, SpawnPid} = eval_replay_spawn(),
-      utils_gui:sttext_replay_spawn(HasRolled, SpawnPid),
-      refresh(true);
+      {HasReplayed, SpawnPid} = eval_replay_spawn(),
+      utils_gui:sttext_replay_spawn(HasReplayed, SpawnPid),
+      refresh(HasReplayed);
     #wx{id = ?REPLAY_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
       utils_gui:disable_all_buttons(),
-      {HasRolled, SendId} = eval_replay_send(),
-      utils_gui:sttext_replay_send(HasRolled, SendId),
-      refresh(true);
+      {HasReplayed, SendId} = eval_replay_send(),
+      utils_gui:sttext_replay_send(HasReplayed, SendId),
+      refresh(HasReplayed);
     #wx{id = ?REPLAY_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
       utils_gui:disable_all_buttons(),
-      {HasRolled, RecId} = eval_replay_rec(),
-      utils_gui:sttext_replay_rec(HasRolled, RecId),
-      refresh(true);
+      {HasReplayed, RecId} = eval_replay_rec(),
+      utils_gui:sttext_replay_rec(HasReplayed, RecId),
+      refresh(HasReplayed);
 
   %% ---------- Rollback panel buttons ---------- %%
     #wx{id = ?ROLL_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
