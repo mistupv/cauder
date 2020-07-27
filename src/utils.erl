@@ -152,7 +152,6 @@ select_proc(Procs, Pid) ->
 -spec select_msg([cauder_types:message()], non_neg_integer()) -> {cauder_types:message(), [cauder_types:message()]}.
 
 select_msg(Mail, Time) ->
-  io:format("select_msg\n\tMail: ~p\n\tTime: ~p\n",[Mail, Time]),
   {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Mail),
   {Message, RestMessages}.
 
@@ -393,10 +392,9 @@ must_focus_log(System) ->
 load_replay_data(Path) ->
   ResultFile = filename:join(Path, "trace_result.log"),
   {ok, FileHandler} = file:open(ResultFile, [read]),
-  [CallLine, PidLine, _Result] = get_all_lines(FileHandler),
+  Lines = get_all_lines(FileHandler),
   file:close(FileHandler),
-  Call = parse_call_line(CallLine),
-  Pid = parse_pid_line(PidLine),
+  #{call := Call, main_pid := Pid} = parse_lines(Lines),
   Data = #replay{log_path = Path, call = Call, main_pid = Pid},
   put(replay_data, Data),
   ok.
@@ -411,32 +409,51 @@ get_all_lines(File) ->
   end.
 
 
--spec parse_call_line(string()) -> {atom(), atom(), [cauder_types:abstract_expr()]}.
+-spec parse_lines(Lines) -> Data when
+  Lines :: [string()],
+  Data :: #{call := Call, main_pid := Pid},
+  Call :: {atom(), atom(), [cauder_types:abstract_expr()]},
+  Pid :: integer().
 
-parse_call_line("call " ++ Str0) ->
-  Str1 = string:replace(Str0, "\"", "", leading),
-  Str2 = string:replace(Str1, "\"", "", trailing),
-  Str3 = lists:flatten(Str2),
-  parse_call(Str3 ++ ".").
+parse_lines(Lines) -> parse_lines(Lines, #{call => undefined, main_pid => undefined}).
 
 
--spec parse_pid_line(string()) -> pos_integer().
+-type optional(T) :: T | undefined.
 
-parse_pid_line("main_pid " ++ Pid) -> list_to_integer(Pid).
+
+-spec parse_lines(Lines, Data) -> NewData when
+  Lines :: [string()],
+  Data :: #{call := optional(Call), main_pid := optional(Pid)},
+  NewData :: #{call := Call, main_pid := Pid},
+  Call :: {atom(), atom(), [cauder_types:abstract_expr()]},
+  Pid :: integer().
+
+parse_lines([], Data) -> Data;
+parse_lines([Line | RestLines], Data) ->
+  case hd(string:split(Line, " ")) of
+    "call" ->
+      {match, [Call]} = re:run(Line, "call \"(.+)\"", [{capture, [1], list}]),
+      parse_lines(RestLines, Data#{call := parse_call(Call)});
+    "main_pid" ->
+      {match, [Pid]} = re:run(Line, "main_pid (\\d+)", [{capture, [1], list}]),
+      parse_lines(RestLines, Data#{main_pid := list_to_integer(Pid)});
+    _ ->
+      parse_lines(RestLines, Data)
+  end.
 
 
 -spec parse_call(string()) -> {atom(), atom(), [cauder_types:abstract_expr()]}.
 
-parse_call(Func) ->
-  case erl_scan:string(Func) of
+parse_call(Call) ->
+  case erl_scan:string(Call ++ ".") of
     {ok, Tokens, _} ->
       case erl_parse:parse_exprs(Tokens) of
         {ok, Exprs} ->
           [{remote_call, _, M, F, As}] = cauder_syntax:expr_list(Exprs),
           {M, F, As};
-        _Err -> error({parse_error, Func, Tokens})
+        _Err -> error({parse_error, Call, Tokens})
       end;
-    _Err -> error({parse_error, Func})
+    _Err -> error({parse_error, Call})
   end.
 
 
