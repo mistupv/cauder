@@ -114,26 +114,26 @@ eval_opts(Sys = #sys{procs = Procs}) ->
 
 eval_proc_opt(#sys{mail = Mail, procs = Procs}, #proc{pid = Pid, hist = Hist}) ->
   Rule =
-  case Hist of
-    [] -> ?NULL_RULE;
-    [CurHist | _] ->
-      case CurHist of
-        {tau, _Bs, _Es, _Stk} -> ?RULE_SEQ;
-        {self, _Bs, _Es, _Stk} -> ?RULE_SELF;
-        {spawn, _Bs, _Es, _Stk, SpawnPid} ->
-          {SpawnProc, _} = utils:select_proc(Procs, SpawnPid),
-          case SpawnProc#proc.hist of
-            [] -> ?RULE_SPAWN;
-            _ -> ?NULL_RULE
-          end;
-        {send, _Bs, _Es, _Stk, #msg{time = Time}} ->
-          case utils:check_msg(Mail, Time) of
-            none -> ?NULL_RULE;
-            _ -> ?RULE_SEND
-          end;
-        {rec, _Bs, _Es, _Stk, _Msg} -> ?RULE_RECEIVE
-      end
-  end,
+    case Hist of
+      [] -> ?NULL_RULE;
+      [CurHist | _] ->
+        case CurHist of
+          {tau, _Bs, _Es, _Stk} -> ?RULE_SEQ;
+          {self, _Bs, _Es, _Stk} -> ?RULE_SELF;
+          {spawn, _Bs, _Es, _Stk, SpawnPid} ->
+            {SpawnProc, _} = utils:select_proc(Procs, SpawnPid),
+            case SpawnProc#proc.hist of
+              [] -> ?RULE_SPAWN;
+              _ -> ?NULL_RULE
+            end;
+          {send, _Bs, _Es, _Stk, #msg{time = Time}} ->
+            case utils:check_msg(Mail, Time) of
+              none -> ?NULL_RULE;
+              _ -> ?RULE_SEND
+            end;
+          {rec, _Bs, _Es, _Stk, _Msg} -> ?RULE_RECEIVE
+        end
+    end,
   case Rule of
     ?NULL_RULE -> ?NULL_OPT;
     OtherRule -> #opt{sem = ?MODULE, id = Pid, rule = OtherRule}

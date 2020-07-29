@@ -71,10 +71,10 @@ get_rule_from_button(ButtonId) ->
 button_to_option(ButtonId) ->
   Rule = get_rule_from_button(ButtonId),
   Sem =
-  case ButtonId of
-    ?FWD_INT_BUTTON -> ?FWD_SEM;
-    ?BWD_INT_BUTTON -> ?BWD_SEM
-  end,
+    case ButtonId of
+      ?FWD_INT_BUTTON -> ?FWD_SEM;
+      ?BWD_INT_BUTTON -> ?BWD_SEM
+    end,
   #opt{sem = Sem, rule = Rule}.
 
 
@@ -83,10 +83,10 @@ button_to_option(ButtonId) ->
 option_to_button_label(Option) ->
   Label = get_label_from_option(Option),
   Button =
-  case Option#opt.sem of
-    ?FWD_SEM -> ?FWD_INT_BUTTON;
-    ?BWD_SEM -> ?BWD_INT_BUTTON
-  end,
+    case Option#opt.sem of
+      ?FWD_SEM -> ?FWD_INT_BUTTON;
+      ?BWD_SEM -> ?BWD_INT_BUTTON
+    end,
   {Button, Label}.
 
 
@@ -175,10 +175,10 @@ sttext_single(Button) ->
   Option = button_to_option(Button),
   #opt{sem = Sem} = Option,
   SemStr =
-  case Sem of
-    ?FWD_SEM -> " forward ";
-    ?BWD_SEM -> " backward "
-  end,
+    case Sem of
+      ?FWD_SEM -> " forward ";
+      ?BWD_SEM -> " backward "
+    end,
   LabelStr = get_label_from_option(Option),
   FullStr = "Fired" ++ SemStr ++ LabelStr ++ " rule",
   update_status_text(FullStr).

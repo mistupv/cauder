@@ -57,11 +57,11 @@ process(#proc{pid = Pid, log = Log, hist = Hist, stack = Stack, env = Env, exprs
   Es = cauder_syntax:to_abstract_expr(Es0),
 
   header(Pid, MFA) ++
-  log(Log, Opts) ++
-  history(Hist, Opts) ++
-  stack(Stack, Opts) ++
-  environment(Env, Es, Opts) ++
-  expressions(Es, Opts).
+    log(Log, Opts) ++
+    history(Hist, Opts) ++
+    stack(Stack, Opts) ++
+    environment(Env, Es, Opts) ++
+    expressions(Es, Opts).
 
 
 %% ==================== Header ==================== %%
@@ -125,10 +125,10 @@ history(Hist, Opts) ->
 
 history_1(Hist, Opts) ->
   FilteredHist =
-  case proplists:get_value(?FULL_HIST, Opts) of
-    false -> lists:filter(fun is_conc_item/1, Hist);
-    true -> Hist
-  end,
+    case proplists:get_value(?FULL_HIST, Opts) of
+      false -> lists:filter(fun is_conc_item/1, Hist);
+      true -> Hist
+    end,
   Entries = lists:map(fun history_entry/1, FilteredHist),
   "[" ++ lists:flatten(lists:join(",", Entries)) ++ "]".
 
@@ -191,10 +191,10 @@ environment(Env, Exprs, Opts) ->
 
 environment_1(Env, Exprs, Opts) ->
   Bindings =
-  case proplists:get_value(?FULL_ENV, Opts) of
-    true -> Env;
-    false -> relevant_bindings(Env, Exprs)
-  end,
+    case proplists:get_value(?FULL_ENV, Opts) of
+      true -> Env;
+      false -> relevant_bindings(Env, Exprs)
+    end,
   PairsList = lists:map(fun binding/1, Bindings),
   "{" ++ lists:flatten(lists:join(",", PairsList)) ++ "}".
 

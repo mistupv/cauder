@@ -448,7 +448,10 @@ to_abstract_expr({spawn, Line, Fun}) ->
   Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(spawn), [to_abstract_expr(Fun)]),
   set_line(Node, Line);
 to_abstract_expr({spawn, Line, M, F, As}) ->
-  Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(spawn), [to_abstract_expr(M), to_abstract_expr(F), to_abstract_expr(As)]),
+  Node = erl_syntax:application(
+    erl_syntax:atom(erlang),
+    erl_syntax:atom(spawn),
+    [to_abstract_expr(M), to_abstract_expr(F), to_abstract_expr(As)]),
   set_line(Node, Line);
 to_abstract_expr({send, Line, L, R}) ->
   Node = erl_syntax:infix_expr(to_abstract_expr(L), erl_syntax:operator('!'), to_abstract_expr(R)),

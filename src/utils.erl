@@ -374,7 +374,8 @@ gen_log_spawn(OtherPid) ->
   [["Roll spawn of ", pretty_print:pid(OtherPid)]].
 
 gen_log_send(Pid, OtherPid, MsgValue, Time) ->
-  [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:to_string(MsgValue), " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
+  [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:to_string(MsgValue),
+    " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
 
 
 clear_log(System) -> System#sys{roll = []}.

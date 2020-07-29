@@ -662,8 +662,7 @@ openDialog(Parent) ->
   Wildcard = "Erlang (*.erl)|*.erl|All files (*.*)|*.*",
   Dialog = wxFileDialog:new(Parent, [{message, Message},
                                      {wildCard, Wildcard},
-                                     {style, ?wxFD_OPEN bor
-                                             ?wxFD_FILE_MUST_EXIST}]),
+                                     {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST}]),
   case wxDialog:showModal(Dialog) of
     ?wxID_OK ->
       Dir = wxFileDialog:getDirectory(Dialog),
@@ -926,10 +925,10 @@ eval_mult(Button) ->
     {Steps, _} ->
       Sys0 = ref_lookup(?SYSTEM),
       Dir =
-      case Button of
-        ?FORWARD_BUTTON -> ?MULT_FWD;
-        ?BACKWARD_BUTTON -> ?MULT_BWD
-      end,
+        case Button of
+          ?FORWARD_BUTTON -> ?MULT_FWD;
+          ?BACKWARD_BUTTON -> ?MULT_BWD
+        end,
       {Sys1, StepsDone} = cauder:eval_mult(Sys0, Dir, Steps),
       ref_add(?SYSTEM, Sys1),
       {StepsDone, Steps}
@@ -1113,130 +1112,130 @@ focus_roll_log(true) ->
 
 loop() ->
   Result =
-  receive
-  %% ---------- File menu ---------- %%
-    #wx{id = ?OPEN, event = #wxCommand{type = command_menu_selected}} -> openDialog(ref_lookup(?FRAME));
-    #wx{id = ?REPLAY, event = #wxCommand{type = command_menu_selected}} -> openReplayDialog(ref_lookup(?FRAME));
-    #wx{id = ?EXIT, event = #wxCommand{type = command_menu_selected}} -> exit;
+    receive
+    %% ---------- File menu ---------- %%
+      #wx{id = ?OPEN, event = #wxCommand{type = command_menu_selected}} -> openDialog(ref_lookup(?FRAME));
+      #wx{id = ?REPLAY, event = #wxCommand{type = command_menu_selected}} -> openReplayDialog(ref_lookup(?FRAME));
+      #wx{id = ?EXIT, event = #wxCommand{type = command_menu_selected}} -> exit;
 
-  %% ---------- View menu ---------- %%
-    #wx{id = ?ZOOM_IN, event = #wxCommand{type = command_menu_selected}} -> zoomIn();
-    #wx{id = ?ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} -> zoomOut();
-    #wx{id = ?ZOOM_100, event = #wxCommand{type = command_menu_selected}} -> zoomReset();
-    #wx{id = ?TOGGLE_MAIL, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?TOGGLE_LOG, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?TOGGLE_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?TOGGLE_STACK, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?TOGGLE_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?TOGGLE_EXP, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?RADIO_CONC_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?RADIO_FULL_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?RADIO_REL_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
-    #wx{id = ?RADIO_FULL_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+    %% ---------- View menu ---------- %%
+      #wx{id = ?ZOOM_IN, event = #wxCommand{type = command_menu_selected}} -> zoomIn();
+      #wx{id = ?ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} -> zoomOut();
+      #wx{id = ?ZOOM_100, event = #wxCommand{type = command_menu_selected}} -> zoomReset();
+      #wx{id = ?TOGGLE_MAIL, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?TOGGLE_LOG, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?TOGGLE_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?TOGGLE_STACK, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?TOGGLE_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?TOGGLE_EXP, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?RADIO_CONC_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?RADIO_FULL_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?RADIO_REL_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
+      #wx{id = ?RADIO_FULL_ENV, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
 
-  %% ---------- Compiler menu ---------- %%
-    #wx{id = ?TOGGLE_COMP, event = #wxCommand{type = command_menu_selected}} -> utils_gui:sttext_comp();
+    %% ---------- Compiler menu ---------- %%
+      #wx{id = ?TOGGLE_COMP, event = #wxCommand{type = command_menu_selected}} -> utils_gui:sttext_comp();
 
-  %% ---------- Help menu ---------- %%
-    #wx{id = ?ABOUT, event = #wxCommand{type = command_menu_selected}} ->
-      Caption = "About " ++ ?APP_STRING,
-      Dialog = wxMessageDialog:new(ref_lookup(?FRAME), ?INFO_TEXT, [{style, ?wxOK}, {caption, Caption}]),
-      wxDialog:showModal(Dialog),
-      wxWindow:destroy(Dialog);
+    %% ---------- Help menu ---------- %%
+      #wx{id = ?ABOUT, event = #wxCommand{type = command_menu_selected}} ->
+        Caption = "About " ++ ?APP_STRING,
+        Dialog = wxMessageDialog:new(ref_lookup(?FRAME), ?INFO_TEXT, [{style, ?wxOK}, {caption, Caption}]),
+        wxDialog:showModal(Dialog),
+        wxWindow:destroy(Dialog);
 
-  %% ---------- Start button ---------- %%
-    #wx{id = ?START_BUTTON, event = #wxCommand{type = command_button_clicked}} -> start();
+    %% ---------- Start button ---------- %%
+      #wx{id = ?START_BUTTON, event = #wxCommand{type = command_button_clicked}} -> start();
 
-  %% ---------- Manual panel buttons ---------- %%
-    #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
-      when (Button =:= ?FWD_INT_BUTTON) orelse (Button =:= ?BWD_INT_BUTTON) ->
-      utils_gui:disable_all_buttons(),
-      exec_with(Button),
-      utils_gui:sttext_single(Button),
-      refresh(true);
+    %% ---------- Manual panel buttons ---------- %%
+      #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
+        when (Button =:= ?FWD_INT_BUTTON) orelse (Button =:= ?BWD_INT_BUTTON) ->
+        utils_gui:disable_all_buttons(),
+        exec_with(Button),
+        utils_gui:sttext_single(Button),
+        refresh(true);
 
-  %% ---------- Automatic panel buttons ---------- %%
-    #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
-      when (Button =:= ?FORWARD_BUTTON) orelse (Button =:= ?BACKWARD_BUTTON) ->
-      utils_gui:disable_all_buttons(),
-      case eval_mult(Button) of
-        error ->
-          utils_gui:update_status_text(?ERROR_NUM_STEP);
-        {StepsDone, TotalSteps} ->
-          utils_gui:sttext_mult(StepsDone, TotalSteps)
-      end,
-      refresh(true);
-    #wx{id = ?NORMALIZE_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      StepsDone = eval_norm(),
-      utils_gui:sttext_norm(StepsDone),
-      refresh(true);
+    %% ---------- Automatic panel buttons ---------- %%
+      #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
+        when (Button =:= ?FORWARD_BUTTON) orelse (Button =:= ?BACKWARD_BUTTON) ->
+        utils_gui:disable_all_buttons(),
+        case eval_mult(Button) of
+          error ->
+            utils_gui:update_status_text(?ERROR_NUM_STEP);
+          {StepsDone, TotalSteps} ->
+            utils_gui:sttext_mult(StepsDone, TotalSteps)
+        end,
+        refresh(true);
+      #wx{id = ?NORMALIZE_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        StepsDone = eval_norm(),
+        utils_gui:sttext_norm(StepsDone),
+        refresh(true);
 
-  %% ---------- Replay panel buttons ---------- %%
-    #wx{id = ?REPLAY_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {StepsDone, TotalSteps} = eval_replay(),
-      utils_gui:sttext_replay(StepsDone, TotalSteps),
-      refresh(true);
-    #wx{id = ?REPLAY_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasReplayed, SpawnPid} = eval_replay_spawn(),
-      utils_gui:sttext_replay_spawn(HasReplayed, SpawnPid),
-      refresh(HasReplayed);
-    #wx{id = ?REPLAY_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasReplayed, SendId} = eval_replay_send(),
-      utils_gui:sttext_replay_send(HasReplayed, SendId),
-      refresh(HasReplayed);
-    #wx{id = ?REPLAY_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasReplayed, RecId} = eval_replay_rec(),
-      utils_gui:sttext_replay_rec(HasReplayed, RecId),
-      refresh(HasReplayed);
+    %% ---------- Replay panel buttons ---------- %%
+      #wx{id = ?REPLAY_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {StepsDone, TotalSteps} = eval_replay(),
+        utils_gui:sttext_replay(StepsDone, TotalSteps),
+        refresh(true);
+      #wx{id = ?REPLAY_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasReplayed, SpawnPid} = eval_replay_spawn(),
+        utils_gui:sttext_replay_spawn(HasReplayed, SpawnPid),
+        refresh(HasReplayed);
+      #wx{id = ?REPLAY_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasReplayed, SendId} = eval_replay_send(),
+        utils_gui:sttext_replay_send(HasReplayed, SendId),
+        refresh(HasReplayed);
+      #wx{id = ?REPLAY_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasReplayed, RecId} = eval_replay_rec(),
+        utils_gui:sttext_replay_rec(HasReplayed, RecId),
+        refresh(HasReplayed);
 
-  %% ---------- Rollback panel buttons ---------- %%
-    #wx{id = ?ROLL_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {MustFocus, StepsDone, TotalSteps} = eval_roll(),
-      utils_gui:sttext_roll(StepsDone, TotalSteps),
-      focus_roll_log(MustFocus),
-      refresh(true);
-    #wx{id = ?ROLL_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasRolled, SpawnPid, MustFocus} = eval_roll_spawn(),
-      utils_gui:sttext_roll_spawn(HasRolled, SpawnPid),
-      focus_roll_log(MustFocus),
-      refresh(HasRolled);
-    #wx{id = ?ROLL_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasRolled, SendId, MustFocus} = eval_roll_send(),
-      utils_gui:sttext_roll_send(HasRolled, SendId),
-      focus_roll_log(MustFocus),
-      refresh(HasRolled);
-    #wx{id = ?ROLL_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasRolled, RecId, MustFocus} = eval_roll_rec(),
-      utils_gui:sttext_roll_rec(HasRolled, RecId),
-      focus_roll_log(MustFocus),
-      refresh(HasRolled);
-    #wx{id = ?ROLL_VAR_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
-      utils_gui:disable_all_buttons(),
-      {HasRolled, VarId, MustFocus} = eval_roll_var(),
-      utils_gui:sttext_roll_var(HasRolled, VarId),
-      focus_roll_log(MustFocus),
-      refresh(HasRolled);
+    %% ---------- Rollback panel buttons ---------- %%
+      #wx{id = ?ROLL_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {MustFocus, StepsDone, TotalSteps} = eval_roll(),
+        utils_gui:sttext_roll(StepsDone, TotalSteps),
+        focus_roll_log(MustFocus),
+        refresh(true);
+      #wx{id = ?ROLL_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasRolled, SpawnPid, MustFocus} = eval_roll_spawn(),
+        utils_gui:sttext_roll_spawn(HasRolled, SpawnPid),
+        focus_roll_log(MustFocus),
+        refresh(HasRolled);
+      #wx{id = ?ROLL_SEND_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasRolled, SendId, MustFocus} = eval_roll_send(),
+        utils_gui:sttext_roll_send(HasRolled, SendId),
+        focus_roll_log(MustFocus),
+        refresh(HasRolled);
+      #wx{id = ?ROLL_REC_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasRolled, RecId, MustFocus} = eval_roll_rec(),
+        utils_gui:sttext_roll_rec(HasRolled, RecId),
+        focus_roll_log(MustFocus),
+        refresh(HasRolled);
+      #wx{id = ?ROLL_VAR_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
+        utils_gui:disable_all_buttons(),
+        {HasRolled, VarId, MustFocus} = eval_roll_var(),
+        utils_gui:sttext_roll_var(HasRolled, VarId),
+        focus_roll_log(MustFocus),
+        refresh(HasRolled);
 
-  %% ---------- Text handlers ---------- %%
-    #wx{id = ?MANUAL_PID_TEXT, event = #wxCommand{type = command_text_updated}} -> refresh(false);
-    #wx{id = ?AUTO_STEP_TEXT, event = #wxCommand{type = command_text_updated}} -> refresh(false);
-    #wx{id = _RestIds, event = #wxCommand{type = command_text_updated}} -> ok;
+    %% ---------- Text handlers ---------- %%
+      #wx{id = ?MANUAL_PID_TEXT, event = #wxCommand{type = command_text_updated}} -> refresh(false);
+      #wx{id = ?AUTO_STEP_TEXT, event = #wxCommand{type = command_text_updated}} -> refresh(false);
+      #wx{id = _RestIds, event = #wxCommand{type = command_text_updated}} -> ok;
 
-  %% ---------- Other handlers ---------- %%
-    #wx{event = #wxClose{type = close_window}} -> exit;
+    %% ---------- Other handlers ---------- %%
+      #wx{event = #wxClose{type = close_window}} -> exit;
 
-  %% ---------- Non-supported events ---------- %%
-    Other -> io:format("main loop does not implement ~p~n", [Other])
-  end,
+    %% ---------- Non-supported events ---------- %%
+      Other -> io:format("main loop does not implement ~p~n", [Other])
+    end,
   case Result of
     ok -> loop();
     exit -> wxFrame:destroy(ref_lookup(?FRAME));

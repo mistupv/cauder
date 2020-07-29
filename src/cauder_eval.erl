@@ -131,15 +131,15 @@ expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
   Arity = length(element(3, hd(Cs))),
   Info = {{M, Name}, Bs, Cs},
   Fun =
-  case Arity of
-    0 -> fun() -> {[], Info} end;
-    1 -> fun(A) -> {[A], Info} end;
-    2 -> fun(A, B) -> {[A, B], Info} end;
-    3 -> fun(A, B, C) -> {[A, B, C], Info} end;
-    4 -> fun(A, B, C, D) -> {[A, B, C, D], Info} end;
-    5 -> fun(A, B, C, D, E) -> {[A, B, C, D, E], Info} end;
-    _ -> error({argument_limit, Arity}) % TODO Support more arities
-  end,
+    case Arity of
+      0 -> fun() -> {[], Info} end;
+      1 -> fun(A) -> {[A], Info} end;
+      2 -> fun(A, B) -> {[A, B], Info} end;
+      3 -> fun(A, B, C) -> {[A, B, C], Info} end;
+      4 -> fun(A, B, C, D) -> {[A, B, C, D], Info} end;
+      5 -> fun(A, B, C, D, E) -> {[A, B, C, D, E], Info} end;
+      _ -> error({argument_limit, Arity}) % TODO Support more arities
+    end,
   #result{env = Bs, exprs = [{value, Line, Fun}], stack = Stk0};
 
 expr(Bs, E = {bif, Line, M, F, As}, Stk) ->

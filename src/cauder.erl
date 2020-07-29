@@ -81,10 +81,10 @@ eval_mult(Sys, Dir, Steps) -> eval_mult_1(Sys, Dir, Steps, 0).
 eval_mult_1(Sys, _Dir, Steps, Steps) -> {Sys, Steps};
 eval_mult_1(Sys, Dir, Steps, StepsDone) ->
   Sem =
-  case Dir of
-    ?MULT_FWD -> fwd_sem;
-    ?MULT_BWD -> bwd_sem
-  end,
+    case Dir of
+      ?MULT_FWD -> fwd_sem;
+      ?MULT_BWD -> bwd_sem
+    end,
   case Sem:eval_opts(Sys) of
     [] -> {Sys, StepsDone};
     [Opt | _] ->
