@@ -1,0 +1,18 @@
+<component name="ProjectCodeStyleConfiguration">
+  <code_scheme name="Project" version="173">
+    <option name="RIGHT_MARGIN" value="140" />
+    <ErlangCodeStyleSettings>
+      <option name="ALIGN_MULTILINE_BLOCK" value="true" />
+      <option name="ALIGN_FUNCTION_CLAUSES" value="true" />
+      <option name="ALIGN_GUARDS" value="true" />
+      <option name="NEW_LINE_AFTER_ARROW" value="2" />
+      <option name="ALIGN_FUN_CLAUSES" value="true" />
+      <option name="ALIGN_RECORD_FIELD_ASSIGNMENTS" value="true" />
+      <option name="UNIFORM_BINARY_EXPRESSIONS" value="true" />
+      <option name="EXPRESSION_IN_CLAUSE_WRAP" value="5" />
+    </ErlangCodeStyleSettings>
+    <codeStyleSettings language="Erlang">
+      <option name="CALL_PARAMETERS_WRAP" value="5" />
+    </codeStyleSettings>
+  </code_scheme>
+</component>

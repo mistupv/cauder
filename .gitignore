@@ -5,6 +5,7 @@ erl_crash.dump
 
 # IntelliJ
 /out
+.idea/**/workspace.xml
 
 # Other
 .DS_Store
