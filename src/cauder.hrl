@@ -60,8 +60,8 @@
   % Global mailbox
   mail = [] :: [cauder_types:message()],
   % Pool of processes
-  procs = [] :: [cauder_types:process()],
-  ghosts = [] :: [cauder_types:process()],
+  procs = [] :: cauder_types:process_dict(),
+  ghosts = [] :: cauder_types:process_dict(),
   trace = [] :: [cauder_types:trace()],
   roll = []
 }).

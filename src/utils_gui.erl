@@ -4,15 +4,15 @@
 -export([is_app_loaded/0, is_app_running/0]).
 
 %% Button related functions
--export([enable_button_if/2, enable_replay_buttons/0, enable_roll_buttons/0,
-         disable_button/1, disable_buttons/1, disable_all_buttons/0,
-         button_to_option/1, option_to_button_label/1, set_button_label_from/2]).
+-export([enable_control_if/2, enable_replay/0, enable_roll/0,
+         disable_control/1, disable_controls/1, disable_all_buttons/0,
+         button_to_option/1, option_to_button_label/1, set_button_label_from/2, disable_all_inputs/0]).
 
 %% Font size functions
 -export([can_zoom_in/1, can_zoom_out/1, prev_font_size/1, next_font_size/1]).
 
 %% Misc.
--export([set_choices/1, clear_texts/0, sort_opts/1, toggle_opts/0, pp_marked_text/2]).
+-export([clear_texts/0, sort_opts/1, toggle_opts/0, pp_marked_text/2]).
 
 %% ----- Status text update functions ----- %%
 -export([update_status_text/1]).
@@ -28,6 +28,8 @@
 
 %% ETS functions
 -export([stop_refs/0]).
+
+-export([update_process_choices/1, get_selected_process/0, update_code_line/0]).
 
 
 -include("cauder.hrl").
@@ -72,8 +74,8 @@ button_to_option(ButtonId) ->
   Rule = get_rule_from_button(ButtonId),
   Sem =
     case ButtonId of
-      ?FWD_INT_BUTTON -> ?FWD_SEM;
-      ?BWD_INT_BUTTON -> ?BWD_SEM
+      ?SINGLE_FORWARD_BUTTON -> ?FWD_SEM;
+      ?SINGLE_BACKWARD_BUTTON -> ?BWD_SEM
     end,
   #opt{sem = Sem, rule = Rule}.
 
@@ -84,27 +86,44 @@ option_to_button_label(Option) ->
   Label = get_label_from_option(Option),
   Button =
     case Option#opt.sem of
-      ?FWD_SEM -> ?FWD_INT_BUTTON;
-      ?BWD_SEM -> ?BWD_INT_BUTTON
+      ?FWD_SEM -> ?SINGLE_FORWARD_BUTTON;
+      ?BWD_SEM -> ?SINGLE_BACKWARD_BUTTON
     end,
   {Button, Label}.
 
 
--spec disable_button(ButtonId :: integer()) -> ok.
+-spec enable_control(ControlId :: integer()) -> ok.
 
-disable_button(Id) ->
-  wxButton:disable(ref_lookup(Id)),
+enable_control(Id) ->
+  wxWindow:enable(ref_lookup(Id)),
   ok.
 
 
--spec disable_buttons(ButtonIds :: [integer()]) -> ok.
+-spec disable_control(ControlId :: integer()) -> ok.
 
-disable_buttons(Ids) -> lists:foreach(fun disable_button/1, Ids).
+disable_control(Id) ->
+  wxWindow:disable(ref_lookup(Id)),
+  ok.
+
+
+-spec enable_controls(ControlIds :: [integer()]) -> ok.
+
+enable_controls(Ids) -> wx:foreach(fun enable_control/1, Ids).
+
+
+-spec disable_controls(ControlIds :: [integer()]) -> ok.
+
+disable_controls(Ids) -> wx:foreach(fun disable_control/1, Ids).
+
+
+-spec disable_all_inputs() -> ok.
+
+disable_all_inputs() -> disable_controls(?ALL_INPUTS).
 
 
 -spec disable_all_buttons() -> ok.
 
-disable_all_buttons() -> disable_buttons(?ALL_BUTTONS).
+disable_all_buttons() -> disable_controls(?ALL_BUTTONS).
 
 
 -spec set_button_label_from(ButtonId :: integer(), ButtonLabels :: [{integer(), string()}]) -> ok.
@@ -121,49 +140,97 @@ set_button_label_from(Id, ButtonLabels) ->
   end.
 
 
--spec enable_button_if(ButtonId :: integer(), Condition :: boolean()) -> ok.
+-spec enable_control_if(ControlId :: integer(), Condition :: boolean()) -> ok.
 
-enable_button_if(Id, true) ->
-  wxButton:enable(ref_lookup(Id)),
+enable_control_if(Id, true) ->
+  wxWindow:enable(ref_lookup(Id)),
   ok;
-enable_button_if(Id, false) ->
-  wxButton:disable(ref_lookup(Id)),
+enable_control_if(Id, false) ->
+  wxWindow:disable(ref_lookup(Id)),
   ok.
 
 
--spec enable_replay_buttons() -> ok.
+-spec enable_replay() -> ok.
 
-enable_replay_buttons() ->
-  wxButton:enable(ref_lookup(?REPLAY_BUTTON)),
-  wxButton:enable(ref_lookup(?REPLAY_SPAWN_BUTTON)),
-  wxButton:enable(ref_lookup(?REPLAY_SEND_BUTTON)),
-  wxButton:enable(ref_lookup(?REPLAY_REC_BUTTON)),
+enable_replay() ->
+  enable_controls(?REPLAY_INPUTS),
+  enable_controls(?REPLAY_BUTTONS),
   ok.
 
 
--spec enable_roll_buttons() -> ok.
+-spec enable_roll() -> ok.
 
-enable_roll_buttons() ->
-  wxButton:enable(ref_lookup(?ROLL_BUTTON)),
-  wxButton:enable(ref_lookup(?ROLL_SPAWN_BUTTON)),
-  wxButton:enable(ref_lookup(?ROLL_SEND_BUTTON)),
-  wxButton:enable(ref_lookup(?ROLL_REC_BUTTON)),
-  wxButton:enable(ref_lookup(?ROLL_VAR_BUTTON)),
+enable_roll() ->
+  enable_controls(?ROLL_INPUTS),
+  enable_controls(?ROLL_BUTTONS),
   ok.
 
-set_choices(Choices) ->
-  FunChoice = ref_lookup(?FUN_CHOICE),
-  wxChoice:clear(FunChoice),
-  [wxChoice:append(FunChoice, Choice) || Choice <- Choices],
-  wxChoice:setSelection(FunChoice, 0).
+%%set_choices(Choices) ->
+%%  FunChoice = ref_lookup(?FUN_CHOICE),
+%%  wxChoice:clear(FunChoice),
+%%  [wxChoice:append(FunChoice, Choice) || Choice <- Choices],
+%%  wxChoice:setSelection(FunChoice, 0).
 
 clear_texts() ->
-  StateText = ref_lookup(?STATE_TEXT),
-  TraceText = ref_lookup(?TRACE_TEXT),
-  RollLogText = ref_lookup(?ROLL_LOG_TEXT),
-  wxTextCtrl:clear(StateText),
-  wxTextCtrl:clear(TraceText),
-  wxTextCtrl:clear(RollLogText).
+  Batch =
+    fun() ->
+      wxListBox:clear(ref_lookup(?TRACE_LIST)),
+      wxListBox:clear(ref_lookup(?ROLL_LOG_LIST)),
+      wxListCtrl:deleteAllItems(ref_lookup(?BINDINGS_LIST)),
+      wxListBox:clear(ref_lookup(?STACK_LIST)),
+      wxTextCtrl:clear(ref_lookup(?LOG_TEXT)),
+      wxTextCtrl:clear(ref_lookup(?HISTORY_TEXT))
+    end,
+
+  wx:batch(Batch).
+
+
+get_selected_process() ->
+  Choice = ref_lookup(?PROC_CHOICE),
+  case wxChoice:getSelection(Choice) of
+    ?wxNOT_FOUND -> none;
+    Idx ->
+      #sys{procs = ProcDict} = ref_lookup(?SYSTEM),
+      {_, Proc} = lists:nth(Idx + 1, ProcDict),
+      Proc
+  end.
+
+
+update_process_choices(#sys{procs = []}) ->
+  Choice = ref_lookup(?PROC_CHOICE),
+  wxChoice:freeze(Choice),
+  wxChoice:disable(Choice),
+  wxChoice:clear(Choice),
+  wxChoice:thaw(Choice);
+update_process_choices(#sys{procs = ProcDict}) ->
+  Choice = ref_lookup(?PROC_CHOICE),
+  wxChoice:freeze(Choice),
+  wxChoice:enable(Choice),
+  PrevSel = wxChoice:getStringSelection(Choice),
+  wxChoice:clear(Choice),
+  Procs = lists:map(fun({_, Proc}) -> Proc end, ProcDict),
+  Values = lists:map(fun pretty_print:process/1, Procs),
+  wxChoice:appendStrings(Choice, Values),
+  case lists:member(PrevSel, Values) of
+    true -> wxChoice:setStringSelection(Choice, PrevSel);
+    false -> wxChoice:setSelection(Choice, 0)
+  end,
+  wxChoice:thaw(Choice),
+  ok.
+
+
+update_code_line() ->
+  case get_selected_process() of
+    none -> ok;
+    #proc{exprs = [E | _]} ->
+      Line = element(2, E),
+      Prev = get(line),
+      cauder_wx_code:mark_line(ref_lookup(?CODE_TEXT), Prev, Line),
+      put(line, Line),
+      ok
+  end
+.
+
 
 stop_refs() ->
   case is_app_loaded() of
@@ -317,5 +384,5 @@ pp_marked_text(Ctrl, TextList) ->
   % Unfreeze control
   wxTextCtrl:thaw(Ctrl).
 
-ref_lookup(Id) ->
-  ets:lookup_element(?GUI_REF, Id, 2).
+
+ref_lookup(Id) -> cauder_gui:ref_lookup(Id).

@@ -28,7 +28,7 @@
 -spec start() -> ok.
 
 start() ->
-  cauder_gui:setup_gui(),
+  cauder_gui:init(),
   ok.
 
 

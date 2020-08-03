@@ -273,7 +273,7 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
           {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
           {match, Bs2, Body} = match_fun(Cs, As),
           Var = utils:temp_variable(Line),
-          Stk = [{{M, F, A}, utils:merge_env(Bs1, Bs2), Body, Var} | Stk0],
+          Stk = [{{M, F, A}, utils:merge_bindings(Bs1, Bs2), Body, Var} | Stk0],
           #result{env = Bs0, exprs = [Var], stack = Stk}
       end
   end;

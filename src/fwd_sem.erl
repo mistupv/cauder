@@ -9,7 +9,7 @@
 
 -export([eval_step/2, eval_opts/1]).
 
--import(cauder_eval, [abstract/1, is_reducible/2]).
+-import(cauder_eval, [is_reducible/2]).
 
 -include("cauder.hrl").
 
@@ -20,79 +20,79 @@
 -spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
 eval_step(Sys, Pid) ->
-  #sys{mail = Ms, procs = Ps0, ghosts = Gs, trace = Ts} = Sys,
-  {P, Ps} = utils:select_proc(Ps0, Pid),
-  #proc{pid = Pid, log = Log, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P,
+  #sys{mail = Ms, procs = PDict, ghosts = GDict0, trace = Trace} = Sys,
+  {P0, PDict0} = utils:take_process(PDict, Pid),
+  #proc{pid = Pid, log = Log, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
   %io:format("eval_step: ~p\n", [P]),
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
   case Label of
     tau ->
-      P1 = P#proc{
+      P = P0#proc{
         hist  = [{tau, Bs0, Es0, Stk0} | Hist],
         stack = Stk,
         env   = Bs,
         exprs = Es
       },
       Sys#sys{
-        procs = [P1 | Ps]
+        procs = orddict:store(Pid, P, PDict0)
       };
     {self, VarPid} ->
-      P1 = P#proc{
+      P = P0#proc{
         hist  = [{self, Bs0, Es0, Stk0} | Hist],
         stack = Stk,
         env   = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarPid, abstract(Pid))
+        exprs = cauder_syntax:replace_variable(Es, VarPid, Pid)
       },
       Sys#sys{
-        procs = [P1 | Ps]
+        procs = orddict:store(Pid, P, PDict0)
       };
     {spawn, VarPid, M, F, As} ->
       % TODO Without Log
       %SpawnPid = utils:fresh_pid(),
       {spawn, SpawnPid} = hd(Log),
-      {SpawnGhost, RestGhosts} = utils:select_proc(Gs, SpawnPid),
-      P2 = #proc{
-        pid   = SpawnPid,
-        log   = SpawnGhost#proc.log,
-        exprs = [{remote_call, 0, M, F, lists:map(fun cauder_eval:abstract/1, As)}],
-        spf   = {M, F, length(As)}
-      },
+      {G, GDict1} = utils:take_process(GDict0, SpawnPid),
 
-      P1 = P#proc{
+      P1 = P0#proc{
         log   = tl(Log),
         hist  = [{spawn, Bs0, Es0, Stk0, SpawnPid} | Hist],
         stack = Stk,
         env   = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarPid, cauder_eval:abstract(SpawnPid))
+        exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
       },
-      T1 = #trace{
+      P2 = #proc{
+        pid   = SpawnPid,
+        log   = G#proc.log,
+        exprs = [{remote_call, 0, M, F, lists:map(fun cauder_eval:abstract/1, As)}],
+        spf   = {M, F, length(As)}
+      },
+      T = #trace{
         type = ?RULE_SPAWN,
         from = Pid,
         to   = SpawnPid
       },
       Sys#sys{
-        procs  = [P1, P2 | Ps],
-        ghosts = RestGhosts,
-        trace  = [T1 | Ts]
+        procs  = orddict:store(SpawnPid, P2, orddict:store(Pid, P1, PDict0)),
+        ghosts = GDict1,
+        trace  = [T | Trace]
       };
     {send, Dest, Val} ->
       % TODO Without Log
       %Time = utils:fresh_time(),
       {send, Time} = hd(Log),
 
-      M1 = #msg{
+      M = #msg{
         dest = Dest,
         val  = Val,
         time = Time
       },
-      P1 = P#proc{
+      P = P0#proc{
         log   = tl(Log),
-        hist  = [{send, Bs0, Es0, Stk0, M1} | Hist],
+        hist  = [{send, Bs0, Es0, Stk0, M} | Hist],
         stack = Stk,
         env   = Bs,
         exprs = Es
       },
-      T1 = #trace{
+      T = #trace{
         type = ?RULE_SEND,
         from = Pid,
         to   = Dest,
@@ -100,22 +100,22 @@ eval_step(Sys, Pid) ->
         time = Time
       },
       Sys#sys{
-        mail  = [M1 | Ms],
-        procs = [P1 | Ps],
-        trace = [T1 | Ts]
+        mail  = [M | Ms],
+        procs = orddict:store(Pid, P, PDict0),
+        trace = [T | Trace]
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
       % TODO Without Log
-      {Bs1, Body, M1 = #msg{dest = Pid, val = Val, time = Time}, Ms1} = cauder_eval:match_rec(Cs, Bs, Log, Ms),
+      {Bs1, Es1, M = #msg{dest = Pid, val = Val, time = Time}, Ms1} = cauder_eval:match_rec(Cs, Bs, Log, Ms),
 
-      P1 = P#proc{
+      P = P0#proc{
         log   = tl(Log),
-        hist  = [{rec, Bs0, Es0, Stk0, M1} | Hist],
+        hist  = [{rec, Bs0, Es0, Stk0, M} | Hist],
         stack = Stk,
-        env   = utils:merge_env(Bs, Bs1),
-        exprs = Body
+        env   = utils:merge_bindings(Bs, Bs1),
+        exprs = Es1
       },
-      T1 = #trace{
+      T = #trace{
         type = ?RULE_RECEIVE,
         from = Pid,
         val  = Val,
@@ -123,8 +123,8 @@ eval_step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = Ms1,
-        procs = [P1 | Ps],
-        trace = [T1 | Ts]
+        procs = orddict:store(Pid, P, PDict0),
+        trace = [T | Trace]
       }
   end.
 
@@ -135,18 +135,22 @@ eval_step(Sys, Pid) ->
 -spec eval_opts(cauder_types:system()) -> [cauder_types:option()].
 
 eval_opts(#sys{procs = []}) -> [];
-eval_opts(System = #sys{mail = Mail, procs = [P | Ps]}) ->
-  #proc{pid = Pid, log = Log, stack = Stk, env = Bs, exprs = Es} = P,
-  case eval_expr_opt(Es, Bs, Stk, Log, Mail) of
-    ?NOT_EXP -> eval_opts(System#sys{procs = Ps});
-    Rule ->
-      Option = #opt{
-        sem  = ?MODULE,
-        id   = Pid,
-        rule = Rule
-      },
-      [Option | eval_opts(System#sys{procs = Ps})]
-  end.
+eval_opts(#sys{mail = Mail, procs = PDict}) ->
+  lists:filtermap(
+    fun
+      ({_, #proc{pid = Pid, log = Log, stack = Stk, env = Bs, exprs = Es}}) ->
+        case eval_expr_opt(Es, Bs, Stk, Log, Mail) of
+          ?NOT_EXP -> false;
+          Rule ->
+            {true, #opt{
+              sem  = ?MODULE,
+              id   = Pid,
+              rule = Rule
+            }}
+        end
+    end,
+    PDict
+  ).
 
 
 -spec eval_expr_opt(Expressions, Environment, Stack, Log, Mail) -> Rule when

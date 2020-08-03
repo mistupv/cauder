@@ -15,7 +15,7 @@ can_roll(#sys{procs = Procs}, Pid) ->
   case utils:pid_exists(Procs, Pid) of
     false -> false;
     true ->
-      {Proc, _} = utils:select_proc(Procs, Pid),
+      {Proc, _} = utils:take_process(Procs, Pid),
       case Proc#proc.hist of
         [] -> false;
         _ -> true
@@ -27,7 +27,7 @@ can_roll(#sys{procs = Procs}, Pid) ->
 
 roll_step(Sys0, Pid) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   %io:format("eval_roll - hist: ~p\n",[Proc#proc.hist]),
   [CurHist | _] = Proc#proc.hist,
   case CurHist of
@@ -78,22 +78,22 @@ roll_send(Sys0, Pid, DestPid, Time) ->
 
 -spec can_roll_spawn(cauder_types:system(), pos_integer()) -> boolean().
 
-can_roll_spawn(#sys{procs = Procs}, SpawnPid) -> utils:find_proc_with_spawn(Procs, SpawnPid) =/= false.
+can_roll_spawn(#sys{procs = ProcDict}, SpawnPid) -> utils:find_proc_with_spawn(ProcDict, SpawnPid) =/= false.
 
 
 -spec can_roll_send(cauder_types:system(), pos_integer()) -> boolean().
 
-can_roll_send(#sys{procs = Procs}, Time) -> utils:find_proc_with_send(Procs, Time) =/= false.
+can_roll_send(#sys{procs = ProcDict}, Time) -> utils:find_proc_with_send(ProcDict, Time) =/= false.
 
 
 -spec can_roll_rec(cauder_types:system(), pos_integer()) -> boolean().
 
-can_roll_rec(#sys{procs = Procs}, Time) -> utils:find_proc_with_rec(Procs, Time) =/= false.
+can_roll_rec(#sys{procs = ProcDict}, Time) -> utils:find_proc_with_rec(ProcDict, Time) =/= false.
 
 
 -spec can_roll_var(cauder_types:system(), atom()) -> boolean().
 
-can_roll_var(#sys{procs = Procs}, Name) -> utils:find_proc_with_var(Procs, Name) =/= false.
+can_roll_var(#sys{procs = ProcDict}, Name) -> utils:find_proc_with_var(ProcDict, Name) =/= false.
 
 
 %% =====================================================================
@@ -134,7 +134,7 @@ roll_var(Sys, Name) ->
 
 roll_until_spawn(Sys0, Pid, SpawnPid) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   [Hist | _] = Proc#proc.hist,
   case Hist of
     {spawn, _Bs, _Es, _Stk, SpawnPid} ->
@@ -149,7 +149,7 @@ roll_until_spawn(Sys0, Pid, SpawnPid) ->
 
 roll_until_send(Sys0, Pid, Time) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   [CurHist | _] = Proc#proc.hist,
   case CurHist of
     {send, _Bs, _Es, _Stk, #msg{time = Time}} ->
@@ -164,7 +164,7 @@ roll_until_send(Sys0, Pid, Time) ->
 
 roll_until_rec(Sys0, Pid, Time) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   [CurHist | _] = Proc#proc.hist,
   case CurHist of
     {rec, _Bs, _Es, _Stk, #msg{time = Time}} ->
@@ -180,7 +180,7 @@ roll_until_rec(Sys0, Pid, Time) ->
 roll_after_rec(Sys0, Pid, Time) ->
   Sys1 = roll_step(Sys0, Pid),
   Procs = Sys1#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   [CurHist | _] = Proc#proc.hist,
   case CurHist of
     {rec, _Bs, _E, _Stk, #msg{time = Time}} ->
@@ -193,7 +193,7 @@ roll_after_rec(Sys0, Pid, Time) ->
 
 roll_until_var(Sys0, Pid, Name) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:select_proc(Procs, Pid),
+  {Proc, _} = utils:take_process(Procs, Pid),
   Hist = Proc#proc.hist,
   case utils:has_var(Hist, Name) of
     true ->

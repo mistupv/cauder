@@ -6,17 +6,17 @@
 -module(utils).
 -export([fundef_lookup/3, fundef_rename/1,
          temp_variable/1, is_temp_variable_name/1, fresh_time/0, pid_exists/2,
-         select_proc/2, select_msg/2,
+         take_process/2, select_msg/2,
          find_proc_with_send/2,
          find_proc_with_spawn/2, find_proc_with_rec/2,
          find_proc_with_var/2,
-         merge_env/2,
+         merge_bindings/2,
          stringToMFA/1, stringToArgs/1,
          filter_options/2,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1,
-         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2]).
+         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2, current_line/1]).
 
 -include("cauder.hrl").
 
@@ -122,25 +122,21 @@ fresh_time() ->
   Time.
 
 
--spec pid_exists([cauder_types:process()], pos_integer()) -> boolean().
+-spec pid_exists(cauder_types:process_dict(), pos_integer()) -> boolean().
 
-pid_exists([#proc{pid = Pid} | _], Pid) -> true;
-pid_exists([_ | Procs], Pid)            -> pid_exists(Procs, Pid);
-pid_exists([], _)                       -> false.
+pid_exists(Procs, Pid) -> orddict:is_key(Pid, Procs).
 
 
 %%--------------------------------------------------------------------
 %% @doc Returns a tuple where the first element is the process whose
-%% Pid matches the given one, and the second element is a list with
-%% the rest of processes from `Procs`
+%% Pid matches the given one, and the second element is a dictionary
+%% without the previous process.
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_proc([cauder_types:process()], pos_integer()) -> {cauder_types:process(), [cauder_types:process()]}.
+-spec take_process(cauder_types:process_dict(), pos_integer()) -> {cauder_types:process(), cauder_types:process_dict()}.
 
-select_proc(Procs, Pid) ->
-  {[Proc], RestProcs} = lists:partition(fun(P) -> P#proc.pid == Pid end, Procs),
-  {Proc, RestProcs}.
+take_process(Procs, Pid) -> {_P, _Ps} = orddict:take(Pid, Procs).
 
 
 %%--------------------------------------------------------------------
@@ -172,39 +168,40 @@ check_log([])         -> none;
 check_log([Item | _]) -> Item.
 
 
--spec find_item([cauder_types:process()], {spawn | send | 'receive', pos_integer()}) -> [pos_integer()].
+-spec find_item(cauder_types:process_dict(), cauder_types:log_entry()) -> [pos_integer()].
 
-find_item(Procs, Item) ->
+find_item(PDict, Item) ->
   lists:filtermap(
-    fun(#proc{pid = Pid, log = Log}) ->
+    fun({_, #proc{pid = Pid, log = Log}}) ->
       case lists:member(Item, Log) of
         true -> {true, Pid};
         false -> false
       end
-    end, Procs).
+    end, PDict).
 
 
--spec find_spawn_parent([cauder_types:process()], pos_integer()) -> [pos_integer()].
+-spec find_spawn_parent(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
 
-find_spawn_parent(Procs, Pid) -> find_item(Procs, {spawn, Pid}).
+find_spawn_parent(PDict, Pid) -> find_item(PDict, {spawn, Pid}).
 
--spec find_msg_sender([cauder_types:process()], pos_integer()) -> [pos_integer()].
+-spec find_msg_sender(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
 
-find_msg_sender(Procs, Stamp) -> find_item(Procs, {send, Stamp}).
+find_msg_sender(PDict, Stamp) -> find_item(PDict, {send, Stamp}).
 
--spec find_msg_receiver([cauder_types:process()], pos_integer()) -> [pos_integer()].
+-spec find_msg_receiver(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
 
-find_msg_receiver(Procs, Stamp) -> find_item(Procs, {'receive', Stamp}).
+find_msg_receiver(PDict, Stamp) -> find_item(PDict, {'receive', Stamp}).
 
 
 %% =====================================================================
 %% @doc Returns the processes that contain a spawn item in history with
 %% pid `Pid`
 
--spec find_proc_with_spawn([cauder_types:process()], pos_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_spawn(cauder_types:process_dict(), pos_integer()) -> cauder_types:process() | false.
 
-find_proc_with_spawn(Procs, Pid) ->
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_spawn(H, Pid) end, Procs) of
+find_proc_with_spawn(PDict, Pid) ->
+  Ps = lists:map(fun({_, P}) -> P end, PDict),
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_spawn(H, Pid) end, Ps) of
     [Proc | _] -> Proc;
     [] -> false
   end.
@@ -214,10 +211,11 @@ find_proc_with_spawn(Procs, Pid) ->
 %% @doc Returns the processes that contain a send item in history with
 %% time `Time`
 
--spec find_proc_with_send([cauder_types:process()], non_neg_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_send(cauder_types:process_dict(), non_neg_integer()) -> cauder_types:process() | false.
 
-find_proc_with_send(Procs, Time) ->
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Procs) of
+find_proc_with_send(PDict, Time) ->
+  Ps = lists:map(fun({_, P}) -> P end, PDict),
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Ps) of
     [Proc | _] -> Proc;
     [] -> false
   end.
@@ -227,10 +225,11 @@ find_proc_with_send(Procs, Time) ->
 %% @doc Returns the processes that contain a rec item in history with
 %% time `Time`
 
--spec find_proc_with_rec([cauder_types:process()], non_neg_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_rec(cauder_types:process_dict(), non_neg_integer()) -> cauder_types:process() | false.
 
-find_proc_with_rec(Procs, Time) ->
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_rec(H, Time) end, Procs) of
+find_proc_with_rec(PDict, Time) ->
+  Ps = lists:map(fun({_, P}) -> P end, PDict),
+  case lists:dropwhile(fun(#proc{hist = H}) -> not has_rec(H, Time) end, Ps) of
     [Proc | _] -> Proc;
     [] -> false
   end.
@@ -239,10 +238,11 @@ find_proc_with_rec(Procs, Time) ->
 %% @doc Returns the process that contain a binding for Var in its
 %% environment
 
--spec find_proc_with_var([cauder_types:process()], atom()) -> cauder_types:process() | false.
+-spec find_proc_with_var(cauder_types:process_dict(), atom()) -> cauder_types:process() | false.
 
-find_proc_with_var(Procs, Name) ->
-  case lists:dropwhile(fun(#proc{env = Bs}) -> not has_var(Bs, Name) end, Procs) of
+find_proc_with_var(PDict, Name) ->
+  Ps = lists:map(fun({_, P}) -> P end, PDict),
+  case lists:dropwhile(fun(#proc{env = Bs}) -> not has_var(Bs, Name) end, Ps) of
     [Proc | _] -> Proc;
     [] -> false
   end.
@@ -252,12 +252,18 @@ find_proc_with_var(Procs, Name) ->
 %% @doc Update the environment Env with multiple bindings
 
 
--spec merge_env(cauder_types:environment(), cauder_types:environment()) -> cauder_types:environment().
+-spec merge_bindings(cauder_types:environment(), cauder_types:environment()) -> cauder_types:environment().
 
-merge_env(Env, []) -> Env;
-merge_env(Env, [{Name, Value} | RestBindings]) ->
-  NewEnv = erl_eval:add_binding(Name, Value, Env),
-  merge_env(NewEnv, RestBindings).
+merge_bindings(Bs1, Bs2) ->
+  lists:foldl(
+    fun({Name, Val}, Bs) ->
+      case orddict:find(Name, Bs) of
+        {ok, Val} -> Bs; % Already with SAME value
+        {ok, V1} -> erlang:error(badmatch, V1);
+        error -> orddict:store(Name, Val, Bs)
+      end
+    end,
+    Bs2, orddict:to_list(Bs1)).
 
 
 %%--------------------------------------------------------------------
@@ -506,3 +512,8 @@ fresh_pid() ->
   cauder:ref_add(?FRESH_PID, Pid + 1),
   Pid.
 
+
+-spec current_line(Process) -> non_neg_integer() when
+  Process :: cauder_types:process().
+
+current_line(#proc{exprs = [E | _]}) -> element(2, E).

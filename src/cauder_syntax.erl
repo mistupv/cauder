@@ -298,10 +298,10 @@ check_guard_op(Op, Arity, AllowedTypes) ->
 %% @doc Replaces all occurrences of the given Variable in each one of
 %% the Expressions with the given literal Value.
 
--spec replace_variable(cauder_types:abstract_expr(), cauder_types:af_variable(), cauder_types:af_literal()) -> cauder_types:abstract_expr();
-                      ([cauder_types:abstract_expr()], cauder_types:af_variable(), cauder_types:af_literal()) -> [cauder_types:abstract_expr()].
+-spec replace_variable(cauder_types:abstract_expr(), cauder_types:af_variable(), term()) -> cauder_types:abstract_expr();
+                      ([cauder_types:abstract_expr()], cauder_types:af_variable(), term()) -> [cauder_types:abstract_expr()].
 
-replace_variable([E0 | Es], Var = {var, _, _}, Val = {value, _, _}) ->
+replace_variable([E0 | Es], Var = {var, _, _}, Val) ->
   E = replace_variable(E0, Var, Val),
   [E | replace_variable(Es, Var, Val)];
 replace_variable([], _, _) -> [];
@@ -314,8 +314,8 @@ replace_variable({clause, Line, H0, G0, B0}, Var, Val) ->
 
 replace_variable(Expr = {value, _, _}, _, _) ->
   Expr;
-replace_variable({var, _, Name}, {var, _, Name}, Val) ->
-  Val;
+replace_variable({var, _, Name}, {var, Line, Name}, Val) ->
+  {value, Line, Val};
 replace_variable(Expr = {var, _, _}, _, _) ->
   Expr;
 replace_variable({cons, Line, H0, T0}, Var, Val) ->

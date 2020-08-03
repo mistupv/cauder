@@ -2,7 +2,7 @@
 
 -include("cauder.hrl").
 
--export_type([system/0, process/0, message/0, trace/0, option/0]).
+-export_type([system/0, process/0, process_dict/0, message/0, trace/0, option/0]).
 -export_type([log/0, log_entry/0, history/0, history_entry/0, stack/0, stack_entry/0, environment/0, binding/0]).
 -export_type([print_option/0]).
 
@@ -16,6 +16,7 @@
 
 -type system() :: #sys{}.
 -type process() :: #proc{}.
+-type process_dict() :: orddict:orddict(pos_integer(), cauder_types:process()).
 -type message() :: #msg{}.
 -type option() :: #opt{}.
 -type trace() :: #trace{}.
@@ -37,7 +38,7 @@
 -type stack_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}
                      | {atom(), [abstract_expr()], af_variable()}.
 
--type environment() :: [binding()].
+-type environment() :: orddict:orddict(atom(), term()).
 -type binding() :: {atom(), term()}.
 
 

@@ -5,21 +5,18 @@
 
 -define(FRAME, 500).
 
--define(FRAME_SIZE_INIT, {800, 600}).
--define(FRAME_SIZE_MIN, {800, 600}).
--define(FRAME_SIZE_MAX, {800, 600}).
+-define(FRAME_SIZE_INIT, {900, 750}).
 
 -define(DEFAULT_FONT_SIZE, 9).
 -define(FONT_SIZES, [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]).
 
-%% =====================================================================
 
 %% ========== Menu Bar ========== %%
 
 %% File Menu
 
 -define(OPEN,             ?wxID_OPEN).
--define(REPLAY,           1000).
+-define(LOAD_TRACE,       1000).
 -define(EXIT,             ?wxID_EXIT).
 
 %% View Menu
@@ -54,111 +51,148 @@
 -define(ABOUT,            ?wxID_ABOUT).
 
 
-%% ==================== Left notebook ==================== %%
+%% ========== Main Panel ========== %%
 
--define(LEFT_NOTEBOOK,    2000).
+%% ===== Code Panel ===== %%
 
-%% ========== Code Panel ========== %%
+-define(CODE_TEXT,                2001).
 
--define(CODE_TEXT,        2001).
+%% ===== Action Panel ===== %%
 
--define(FUN_SIZER,        2002).
--define(FUN_CHOICE,       2003).
--define(ARGS_TEXT,        2004).
--define(START_BUTTON,     2005).
+-define(ACTION_NOTEBOOK,          2100).
 
-%% ========== State Panel ========== %%
+%% ----- Manual Panel ----- %%
 
--define(STATE_TEXT,       2006).
+-define(PROC_CHOICE,              2101).
 
+-define(SINGLE_FORWARD_BUTTON,    2102).
+-define(SINGLE_BACKWARD_BUTTON,   2104).
 
-%% ==================== Right top notebook ==================== %%
+%% ----- Automatic Panel ----- %%
 
--define(RIGHT_TOP_NOTEBOOK,     2100).
+-define(STEPS_SPIN, 2106).
 
-%% ========== Manual Panel ========== %%
+-define(MULTIPLE_FORWARD_BUTTON,  2107).
+-define(MULTIPLE_BACKWARD_BUTTON, 2108).
 
--define(MANUAL_PID_TEXT,        2101).
+%% ----- Replay Panel ----- %%
 
--define(FWD_INT_BUTTON,         2102).
--define(BWD_INT_BUTTON,         2104).
+-define(REPLAY_STEPS_SPIN,        2111).
+-define(REPLAY_SPAWN_TEXT,        2113).
+-define(REPLAY_SEND_TEXT,         2112).
+-define(REPLAY_REC_TEXT,          2114).
 
-%% ========== Automatic Panel ========== %%
+-define(REPLAY_INPUTS, [
+  ?REPLAY_STEPS_SPIN,
+  ?REPLAY_SPAWN_TEXT,
+  ?REPLAY_SEND_TEXT,
+  ?REPLAY_REC_TEXT
+]).
 
--define(AUTO_STEP_TEXT,         2106).
+-define(REPLAY_STEPS_BUTTON,      2115).
+-define(REPLAY_SPAWN_BUTTON,      2117).
+-define(REPLAY_SEND_BUTTON,       2116).
+-define(REPLAY_REC_BUTTON,        2118).
 
--define(FORWARD_BUTTON,         2107).
--define(BACKWARD_BUTTON,        2108).
--define(NORMALIZE_BUTTON,       2109).
-
-%% ========== Replay Panel ========== %%
-
--define(REPLAY_PID_TEXT,        2110).
--define(REPLAY_STEPS_TEXT,      2111).
--define(REPLAY_SEND_ID_TEXT,    2112).
--define(REPLAY_SPAWN_PID_TEXT,  2113).
--define(REPLAY_REC_ID_TEXT,     2114).
-
--define(REPLAY_BUTTON,          2115).
--define(REPLAY_SEND_BUTTON,     2116).
--define(REPLAY_SPAWN_BUTTON,    2117).
--define(REPLAY_REC_BUTTON,      2118).
-
-%% ========== Rollback Panel ========== %%
-
--define(ROLL_PID_TEXT,          2119).
--define(ROLL_STEP_TEXT,         2120).
--define(ROLL_SEND_ID_TEXT,      2121).
--define(ROLL_SPAWN_PID_TEXT,    2122).
--define(ROLL_REC_ID_TEXT,       2123).
--define(ROLL_VAR_NAME_TEXT,     2124).
-
--define(ROLL_BUTTON,            2125).
--define(ROLL_SEND_BUTTON,       2126).
--define(ROLL_SPAWN_BUTTON,      2127).
--define(ROLL_REC_BUTTON,        2128).
--define(ROLL_VAR_BUTTON,        2129).
-
-
-%% ==================== Right bottom notebook ==================== %%
-
--define(RIGHT_BOTTOM_NOTEBOOK,  2200).
-
-%% ========== Trace panel ========== %%
-
--define(TRACE_TEXT,             2201).
-
-%% ========== Roll log panel ========== %%
-
--define(ROLL_LOG_TEXT,          2202).
-
-
-%% ==================== Status bar ==================== %%
-
--define(STATUS_BAR,             2300).
-
-
-%% =====================================================================
-
--define(ALL_BUTTONS, [
-  ?FWD_INT_BUTTON,
-  ?BWD_INT_BUTTON,
-  ?FORWARD_BUTTON,
-  ?BACKWARD_BUTTON,
-  ?NORMALIZE_BUTTON,
-  ?REPLAY_BUTTON,
-  ?REPLAY_SEND_BUTTON,
+-define(REPLAY_BUTTONS, [
+  ?REPLAY_STEPS_BUTTON,
   ?REPLAY_SPAWN_BUTTON,
-  ?REPLAY_REC_BUTTON,
-  ?ROLL_BUTTON,
-  ?ROLL_SEND_BUTTON,
+  ?REPLAY_SEND_BUTTON,
+  ?REPLAY_REC_BUTTON
+]).
+
+%% ----- Rollback Panel ----- %%
+
+-define(ROLL_STEPS_SPIN,          2120).
+-define(ROLL_SPAWN_TEXT,          2122).
+-define(ROLL_SEND_TEXT,           2121).
+-define(ROLL_REC_TEXT,            2123).
+-define(ROLL_VAR_TEXT,            2124).
+
+-define(ROLL_INPUTS, [
+  ?ROLL_STEPS_SPIN,
+  ?ROLL_SPAWN_TEXT,
+  ?ROLL_SEND_TEXT,
+  ?ROLL_REC_TEXT,
+  ?ROLL_VAR_TEXT
+]).
+
+-define(ROLL_STEPS_BUTTON,        2125).
+-define(ROLL_SPAWN_BUTTON,        2127).
+-define(ROLL_SEND_BUTTON,         2126).
+-define(ROLL_REC_BUTTON,          2128).
+-define(ROLL_VAR_BUTTON,          2129).
+
+-define(ROLL_BUTTONS, [
+  ?ROLL_STEPS_BUTTON,
   ?ROLL_SPAWN_BUTTON,
+  ?ROLL_SEND_BUTTON,
   ?ROLL_REC_BUTTON,
   ?ROLL_VAR_BUTTON
 ]).
 
 
+%% ===== %%
+
+
+-define(ALL_INPUTS, [
+  ?PROC_CHOICE,
+  ?STEPS_SPIN |
+  ?REPLAY_INPUTS ++ ?ROLL_INPUTS
+]).
+
+-define(ALL_BUTTONS, [
+  ?SINGLE_FORWARD_BUTTON, ?SINGLE_BACKWARD_BUTTON,
+  ?MULTIPLE_FORWARD_BUTTON, ?MULTIPLE_BACKWARD_BUTTON |
+  ?REPLAY_BUTTONS ++ ?ROLL_BUTTONS
+]).
+
+
+%% ===== System Info Panel ===== %%
+
+-define(MAIL_LIST,            2199).
+
+-define(SYSTEM_INFO_NOTEBOOK, 2200).
+-define(PAGEPOS_TRACE,        0).
+-define(PAGEPOS_ROLL,         1).
+
+-define(TRACE_LIST,           2201).
+-define(ROLL_LOG_LIST,        2202).
+
+
+%% ===== Process Info Panel ===== %%
+
+-define(BINDINGS_LIST,        2222).
+-define(STACK_LIST,           2223).
+-define(LOG_TEXT,             2224).
+-define(HISTORY_TEXT,         2225).
+
+
+%% ========== Status bar ========== %%
+
+-define(STATUS_BAR,           2300).
+
+
 %% =====================================================================
+
+
+%% =====================================================================
+
+
+%%-define(LEFT_NOTEBOOK, 2000).
+%%
+%%-define(FUN_SIZER, 2002).
+%%-define(FUN_CHOICE, 2003).
+%%-define(ARGS_TEXT, 2004).
+%%-define(START_BUTTON, 2005).
+%%
+%%%% ========== State Panel ========== %%
+%%
+%%-define(STATE_TEXT, 2006).
+
+
+%% =====================================================================
+
 
 -define(SYSTEM, 601).
 -define(STATUS, 602).
@@ -166,13 +200,6 @@
 
 %% =====================================================================
 
--define(PAGEPOS_CODE,  0).
--define(PAGEPOS_STATE, 1).
--define(PAGEPOS_MANU,  0).
--define(PAGEPOS_SEMI,  1).
--define(PAGEPOS_AUTO,  2).
--define(PAGEPOS_TRACE, 0).
--define(PAGEPOS_ROLL,  1).
 
 -define(INFO_TEXT, "A Causal-consistent Debugger for Erlang. More info at: https://github.com/mistupv/cauder").
 
