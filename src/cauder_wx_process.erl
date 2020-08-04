@@ -1,11 +1,42 @@
 -module(cauder_wx_process).
 
--export([bind_area/1, stack_area/1, log_area/1, history_area/1, update_process_info/0]).
+-export([process_info_area/1, update_process_info/0]).
 
 
 -include("cauder.hrl").
 -include("cauder_gui.hrl").
 -include_lib("wx/include/wx.hrl").
+
+
+%% ===== Process Info ===== %%
+
+-spec process_info_area(Parent :: wxWindow:wxWindow()) -> ProcessInfoArea :: wxPanel:wxPanel().
+
+process_info_area(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxGridSizer:new(2, 2, 5, 5),
+  wxWindow:setSizer(Win, Sizer),
+
+  Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
+
+  wxSizer:add(Sizer, bind_area(Win), Expand),
+  wxSizer:add(Sizer, stack_area(Win), Expand),
+  wxSizer:add(Sizer, log_area(Win), Expand),
+  wxSizer:add(Sizer, history_area(Win), Expand),
+
+  Win.
+
+
+-spec update_process_info() -> ok.
+
+update_process_info() ->
+  _ViewOpts = utils_gui:toggle_opts(),
+
+  update_bindings(),
+  update_stack(),
+  update_log(),
+  update_history().
 
 
 %% ===== Bindings ===== %%
@@ -53,7 +84,7 @@ update_bindings() ->
           true -> Bs;
           false -> pretty_print:relevant_bindings(Bs, Es)
         end,
-      wx:foldl(
+      lists:foldl(
         fun({Var, Val}, Row) ->
           wxListCtrl:insertItem(BindArea, Row, ""),
           wxListCtrl:setItemFont(BindArea, Row, wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL)),
@@ -92,7 +123,7 @@ update_stack() ->
     none -> ok;
     #proc{stack = Stk} ->
       Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
-      wx:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
+      lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
   end,
   wxListBox:thaw(StackArea).
 
@@ -168,14 +199,6 @@ update_history() ->
 
 
 %% ===== Utils ===== %%
-
-update_process_info() ->
-  _ViewOpts = utils_gui:toggle_opts(),
-
-  update_bindings(),
-  update_stack(),
-  update_log(),
-  update_history().
 
 
 ref_add(Id, Ref) -> cauder_gui:ref_add(Id, Ref).

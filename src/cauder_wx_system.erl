@@ -1,11 +1,45 @@
 -module(cauder_wx_system).
 
--export([mail_area/1, trace_area/1, roll_log_area/1, update_system_info/0]).
+-export([system_info_area/1, update_system_info/0]).
 
 
 -include("cauder.hrl").
 -include("cauder_gui.hrl").
 -include_lib("wx/include/wx.hrl").
+
+
+%% ===== System Info ===== %%
+
+
+-spec system_info_area(Parent :: wxWindow:wxWindow()) -> SystemInfoArea :: wxPanel:wxPanel().
+
+system_info_area(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxBoxSizer:new(?wxVERTICAL),
+  wxWindow:setSizer(Win, Sizer),
+
+  Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
+
+  wxSizer:add(Sizer, mail_area(Win), Expand),
+
+  wxSizer:addSpacer(Sizer, 5),
+
+  Notebook = wxNotebook:new(Win, ?SYSTEM_INFO_NOTEBOOK),
+  ref_add(?SYSTEM_INFO_NOTEBOOK, Notebook),
+  wxNotebook:addPage(Notebook, trace_area(Notebook), "Trace"),
+  wxNotebook:addPage(Notebook, roll_log_area(Notebook), "Roll Log"),
+  wxSizer:add(Sizer, Notebook, Expand),
+
+  Win.
+
+
+-spec update_system_info() -> ok.
+
+update_system_info() ->
+  update_mail(),
+  update_trace(),
+  update_roll_log().
 
 
 %% ===== Mail ===== %%
@@ -51,11 +85,12 @@ update_mail() ->
   MailArea = ref_lookup(?MAIL_LIST),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   #sys{mail = Mail} = ref_lookup(?SYSTEM),
-  wx:foldl(
+  lists:foldl(
     fun(#msg{dest = Dest, val = Value, time = Time}, Row) ->
       wxListCtrl:insertItem(MailArea, Row, ""),
-      wxListCtrl:setItemFont(MailArea, Row, wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL)),
+      wxListCtrl:setItemFont(MailArea, Row, Font),
       wxListCtrl:setItem(MailArea, Row, 0, integer_to_list(Dest)),
       wxListCtrl:setItem(MailArea, Row, 1, io_lib:format("~p", [Value])),
       wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(Time)),
@@ -89,7 +124,7 @@ update_trace() ->
   wxListBox:clear(TraceArea),
   #sys{trace = Trace} = ref_lookup(?SYSTEM),
   Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:trace_entry/1, Trace)),
-  wx:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
+  lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
   wxListBox:thaw(TraceArea).
 
 
@@ -117,17 +152,11 @@ update_roll_log() ->
   wxListBox:freeze(RollLogArea),
   wxListBox:clear(RollLogArea),
   #sys{roll = Roll} = ref_lookup(?SYSTEM),
-  wx:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, Roll),
+  lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, Roll),
   wxListBox:freeze(RollLogArea).
 
 
 %% ===== Utils ===== %%
-
-
-update_system_info() ->
-  update_mail(),
-  update_trace(),
-  update_roll_log().
 
 
 ref_add(Id, Ref) -> cauder_gui:ref_add(Id, Ref).

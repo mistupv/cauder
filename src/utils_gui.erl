@@ -8,9 +8,6 @@
          disable_control/1, disable_controls/1, disable_all_buttons/0,
          button_to_option/1, option_to_button_label/1, set_button_label_from/2, disable_all_inputs/0]).
 
-%% Font size functions
--export([can_zoom_in/1, can_zoom_out/1, prev_font_size/1, next_font_size/1]).
-
 %% Misc.
 -export([clear_texts/0, sort_opts/1, toggle_opts/0, pp_marked_text/2]).
 
@@ -312,33 +309,8 @@ update_status_text(String) ->
   Frame = ref_lookup(?FRAME),
   wxFrame:setStatusText(Frame, String).
 
-index_of(Elem, List) -> index_of(Elem, List, 1).
 
-index_of(_, [], _)                -> not_found;
-index_of(Elem, [Elem | _], Index) -> Index;
-index_of(Elem, [_ | Rest], Index) -> index_of(Elem, Rest, Index + 1).
-
-prev_font_size(CurSize) ->
-  SizeIdx = index_of(CurSize, ?FONT_SIZES),
-  case SizeIdx == 1 of
-    true -> CurSize;
-    false -> lists:nth(SizeIdx - 1, ?FONT_SIZES)
-  end.
-
-next_font_size(CurSize) ->
-  SizeIdx = index_of(CurSize, ?FONT_SIZES),
-  SizeLen = length(?FONT_SIZES),
-  case SizeIdx == SizeLen of
-    true -> CurSize;
-    false -> lists:nth(SizeIdx + 1, ?FONT_SIZES)
-  end.
-
-can_zoom_in(Size) -> index_of(Size, ?FONT_SIZES) < length(?FONT_SIZES).
-can_zoom_out(Size) -> index_of(Size, ?FONT_SIZES) > 1.
-
-sort_opts(Opts) ->
-  SortOpts = lists:sort(fun(P1, P2) -> P1#opt.id < P2#opt.id end, Opts),
-  SortOpts.
+sort_opts(Opts) -> lists:sort(fun(P1, P2) -> P1#opt.id < P2#opt.id end, Opts).
 
 
 -spec toggle_opts() -> [{cauder_types:print_option(), boolean()}].

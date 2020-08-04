@@ -7,8 +7,15 @@
 
 -define(FRAME_SIZE_INIT, {900, 750}).
 
--define(DEFAULT_FONT_SIZE, 9).
--define(FONT_SIZES, [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72]).
+-define(ZOOM_MIN, -10).
+-define(ZOOM_MAX, 20).
+-define(ZOOM_DEFAULT, ?ZOOM_MIN + ?FONT_SIZE_APPARENT_DEFAULT - ?FONT_SIZE_MIN).
+
+-define(FONT_SIZE_MIN, 7).
+% Change if you want a different initial font size
+-define(FONT_SIZE_APPARENT_DEFAULT, 9).
+% DO NOT CHANGE. This is the actual default font size taking into account zoom levels
+-define(FONT_SIZE_ACTUAL_DEFAULT, ?FONT_SIZE_APPARENT_DEFAULT - (?ZOOM_DEFAULT)).
 
 
 %% ========== Menu Bar ========== %%
@@ -23,9 +30,9 @@
 
 -define(MENU_VIEW,        1100).
 
--define(ZOOM_IN,          ?wxID_ZOOM_IN).
--define(ZOOM_OUT,         ?wxID_ZOOM_OUT).
--define(ZOOM_100,         ?wxID_ZOOM_100).
+-define(BUTTON_ZOOM_IN,   ?wxID_ZOOM_IN).
+-define(BUTTON_ZOOM_OUT,  ?wxID_ZOOM_OUT).
+-define(BUTTON_ZOOM_100,  ?wxID_ZOOM_100).
 
 -define(TOGGLE_MAIL,      1110).
 -define(TOGGLE_LOG,       1111).

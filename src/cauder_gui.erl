@@ -70,17 +70,17 @@ menu_bar(Frame) ->
   wxMenuBar:append(MenuBar, View, "&View"),
   ref_add(?MENU_VIEW, View),
 
-  View_ZoomIn = wxMenu:append(View, ?ZOOM_IN, "Zoom &In\tCtrl++"),
+  View_ZoomIn = wxMenu:append(View, ?BUTTON_ZOOM_IN, "Zoom &In\tCtrl++"),
   wxMenuItem:setHelp(View_ZoomIn, ?HELP_ZOOM_IN_ITEM),
-  wxMenuItem:enable(View_ZoomIn, [{enable, utils_gui:can_zoom_in(?DEFAULT_FONT_SIZE)}]),
-  ref_add(?ZOOM_IN, View_ZoomIn),
-  View_ZoomOut = wxMenu:append(View, ?ZOOM_OUT, "Zoom &Out\tCtrl+-"),
+  wxMenuItem:enable(View_ZoomIn, [{enable, ?ZOOM_DEFAULT < ?ZOOM_MAX}]),
+  ref_add(?BUTTON_ZOOM_IN, View_ZoomIn),
+  View_ZoomOut = wxMenu:append(View, ?BUTTON_ZOOM_OUT, "Zoom &Out\tCtrl+-"),
   wxMenuItem:setHelp(View_ZoomOut, ?HELP_ZOOM_OUT_ITEM),
-  wxMenuItem:enable(View_ZoomOut, [{enable, utils_gui:can_zoom_out(?DEFAULT_FONT_SIZE)}]),
-  ref_add(?ZOOM_OUT, View_ZoomOut),
-  View_Zoom100 = wxMenu:append(View, ?ZOOM_100, "Zoom &100%\tCtrl+0"),
+  wxMenuItem:enable(View_ZoomOut, [{enable, ?ZOOM_DEFAULT > ?ZOOM_MIN}]),
+  ref_add(?BUTTON_ZOOM_OUT, View_ZoomOut),
+  View_Zoom100 = wxMenu:append(View, ?BUTTON_ZOOM_100, "Zoom &100%\tCtrl+0"),
   wxMenuItem:setHelp(View_Zoom100, ?HELP_ZOOM_100_ITEM),
-  ref_add(?ZOOM_100, View_Zoom100),
+  ref_add(?BUTTON_ZOOM_100, View_Zoom100),
 
   wxMenu:appendSeparator(View),
 
@@ -154,9 +154,9 @@ main_area(Parent) ->
   Left = wxBoxSizer:new(?wxVERTICAL),
   wxSizer:add(Content, Left, [{proportion, 2}, {flag, ?wxEXPAND}]),
 
-  wxSizer:add(Left, code_area(Panel), [{proportion, 2}, {flag, ?wxEXPAND}]),
+  wxSizer:add(Left, cauder_wx_code:code_area(Panel), [{proportion, 2}, {flag, ?wxEXPAND}]),
   wxSizer:addSpacer(Left, 10),
-  wxSizer:add(Left, process_info_area(Panel), [{proportion, 1}, {flag, ?wxEXPAND}]),
+  wxSizer:add(Left, cauder_wx_process:process_info_area(Panel), [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   % -----
 
@@ -169,23 +169,7 @@ main_area(Parent) ->
 
   wxSizer:add(Right, actions_area(Panel), [{proportion, 0}, {flag, ?wxEXPAND}]),
   wxSizer:addSpacer(Right, 10),
-  wxSizer:add(Right, system_info_area(Panel), [{proportion, 1}, {flag, ?wxEXPAND}]),
-
-  Panel.
-
-
-%% ----- Code ----- %%
-
-
-code_area(Parent) ->
-  Panel = wxPanel:new(Parent),
-
-  Code = wxStaticBoxSizer:new(?wxHORIZONTAL, Panel, [{label, "Code"}]),
-  wxWindow:setSizer(Panel, Code),
-
-  CodeArea = cauder_wx_code:code_area(Panel),
-  ref_add(?CODE_TEXT, CodeArea),
-  wxSizer:add(Code, CodeArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
+  wxSizer:add(Right, cauder_wx_system:system_info_area(Panel), [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Panel.
 
@@ -564,49 +548,6 @@ rollback_actions(Parent) ->
   Panel.
 
 
-%% ----- System Info ----- %%
-
-
-system_info_area(Parent) ->
-  Panel = wxPanel:new(Parent),
-
-  Content = wxBoxSizer:new(?wxVERTICAL),
-  wxWindow:setSizer(Panel, Content),
-
-  Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
-
-  wxSizer:add(Content, cauder_wx_system:mail_area(Panel), Expand),
-
-  wxSizer:addSpacer(Content, 5),
-
-  Notebook = wxNotebook:new(Panel, ?SYSTEM_INFO_NOTEBOOK),
-  ref_add(?SYSTEM_INFO_NOTEBOOK, Notebook),
-  wxNotebook:addPage(Notebook, cauder_wx_system:trace_area(Notebook), "Trace"),
-  wxNotebook:addPage(Notebook, cauder_wx_system:roll_log_area(Notebook), "Roll Log"),
-  wxSizer:add(Content, Notebook, Expand),
-
-  Panel.
-
-
-%% ----- Process Info ----- %%
-
-
-process_info_area(Parent) ->
-  Panel = wxPanel:new(Parent),
-
-  Content = wxGridSizer:new(2, 2, 5, 5),
-  wxWindow:setSizer(Panel, Content),
-
-  Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
-
-  wxSizer:add(Content, cauder_wx_process:bind_area(Panel), Expand),
-  wxSizer:add(Content, cauder_wx_process:stack_area(Panel), Expand),
-  wxSizer:add(Content, cauder_wx_process:log_area(Panel), Expand),
-  wxSizer:add(Content, cauder_wx_process:history_area(Panel), Expand),
-
-  Panel.
-
-
 %% ===== Status Bar ===== %%
 
 
@@ -684,49 +625,6 @@ openReplayDialog(Parent) ->
   end,
   wxDialog:destroy(Dialog).
 
-%%zoomIn() ->
-%%  CodeText = ref_lookup(?CODE_TEXT),
-%%  StateText = ref_lookup(?STATE_TEXT),
-%%
-%%  Font = wxTextCtrl:getFont(CodeText),
-%%  FontSize = wxFont:getPointSize(Font),
-%%  NewFontSize = utils_gui:next_font_size(FontSize),
-%%  wxFont:setPointSize(Font, NewFontSize),
-%%
-%%  wxTextCtrl:setFont(CodeText, Font),
-%%  wxTextCtrl:setFont(StateText, Font),
-%%
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_IN), [{enable, utils_gui:can_zoom_in(NewFontSize)}]),
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_OUT), [{enable, utils_gui:can_zoom_out(NewFontSize)}]).
-%%
-%%zoomOut() ->
-%%  CodeText = ref_lookup(?CODE_TEXT),
-%%  StateText = ref_lookup(?STATE_TEXT),
-%%
-%%  Font = wxTextCtrl:getFont(CodeText),
-%%  FontSize = wxFont:getPointSize(Font),
-%%  NewFontSize = utils_gui:prev_font_size(FontSize),
-%%  wxFont:setPointSize(Font, NewFontSize),
-%%
-%%  wxTextCtrl:setFont(CodeText, Font),
-%%  wxTextCtrl:setFont(StateText, Font),
-%%
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_IN), [{enable, utils_gui:can_zoom_in(NewFontSize)}]),
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_OUT), [{enable, utils_gui:can_zoom_out(NewFontSize)}]).
-%%
-%%zoomReset() ->
-%%  CodeText = ref_lookup(?CODE_TEXT),
-%%  StateText = ref_lookup(?STATE_TEXT),
-%%
-%%  Font = wxTextCtrl:getFont(CodeText),
-%%  NewFontSize = ?DEFAULT_FONT_SIZE,
-%%  wxFont:setPointSize(Font, NewFontSize),
-%%
-%%  wxTextCtrl:setFont(CodeText, Font),
-%%  wxTextCtrl:setFont(StateText, Font),
-%%
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_IN), [{enable, utils_gui:can_zoom_in(NewFontSize)}]),
-%%  wxMenuItem:enable(ref_lookup(?ZOOM_OUT), [{enable, utils_gui:can_zoom_out(NewFontSize)}]).
 
 %%--------------------------------------------------------------------
 %% @doc Initializes the system.
@@ -864,21 +762,22 @@ refresh(RefreshState) ->
     true ->
       System = ref_lookup(?SYSTEM),
       Options = cauder:eval_opts(System),
-      case RefreshState of
-        false -> ok;
-        true ->
-          Refresh =
-            fun() ->
+      Update =
+        fun() ->
+          if
+            RefreshState ->
               utils_gui:update_process_choices(System),
               utils_gui:update_code_line(),
               cauder_wx_system:update_system_info(),
-              cauder_wx_process:update_process_info()
-            end,
-          wx:batch(Refresh)
-      end,
-      refresh_buttons(Options),
-      utils_gui:enable_replay(), % TODO Enable only if it is possible to replay
-      utils_gui:enable_roll() % TODO Enable only if it is possible to rollback
+              cauder_wx_process:update_process_info();
+            true -> ok
+          end,
+          refresh_buttons(Options),
+          utils_gui:enable_replay(), % TODO Enable only if it is possible to replay
+          utils_gui:enable_roll() % TODO Enable only if it is possible to rollback
+        end,
+
+      wx:batch(Update)
   end.
 
 %%start() ->
@@ -1102,9 +1001,9 @@ loop() ->
       #wx{id = ?EXIT, event = #wxCommand{type = command_menu_selected}} -> exit;
 
     %% ---------- View menu ---------- %%
-%%      #wx{id = ?ZOOM_IN, event = #wxCommand{type = command_menu_selected}} -> zoomIn();
-%%      #wx{id = ?ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} -> zoomOut();
-%%      #wx{id = ?ZOOM_100, event = #wxCommand{type = command_menu_selected}} -> zoomReset();
+      #wx{id = ?BUTTON_ZOOM_IN, event = #wxCommand{type = command_menu_selected}} -> cauder_wx_code:zoom_in(ref_lookup(?CODE_TEXT));
+      #wx{id = ?BUTTON_ZOOM_OUT, event = #wxCommand{type = command_menu_selected}} -> cauder_wx_code:zoom_out(ref_lookup(?CODE_TEXT));
+      #wx{id = ?BUTTON_ZOOM_100, event = #wxCommand{type = command_menu_selected}} -> cauder_wx_code:zoom_reset(ref_lookup(?CODE_TEXT));
 %%      #wx{id = ?TOGGLE_MAIL, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
 %%      #wx{id = ?TOGGLE_LOG, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
 %%      #wx{id = ?TOGGLE_HIST, event = #wxCommand{type = command_menu_selected}} -> refresh(true);
@@ -1125,6 +1024,11 @@ loop() ->
         Dialog = wxMessageDialog:new(ref_lookup(?FRAME), ?INFO_TEXT, [{style, ?wxOK}, {caption, Caption}]),
         wxDialog:showModal(Dialog),
         wxWindow:destroy(Dialog);
+
+    %% ---------- Code area ---------- %%
+      #wx{id = ?CODE_TEXT, event = #wxStyledText{type = stc_zoom}, obj = CodeArea} ->
+        cauder_wx_code:update_margin(CodeArea),
+        cauder_wx_code:update_zoom_buttons(CodeArea);
 
     %% ---------- Start button ---------- %%
 %%      #wx{id = ?START_BUTTON, event = #wxCommand{type = command_button_clicked}} -> start();

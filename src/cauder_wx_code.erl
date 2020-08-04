@@ -1,13 +1,17 @@
 -module(cauder_wx_code).
 
--export([code_area/1, load_code/2, unload_code/1, mark_line/3]).
+-export([code_area/1, load_code/2, unload_code/1, mark_line/3,
+         can_zoom_in/1, can_zoom_out/1, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_zoom_buttons/1]).
 
+
+-include("cauder.hrl").
+-include("cauder_gui.hrl").
 -include_lib("wx/include/wx.hrl").
 
 
--define(LINE_MARKER, 0).
--define(LINE_BACKGROUND, 1).
-
+-define(KEYWORDS, ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
+                   "end", "fun", "if", "let", "of", "receive", "when", "bnot", "not",
+                   "div", "rem", "band", "and", "bor", "bxor", "bsl", "bsr", "or", "xor"]).
 
 %% For wx-2.9 usage
 -ifndef(wxSTC_ERLANG_COMMENT_FUNCTION).
@@ -24,54 +28,67 @@
 -define(wxSTC_ERLANG_MODULES_ATT, 24).
 -endif.
 
+-define(STYLES, [{?wxSTC_ERLANG_DEFAULT, {0, 0, 0}},
+                 {?wxSTC_ERLANG_COMMENT, {160, 53, 35}},
+                 {?wxSTC_ERLANG_VARIABLE, {150, 100, 40}},
+                 {?wxSTC_ERLANG_NUMBER, {5, 5, 100}},
+                 {?wxSTC_ERLANG_KEYWORD, {130, 40, 172}},
+                 {?wxSTC_ERLANG_STRING, {170, 45, 132}},
+                 {?wxSTC_ERLANG_OPERATOR, {30, 0, 0}},
+                 {?wxSTC_ERLANG_ATOM, {0, 0, 0}},
+                 {?wxSTC_ERLANG_FUNCTION_NAME, {64, 102, 244}},
+                 {?wxSTC_ERLANG_CHARACTER, {236, 155, 172}},
+                 {?wxSTC_ERLANG_MACRO, {40, 144, 170}},
+                 {?wxSTC_ERLANG_RECORD, {40, 100, 20}},
+                 {?wxSTC_ERLANG_SEPARATOR, {0, 0, 0}},
+                 {?wxSTC_ERLANG_NODE_NAME, {0, 0, 0}},
+                 %% Optional 2.9 stuff
+                 {?wxSTC_ERLANG_COMMENT_FUNCTION, {160, 53, 35}},
+                 {?wxSTC_ERLANG_COMMENT_MODULE, {160, 53, 35}},
+                 {?wxSTC_ERLANG_COMMENT_DOC, {160, 53, 35}},
+                 {?wxSTC_ERLANG_COMMENT_DOC_MACRO, {160, 53, 35}},
+                 {?wxSTC_ERLANG_ATOM_QUOTED, {0, 0, 0}},
+                 {?wxSTC_ERLANG_MACRO_QUOTED, {40, 144, 170}},
+                 {?wxSTC_ERLANG_RECORD_QUOTED, {40, 100, 20}},
+                 {?wxSTC_ERLANG_NODE_NAME_QUOTED, {0, 0, 0}},
+                 {?wxSTC_ERLANG_BIFS, {130, 40, 172}},
+                 {?wxSTC_ERLANG_MODULES, {64, 102, 244}},
+                 {?wxSTC_ERLANG_MODULES_ATT, {64, 102, 244}}]).
 
--spec code_area(Parent) -> wxStyledTextCtrl:wxStyledTextCtrl() when
-  Parent :: wxWindow:wxWindow().
+-define(LINE_MARKER, 0).
+-define(LINE_BACKGROUND, 1).
+
+
+-spec code_area(Parent) -> Panel when
+  Parent :: wxWindow:wxWindow(),
+  Panel :: wxPanel:wxPanel().
 
 code_area(Parent) ->
-  Font = wxFont:new(9, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
-  CodeArea = wxStyledTextCtrl:new(Parent),
+  Win = wxPanel:new(Parent),
 
+  Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Code"}]),
+  wxWindow:setSizer(Win, Sizer),
+
+  Font = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
+  CodeArea = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
+  ref_add(?CODE_TEXT, CodeArea),
+  wxSizer:add(Sizer, CodeArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  %% Styles
   wxStyledTextCtrl:styleClearAll(CodeArea),
   wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_DEFAULT, Font),
-  wxStyledTextCtrl:setLexer(CodeArea, ?wxSTC_LEX_ERLANG),
-  wxStyledTextCtrl:setMarginType(CodeArea, 0, ?wxSTC_MARGIN_NUMBER),
-  wxStyledTextCtrl:setSelectionMode(CodeArea, ?wxSTC_SEL_LINES),
-
-  Styles = [{?wxSTC_ERLANG_DEFAULT, {0, 0, 0}},
-            {?wxSTC_ERLANG_COMMENT, {160, 53, 35}},
-            {?wxSTC_ERLANG_VARIABLE, {150, 100, 40}},
-            {?wxSTC_ERLANG_NUMBER, {5, 5, 100}},
-            {?wxSTC_ERLANG_KEYWORD, {130, 40, 172}},
-            {?wxSTC_ERLANG_STRING, {170, 45, 132}},
-            {?wxSTC_ERLANG_OPERATOR, {30, 0, 0}},
-            {?wxSTC_ERLANG_ATOM, {0, 0, 0}},
-            {?wxSTC_ERLANG_FUNCTION_NAME, {64, 102, 244}},
-            {?wxSTC_ERLANG_CHARACTER, {236, 155, 172}},
-            {?wxSTC_ERLANG_MACRO, {40, 144, 170}},
-            {?wxSTC_ERLANG_RECORD, {40, 100, 20}},
-            {?wxSTC_ERLANG_SEPARATOR, {0, 0, 0}},
-            {?wxSTC_ERLANG_NODE_NAME, {0, 0, 0}},
-            %% Optional 2.9 stuff
-            {?wxSTC_ERLANG_COMMENT_FUNCTION, {160, 53, 35}},
-            {?wxSTC_ERLANG_COMMENT_MODULE, {160, 53, 35}},
-            {?wxSTC_ERLANG_COMMENT_DOC, {160, 53, 35}},
-            {?wxSTC_ERLANG_COMMENT_DOC_MACRO, {160, 53, 35}},
-            {?wxSTC_ERLANG_ATOM_QUOTED, {0, 0, 0}},
-            {?wxSTC_ERLANG_MACRO_QUOTED, {40, 144, 170}},
-            {?wxSTC_ERLANG_RECORD_QUOTED, {40, 100, 20}},
-            {?wxSTC_ERLANG_NODE_NAME_QUOTED, {0, 0, 0}},
-            {?wxSTC_ERLANG_BIFS, {130, 40, 172}},
-            {?wxSTC_ERLANG_MODULES, {64, 102, 244}},
-            {?wxSTC_ERLANG_MODULES_ATT, {64, 102, 244}}],
+  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_LINENUMBER, Font),
 
   lists:foreach(
     fun({Style, Color}) ->
       wxStyledTextCtrl:styleSetFont(CodeArea, Style, Font),
       wxStyledTextCtrl:styleSetForeground(CodeArea, Style, Color)
-    end, Styles),
+    end, ?STYLES),
 
+  wxStyledTextCtrl:setLexer(CodeArea, ?wxSTC_LEX_ERLANG),
   wxStyledTextCtrl:setKeyWords(CodeArea, 0, keyWords()),
+  wxStyledTextCtrl:setMarginType(CodeArea, 0, ?wxSTC_MARGIN_NUMBER),
+  wxStyledTextCtrl:setSelectionMode(CodeArea, ?wxSTC_SEL_LINES),
 
   %% Current Line
   wxStyledTextCtrl:markerDefine(CodeArea, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
@@ -85,23 +102,27 @@ code_area(Parent) ->
 
   wxStyledTextCtrl:setReadOnly(CodeArea, true),
 
-  CodeArea.
+  wxStyledTextCtrl:setZoom(CodeArea, ?ZOOM_DEFAULT),
+
+  wxStyledTextCtrl:connect(CodeArea, 'stc_zoom'),
+
+  Win.
+
+
+keyWords() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
 
 
 -spec load_code(This, Code) -> 'ok' when
-  This :: wxStyledTextCtrl:wxStyledTextCtrl(), Code :: binary().
+  This :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  Code :: binary().
 
 load_code(This, Code) ->
   wxStyledTextCtrl:freeze(This),
   wxStyledTextCtrl:setReadOnly(This, false),
   wxStyledTextCtrl:setTextRaw(This, Code),
-  Lines = wxStyledTextCtrl:getLineCount(This),
-  Digits = trunc(math:log10(Lines)) + 1,
-  Width = wxStyledTextCtrl:textWidth(This, ?wxSTC_STYLE_LINENUMBER, lists:duplicate(Digits, $0)),
-  wxStyledTextCtrl:setMarginWidth(This, 0, Width + 5),
+  update_margin(This),
   wxStyledTextCtrl:setReadOnly(This, true),
-  wxStyledTextCtrl:thaw(This),
-  ok.
+  wxStyledTextCtrl:thaw(This).
 
 
 -spec unload_code(This) -> 'ok' when
@@ -113,8 +134,7 @@ unload_code(This) ->
   wxStyledTextCtrl:setTextRaw(This, <<0:8>>),
   wxStyledTextCtrl:setMarginWidth(This, 0, 0),
   wxStyledTextCtrl:setReadOnly(This, true),
-  wxStyledTextCtrl:thaw(This),
-  ok.
+  wxStyledTextCtrl:thaw(This).
 
 
 -spec mark_line(This, Prev, Line) -> 'ok' when
@@ -129,8 +149,7 @@ mark_line(This, Prev, Line) ->
   wxStyledTextCtrl:markerDelete(This, Prev - 1, ?LINE_BACKGROUND),
   wxStyledTextCtrl:markerAdd(This, Line - 1, ?LINE_MARKER),
   wxStyledTextCtrl:markerAdd(This, Line - 1, ?LINE_BACKGROUND),
-  wxStyledTextCtrl:thaw(This),
-  ok.
+  wxStyledTextCtrl:thaw(This).
 
 
 -spec goto_line(This, Line) -> 'ok' | ignore when
@@ -141,9 +160,45 @@ goto_line(_This, 0)   -> ignore;
 goto_line(This, Line) -> wxStyledTextCtrl:gotoLine(This, Line - 1).
 
 
+can_zoom_in(This) -> wxStyledTextCtrl:getZoom(This) < ?ZOOM_MAX.
 
-keyWords() ->
-  L = ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
-       "end", "fun", "if", "let", "of", "receive", "when", "bnot", "not",
-       "div", "rem", "band", "and", "bor", "bxor", "bsl", "bsr", "or", "xor"],
-  lists:flatten([K ++ " " || K <- L] ++ [0]).
+
+can_zoom_out(This) -> wxStyledTextCtrl:getZoom(This) > ?ZOOM_MIN.
+
+
+zoom_in(This) ->
+  wxStyledTextCtrl:zoomIn(This),
+  update_margin(This),
+  update_zoom_buttons(This).
+
+
+zoom_out(This) ->
+  wxStyledTextCtrl:zoomOut(This),
+  update_margin(This),
+  update_zoom_buttons(This).
+
+
+zoom_reset(This) ->
+  wxStyledTextCtrl:setZoom(This, ?ZOOM_DEFAULT),
+  update_margin(This),
+  update_zoom_buttons(This).
+
+
+update_margin(This) ->
+  Lines = wxStyledTextCtrl:getLineCount(This),
+  Digits = trunc(math:log10(Lines)) + 1,
+  Width = wxStyledTextCtrl:textWidth(This, ?wxSTC_STYLE_LINENUMBER, lists:duplicate(Digits, $0)),
+  wxStyledTextCtrl:setMarginWidth(This, 0, Width + 5).
+
+
+update_zoom_buttons(This) ->
+  io:format("Zoom: ~p\n", [wxStyledTextCtrl:getZoom(This)]),
+  wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_IN), [{enable, cauder_wx_code:can_zoom_in(This)}]),
+  wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_OUT), [{enable, cauder_wx_code:can_zoom_out(This)}]).
+
+
+%% ===== Utils ===== %%
+
+
+ref_add(Id, Ref) -> cauder_gui:ref_add(Id, Ref).
+ref_lookup(Id) -> cauder_gui:ref_lookup(Id).
