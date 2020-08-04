@@ -940,20 +940,16 @@ eval_mult(Button) ->
 
 -spec eval_replay() -> {StepsDone :: non_neg_integer(), Steps :: non_neg_integer()}.
 
-eval_replay() -> error(not_implemented).
-%%  PidText = wxTextCtrl:getValue(ref_lookup(?REPLAY_PROC_CHOICE)),
-%%  StepText = wxTextCtrl:getValue(ref_lookup(?REPLAY_STEPS_SPIN)),
-%%  {Pid, _} = string:to_integer(PidText),
-%%  {Steps, _} = string:to_integer(StepText),
-%%  if
-%%    Pid =:= error orelse Steps =:= error ->
-%%      {0, 0};
-%%    true ->
-%%      Sys0 = ref_lookup(?SYSTEM),
-%%      {Sys1, StepsDone} = cauder:eval_replay(Sys0, Pid, Steps),
-%%      ref_add(?SYSTEM, Sys1),
-%%      {StepsDone, Steps}
-%%  end.
+eval_replay() ->
+  case utils_gui:get_selected_process() of
+    none -> {0, 0};
+    #proc{pid = Pid} ->
+      Steps = wxSpinCtrl:getValue(ref_lookup(?REPLAY_STEPS_SPIN)),
+      Sys0 = ref_lookup(?SYSTEM),
+      {Sys1, StepsDone} = cauder:eval_replay(Sys0, Pid, Steps),
+      ref_add(?SYSTEM, Sys1),
+      {StepsDone, Steps}
+  end.
 
 
 -spec eval_replay_spawn() -> {Success :: boolean(), SpawnPid :: none | string()}.
@@ -1009,20 +1005,16 @@ eval_replay_rec() ->
   StepsDone :: non_neg_integer(),
   Steps :: pos_integer().
 
-eval_roll() -> error(not_implemented).
-%%  PidText = wxTextCtrl:getValue(ref_lookup(?ROLL_PROC_CHOICE)),
-%%  StepText = wxTextCtrl:getValue(ref_lookup(?ROLL_STEPS_SPIN)),
-%%  {Pid, _} = string:to_integer(PidText),
-%%  {Steps, _} = string:to_integer(StepText),
-%%  case {Pid, Steps} of
-%%    {error, _} -> {false, 0, 0};
-%%    {_, error} -> {false, 0, 0};
-%%    _ ->
-%%      Sys0 = ref_lookup(?SYSTEM),
-%%      {FocusLog, Sys1, StepsDone} = cauder:eval_roll(Sys0, Pid, Steps),
-%%      ref_add(?SYSTEM, Sys1),
-%%      {FocusLog, StepsDone, Steps}
-%%  end.
+eval_roll() ->
+  case utils_gui:get_selected_process() of
+    none -> {false, 0, 0};
+    #proc{pid = Pid} ->
+      Steps = wxSpinCtrl:getValue(ref_lookup(?ROLL_STEPS_SPIN)),
+      Sys0 = ref_lookup(?SYSTEM),
+      {FocusLog, Sys1, StepsDone} = cauder:eval_roll(Sys0, Pid, Steps),
+      ref_add(?SYSTEM, Sys1),
+      {FocusLog, StepsDone, Steps}
+  end.
 
 
 -spec eval_roll_spawn() -> {CanRoll, SpawnPid, FocusLog} when
