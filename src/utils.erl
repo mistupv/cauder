@@ -11,7 +11,7 @@
          find_proc_with_spawn/2, find_proc_with_rec/2,
          find_proc_with_var/2,
          merge_bindings/2,
-         stringToMFA/1, stringToArgs/1,
+         stringToMFA/1, stringToExprs/1,
          filter_options/2,
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
@@ -280,18 +280,23 @@ stringToMFA(String) ->
   {list_to_atom(M), list_to_atom(F), list_to_integer(A)}.
 
 %%--------------------------------------------------------------------
-%% @doc Parses a string Str that represents a list of arguments
-%% and transforms these arguments to their equivalent in Abstract Syntax
+%% @doc Parses a string Str that represents a list of expressions
+%% and transforms these expressions to their equivalent in Abstract Syntax
 
--spec stringToArgs(String) -> Args when
+-spec stringToExprs(String) -> Expressions | error when
   String :: string(),
-  Args :: [erl_parse:abstract_expr()].
+  Expressions :: [erl_parse:abstract_expr()].
 
-stringToArgs([]) -> [];
-stringToArgs(Str) ->
-  {ok, Tokens, _} = erl_scan:string(Str ++ "."),
-  {ok, Args} = erl_parse:parse_exprs(Tokens),
-  cauder_syntax:expr_list(Args).
+stringToExprs([]) -> [];
+stringToExprs(Str) ->
+  case erl_scan:string(Str ++ ".") of
+    {ok, Tokens, _} ->
+      case erl_parse:parse_exprs(Tokens) of
+        {ok, Value} -> cauder_syntax:expr_list(Value);
+        _ -> error
+      end;
+    _ -> error
+  end.
 
 
 %%--------------------------------------------------------------------

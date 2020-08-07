@@ -14,8 +14,7 @@ init() ->
 
   Setup =
     fun() ->
-      Frame = wxFrame:new(wx:null(), ?wxID_ANY, ?APP_STRING, [{size, ?FRAME_SIZE_INIT}]),
-
+      Frame = wxFrame:new(wx:null(), ?FRAME, ?APP_STRING, [{size, ?FRAME_SIZE_INIT}]),
       ref_add(?FRAME, Frame),
 
       menu_bar(Frame),
@@ -1106,12 +1105,33 @@ loop() ->
         focus_roll_log(MustFocus),
         refresh(HasRolled);
 
+    %% ---------- Bindings handler ---------- %%
+      #wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}} ->
+        P0 = #proc{pid = Pid, env = Bs0, exprs = Es} = utils_gui:get_selected_process(),
+        {Key, Value} =
+          case wxMenu:isChecked(ref_lookup(?MENU_VIEW), ?RADIO_FULL_ENV) of
+            true -> lists:nth(Index + 1, Bs0);
+            false -> lists:nth(Index + 1, pretty_print:relevant_bindings(Bs0, Es))
+          end,
+        case cauder_wx_dialog:edit_binding(ref_lookup(?FRAME), {Key, Value}) of
+          {Key, NewValue} ->
+            Bs1 = orddict:store(Key, NewValue, Bs0),
+            Sys0 = ref_lookup(?SYSTEM),
+            PDict0 = Sys0#sys.procs,
+            P1 = P0#proc{env = Bs1},
+            PDict1 = orddict:store(Pid, P1, PDict0),
+            Sys1 = Sys0#sys{procs = PDict1},
+            ref_add(?SYSTEM, Sys1),
+            refresh(true);
+          cancel -> ok
+        end;
+
     %% ---------- Text handlers ---------- %%
       #wx{id = ?STEPS_SPIN, event = #wxCommand{type = command_text_updated}} -> refresh(false);
       #wx{id = _RestIds, event = #wxCommand{type = command_text_updated}} -> ok;
 
     %% ---------- Other handlers ---------- %%
-      #wx{event = #wxClose{type = close_window}} -> exit;
+      #wx{id = ?FRAME, event = #wxClose{type = close_window}} -> exit;
 
     %% ---------- Non-supported events ---------- %%
       Other -> io:format("main loop does not implement ~p~n", [Other])
