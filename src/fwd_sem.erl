@@ -23,7 +23,6 @@ eval_step(Sys, Pid) ->
   #sys{mail = Ms, procs = PDict, ghosts = GDict0, trace = Trace} = Sys,
   {P0, PDict0} = utils:take_process(PDict, Pid),
   #proc{pid = Pid, log = Log, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-  %io:format("eval_step: ~p\n", [P]),
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
   case Label of
     tau ->

@@ -192,7 +192,6 @@ update_margin(This) ->
 
 
 update_zoom_buttons(This) ->
-  io:format("Zoom: ~p\n", [wxStyledTextCtrl:getZoom(This)]),
   wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_IN), [{enable, cauder_wx_code:can_zoom_in(This)}]),
   wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_OUT), [{enable, cauder_wx_code:can_zoom_out(This)}]).
 
