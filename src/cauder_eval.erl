@@ -34,11 +34,11 @@ seq(Bs, [E | Es], Stk) ->
           case Stk of
             % Call entry
             [{{_M, _F, _A}, Bs1, Es1, Var} | Stk1] ->
-              Es2 = cauder_syntax:replace_variable(Es1, Var, E),
+              Es2 = cauder_syntax:replace_variable(Es1, Var, concrete(E)),
               #result{env = Bs1, exprs = Es2, stack = Stk1};
             % Block entry
             [{_Type, Es1, Var} | Stk1] ->
-              Es2 = cauder_syntax:replace_variable(Es1, Var, E),
+              Es2 = cauder_syntax:replace_variable(Es1, Var, concrete(E)),
               #result{env = Bs, exprs = Es2, stack = Stk1}
           end;
         _ ->
