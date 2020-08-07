@@ -736,7 +736,7 @@ start(M, F, As, Pid, Log) ->
 refresh_buttons(Opts) ->
   ?LOG("full options: " ++ ?TO_STRING(utils_gui:sort_opts(Opts))),
 
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none ->
       utils_gui:disable_controls([?SINGLE_BACKWARD_BUTTON, ?SINGLE_FORWARD_BUTTON]);
     #proc{pid = Pid} ->
@@ -800,7 +800,7 @@ refresh(RefreshState) ->
 -spec exec_with(?SINGLE_FORWARD_BUTTON | ?SINGLE_BACKWARD_BUTTON) -> ok.
 
 exec_with(Button) ->
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> ok;
     #proc{pid = Pid} ->
       Sys0 = ref_lookup(?SYSTEM),
@@ -839,7 +839,7 @@ eval_mult(Button) ->
 -spec eval_replay() -> {StepsDone :: non_neg_integer(), Steps :: non_neg_integer()}.
 
 eval_replay() ->
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> {0, 0};
     #proc{pid = Pid} ->
       Steps = wxSpinCtrl:getValue(ref_lookup(?REPLAY_STEPS_SPIN)),
@@ -904,7 +904,7 @@ eval_replay_rec() ->
   Steps :: pos_integer().
 
 eval_roll() ->
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> {false, 0, 0};
     #proc{pid = Pid} ->
       Steps = wxSpinCtrl:getValue(ref_lookup(?ROLL_STEPS_SPIN)),
@@ -1107,7 +1107,7 @@ loop() ->
 
     %% ---------- Bindings handler ---------- %%
       #wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}} ->
-        P0 = #proc{pid = Pid, env = Bs0, exprs = Es} = utils_gui:get_selected_process(),
+        P0 = #proc{pid = Pid, env = Bs0, exprs = Es} = utils_gui:current_process(),
         {Key, Value} =
           case wxMenu:isChecked(ref_lookup(?MENU_VIEW), ?RADIO_FULL_ENV) of
             true -> lists:nth(Index + 1, Bs0);

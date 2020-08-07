@@ -26,7 +26,7 @@
 %% ETS functions
 -export([stop_refs/0]).
 
--export([update_process_choices/1, get_selected_process/0, update_code_line/0]).
+-export([update_process_choices/1, current_process/0, update_code_line/0]).
 
 
 -include("cauder.hrl").
@@ -182,7 +182,7 @@ clear_texts() ->
   wx:batch(Batch).
 
 
-get_selected_process() ->
+current_process() ->
   Choice = ref_lookup(?PROC_CHOICE),
   case wxChoice:getSelection(Choice) of
     ?wxNOT_FOUND -> none;
@@ -217,7 +217,7 @@ update_process_choices(#sys{procs = ProcDict}) ->
 
 
 update_code_line() ->
-  case get_selected_process() of
+  case current_process() of
     none -> ok;
     #proc{exprs = [E | _]} ->
       Line = element(2, E),

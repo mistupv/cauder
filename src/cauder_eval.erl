@@ -65,8 +65,8 @@ seq(Bs, [E | Es], Stk) ->
 -spec expr(cauder_types:environment(), cauder_types:abstract_expr(), cauder_types:stack()) -> cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
-  {value, Val} = binding(Name, Bs),
-  #result{env = Bs, exprs = [{value, Line, Val}], stack = Stk};
+  {value, Value} = binding(Name, Bs),
+  #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk};
 
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
   case is_reducible(H0, Bs) of
@@ -296,8 +296,8 @@ expr(Bs, E = {op, Line, Op, As}, Stk) ->
   case is_reducible(As, Bs) of
     true -> eval_and_update({Bs, As, Stk}, {4, E});
     false ->
-      Val = apply(erlang, Op, lists:map(fun concrete/1, As)),
-      #result{env = Bs, exprs = [{value, Line, Val}], stack = Stk}
+      Value = apply(erlang, Op, lists:map(fun concrete/1, As)),
+      #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
   end;
 
 expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
@@ -310,8 +310,8 @@ expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
           case is_reducible(Rhs, Bs) of
             true -> eval_and_update({Bs, Rhs, Stk}, {4, E});
             false ->
-              Val = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
-              #result{env = Bs, exprs = [{value, Line, Val}], stack = Stk}
+              Value = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
+              #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
           end
       end
   end;
@@ -326,8 +326,8 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
           case is_reducible(Rhs, Bs) of
             true -> eval_and_update({Bs, Rhs, Stk}, {4, E});
             false ->
-              Val = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
-              #result{env = Bs, exprs = [{value, Line, Val}], stack = Stk}
+              Value = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
+              #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
           end
       end
   end.

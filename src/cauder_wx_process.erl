@@ -76,7 +76,7 @@ update_bindings() ->
   BindArea = ref_lookup(?BINDINGS_LIST),
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> ok;
     #proc{env = Bs, exprs = Es} ->
       Bs1 =
@@ -119,7 +119,7 @@ update_stack() ->
   StackArea = ref_lookup(?STACK_LIST),
   wxListBox:freeze(StackArea),
   wxListBox:clear(StackArea),
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> ok;
     #proc{stack = Stk} ->
       Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
@@ -151,7 +151,7 @@ update_log() ->
   LogArea = ref_lookup(?LOG_TEXT),
   wxTextCtrl:freeze(LogArea),
   wxTextCtrl:clear(LogArea),
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> ok;
     #proc{log = Log} ->
       Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
@@ -184,7 +184,7 @@ update_history() ->
   HistoryArea = ref_lookup(?HISTORY_TEXT),
   wxTextCtrl:freeze(HistoryArea),
   wxTextCtrl:clear(HistoryArea),
-  case utils_gui:get_selected_process() of
+  case utils_gui:current_process() of
     none -> ok;
     #proc{hist = Hist0} ->
       Hist1 =
