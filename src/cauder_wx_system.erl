@@ -16,7 +16,7 @@
 system_info_area(Parent) ->
   Win = wxPanel:new(Parent),
 
-  Sizer = wxBoxSizer:new(?wxVERTICAL),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "System Info"}]),
   wxWindow:setSizer(Win, Sizer),
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
@@ -110,7 +110,7 @@ trace_area(Parent) ->
 
   TraceArea = wxListBox:new(Win, ?TRACE_LIST),
   ref_add(?TRACE_LIST, TraceArea),
-  wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 5}]),
+  wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   wxListBox:setFont(TraceArea, Font),
@@ -139,7 +139,7 @@ roll_log_area(Parent) ->
 
   RollLogArea = wxListBox:new(Win, ?ROLL_LOG_LIST),
   ref_add(?ROLL_LOG_LIST, RollLogArea),
-  wxBoxSizer:add(Sizer, RollLogArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, 5}]),
+  wxBoxSizer:add(Sizer, RollLogArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   wxListBox:setFont(RollLogArea, Font),

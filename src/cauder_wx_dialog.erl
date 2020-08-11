@@ -24,7 +24,7 @@ edit_binding(Parent, {Key, Value}) ->
   %% ----- Input ----- %%
 
   Input = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Input, [{flag, ?wxEXPAND bor ?wxALL}, {border, 10}]),
+  wxBoxSizer:add(Content, Input, [{flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_LARGE}]),
 
   %% Name
 
@@ -34,12 +34,14 @@ edit_binding(Parent, {Key, Value}) ->
   NameStatic = wxStaticText:new(Dialog, ?wxID_ANY, "Name"),
   wxBoxSizer:add(NameSizer, NameStatic),
 
-  wxBoxSizer:addSpacer(NameSizer, 5),
+  wxBoxSizer:addSpacer(NameSizer, ?SPACER_SMALL),
 
   NameText = wxTextCtrl:new(Dialog, ?wxID_ANY, [{value, atom_to_list(Key)}, {style, ?wxTE_READONLY}]),
   wxBoxSizer:add(NameSizer, NameText, [{flag, ?wxEXPAND}]),
 
-  wxBoxSizer:addSpacer(Input, 10),
+  %% -----
+
+  wxBoxSizer:addSpacer(Input, ?SPACER_MEDIUM),
 
   %% Value
 
@@ -49,7 +51,7 @@ edit_binding(Parent, {Key, Value}) ->
   ValueStatic = wxStaticText:new(Dialog, ?wxID_ANY, "Value"),
   wxBoxSizer:add(ValueSizer, ValueStatic),
 
-  wxBoxSizer:addSpacer(ValueSizer, 5),
+  wxBoxSizer:addSpacer(ValueSizer, ?SPACER_SMALL),
 
   ValueText = wxTextCtrl:new(Dialog, ?wxID_ANY, [{value, io_lib:format("~p", [Value])}]),
   wxBoxSizer:add(ValueSizer, ValueText, [{flag, ?wxEXPAND}]),
@@ -62,12 +64,12 @@ edit_binding(Parent, {Key, Value}) ->
   %% ----- Buttons ----- %%
 
   Buttons = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Buttons, [{flag, ?wxALIGN_RIGHT bor ?wxALL}, {border, 10}]),
+  wxBoxSizer:add(Content, Buttons, [{flag, ?wxALIGN_RIGHT bor ?wxALL}, {border, ?SPACER_LARGE}]),
 
   SaveButton = wxButton:new(Dialog, ?wxID_OK, [{label, "Save"}]),
   wxBoxSizer:add(Buttons, SaveButton),
 
-  wxBoxSizer:addSpacer(Buttons, 10),
+  wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
   CancelButton = wxButton:new(Dialog, ?wxID_CANCEL, [{label, "Cancel"}]),
   wxBoxSizer:add(Buttons, CancelButton),

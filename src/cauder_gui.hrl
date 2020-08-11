@@ -5,7 +5,7 @@
 
 -define(FRAME, 500).
 
--define(FRAME_SIZE_INIT, {900, 750}).
+-define(FRAME_SIZE_INIT, {900, 800}).
 
 -define(ZOOM_MIN, -10).
 -define(ZOOM_MAX, 20).
@@ -16,6 +16,11 @@
 -define(FONT_SIZE_APPARENT_DEFAULT, 9).
 % DO NOT CHANGE. This is the actual default font size taking into account zoom levels
 -define(FONT_SIZE_ACTUAL_DEFAULT, ?FONT_SIZE_APPARENT_DEFAULT - (?ZOOM_DEFAULT)).
+
+
+-define(SPACER_SMALL, 5).
+-define(SPACER_MEDIUM, 7).
+-define(SPACER_LARGE, 10).
 
 
 %% ========== Menu Bar ========== %%

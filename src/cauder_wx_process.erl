@@ -15,15 +15,18 @@
 process_info_area(Parent) ->
   Win = wxPanel:new(Parent),
 
-  Sizer = wxGridSizer:new(2, 2, 5, 5),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Process Info"}]),
   wxWindow:setSizer(Win, Sizer),
+
+  Content = wxGridSizer:new(2, 2, 5, 5),
+  wxStaticBoxSizer:add(Sizer, Content, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-  wxSizer:add(Sizer, bind_area(Win), Expand),
-  wxSizer:add(Sizer, stack_area(Win), Expand),
-  wxSizer:add(Sizer, log_area(Win), Expand),
-  wxSizer:add(Sizer, history_area(Win), Expand),
+  wxSizer:add(Content, bind_area(Win), Expand),
+  wxSizer:add(Content, stack_area(Win), Expand),
+  wxSizer:add(Content, log_area(Win), Expand),
+  wxSizer:add(Content, history_area(Win), Expand),
 
   Win.
 
