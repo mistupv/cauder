@@ -202,6 +202,8 @@ expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Fun]}) ->
   {spawn, ln(Anno), expr(Fun)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Mod, Func, As]}) ->
   {spawn, ln(Anno), expr(Mod), expr(Func), expr(As)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, send}}, [Dest, Msg]}) ->
+  {send, ln(Anno), expr(Dest), expr(Msg)};
 expr({call, Anno, {remote, _, {atom, _, Mod}, {atom, _, Func}}, As0}) ->
   As = expr_list(As0),
   case erlang:is_builtin(Mod, Func, length(As)) of
