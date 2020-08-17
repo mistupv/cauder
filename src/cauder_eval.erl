@@ -110,10 +110,13 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
   case is_reducible(A, Bs0) of
     true -> eval_and_update({Bs0, A, Stk0}, {3, E});
     false ->
-      {match, Bs, Body} = match_case(Bs0, Cs, A),
-      Var = utils:temp_variable(Line),
-      Stk = [{'case', Body, Var} | Stk0],
-      #result{env = Bs, exprs = [Var], stack = Stk}
+      case match_case(Bs0, Cs, A) of
+        {match, Bs, Body} ->
+          Var = utils:temp_variable(Line),
+          Stk = [{'case', Body, Var} | Stk0],
+          #result{env = Bs, exprs = [Var], stack = Stk};
+        nomatch -> error(case_clause, concrete(A))
+      end
   end;
 
 %% TODO Support receive with timeout
