@@ -350,13 +350,13 @@ match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
   end.
 
 
--spec match_case(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:abstract_expr()) ->
+-spec match_case(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:af_literal()) ->
   {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
 
 match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 
 
--spec match_fun(cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
+-spec match_fun(cauder_types:af_clause_seq(), [cauder_types:af_literal()]) ->
   {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
 
 match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
@@ -384,7 +384,7 @@ match_rec(Cs, Bs0, [{'receive', Stamp} | _], Mail) ->
 match_rec(_, _, _, _) -> nomatch.
 
 
--spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:abstract_expr()]) ->
+-spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:af_literal()]) ->
   {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
 
 match_clause(_, [], _) -> nomatch;
