@@ -115,7 +115,7 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
           Var = utils:temp_variable(Line),
           Stk = [{'case', Body, Var} | Stk0],
           #result{env = Bs, exprs = [Var], stack = Stk};
-        nomatch -> error(case_clause, concrete(A))
+        nomatch -> error({case_clause, concrete(A)})
       end
   end;
 
@@ -290,7 +290,7 @@ expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
         false ->
           case match(Bs0, [Lhs], [Rhs]) of
             {match, Bs} -> #result{env = Bs, exprs = [Rhs], stack = Stk};
-            nomatch -> error({badmatch, Bs0, Lhs, Rhs})
+            nomatch -> error({badmatch, concrete(Rhs)})
           end
       end
   end;
