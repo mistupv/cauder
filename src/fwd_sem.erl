@@ -217,7 +217,7 @@ eval_expr_opt([E0 | Es0], Bs, Stk, Log, Mail) ->
                   end
               end
           end;
-        {send, _, L, R} ->
+        {Send, _, L, R} when Send =:= 'send' orelse Send =:= 'send_op' ->
           case is_reducible(L, Bs) of
             true -> eval_expr_opt(L, Bs, Stk, Log, Mail);
             false ->

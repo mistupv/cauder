@@ -183,7 +183,7 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
       end
   end;
 
-expr(Bs, E = {send, _, L, R}, Stk) ->
+expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op' ->
   case is_reducible(L, Bs) of
     true -> eval_and_update({Bs, L, Stk}, {3, E});
     false ->

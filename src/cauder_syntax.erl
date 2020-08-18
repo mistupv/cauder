@@ -238,7 +238,7 @@ expr({op, Anno, Op, A0}) ->
 expr({op, Anno, '!', L0, R0}) ->
   L1 = expr(L0),
   R1 = expr(R0),
-  {send, ln(Anno), L1, R1};
+  {send_op, ln(Anno), L1, R1};
 expr({op, Anno, Op, L0, R0}) when Op =:= 'andalso'; Op =:= 'orelse' ->
   L1 = expr(L0),
   R1 = expr(R0),
@@ -365,6 +365,10 @@ replace_variable({send, Line, L0, R0}, Var, Val) ->
   L = replace_variable(L0, Var, Val),
   R = replace_variable(R0, Var, Val),
   {send, Line, L, R};
+replace_variable({send_op, Line, L0, R0}, Var, Val) ->
+  L = replace_variable(L0, Var, Val),
+  R = replace_variable(R0, Var, Val),
+  {send_op, Line, L, R};
 replace_variable({local_call, Line, F, As0}, Var, Val) ->
   As = replace_variable(As0, Var, Val),
   {local_call, Line, F, As};
@@ -456,6 +460,9 @@ to_abstract_expr({spawn, Line, M, F, As}) ->
     [to_abstract_expr(M), to_abstract_expr(F), to_abstract_expr(As)]),
   set_line(Node, Line);
 to_abstract_expr({send, Line, L, R}) ->
+  Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(send), [to_abstract_expr(L), to_abstract_expr(R)]),
+  set_line(Node, Line);
+to_abstract_expr({send_op, Line, L, R}) ->
   Node = erl_syntax:infix_expr(to_abstract_expr(L), erl_syntax:operator('!'), to_abstract_expr(R)),
   set_line(Node, Line);
 to_abstract_expr({local_call, Line, F, As}) ->
