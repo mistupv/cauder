@@ -22,9 +22,9 @@ process(#proc{pid = Pid, spf = {M, F, A}}) -> lists:flatten(io_lib:format("PID: 
 
 -spec log_entry(cauder_types:log_entry()) -> string().
 
-log_entry({spawn, SpawnPid})  -> "spawn(" ++ green(to_string(SpawnPid)) ++ ")";
-log_entry({send, Stamp})      -> "send(" ++ red(to_string(Stamp)) ++ ")";
-log_entry({'receive', Stamp}) -> "rec(" ++ blue(to_string(Stamp)) ++ ")".
+log_entry({spawn, SpawnPid}) -> "spawn(" ++ green(to_string(SpawnPid)) ++ ")";
+log_entry({send, UID})       -> "send(" ++ red(to_string(UID)) ++ ")";
+log_entry({'receive', UID})  -> "rec(" ++ blue(to_string(UID)) ++ ")".
 
 
 %% ===== History ===== %%
@@ -40,11 +40,11 @@ is_conc_item(_)                             -> false.
 
 -spec history_entry(cauder_types:history_entry()) -> string().
 
-history_entry({tau, _Bs, _Es, _Stk})                                -> "seq";
-history_entry({self, _Bs, _Es, _Stk})                               -> "self";
-history_entry({spawn, _Bs, _Es, _Stk, Pid})                         -> "spawn(" ++ green(to_string(Pid)) ++ ")";
-history_entry({send, _Bs, _Es, _Stk, #msg{val = Val, time = Time}}) -> "send(" ++ to_string(Val) ++ "," ++ red(to_string(Time)) ++ ")";
-history_entry({rec, _Bs, _Es, _Stk, #msg{val = Val, time = Time}})  -> "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Time)) ++ ")".
+history_entry({tau, _Bs, _Es, _Stk})                              -> "seq";
+history_entry({self, _Bs, _Es, _Stk})                             -> "self";
+history_entry({spawn, _Bs, _Es, _Stk, Pid})                       -> "spawn(" ++ green(to_string(Pid)) ++ ")";
+history_entry({send, _Bs, _Es, _Stk, #msg{val = Val, uid = UID}}) -> "send(" ++ to_string(Val) ++ "," ++ red(to_string(UID)) ++ ")";
+history_entry({rec, _Bs, _Es, _Stk, #msg{val = Val, uid = UID}})  -> "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(UID)) ++ ")".
 
 
 %% ===== Stack ===== %%
@@ -72,7 +72,7 @@ relevant_bindings(Bs, Es) ->
 
 -spec expression(cauder_types:abstract_expr()) -> string().
 
-expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_expr(Expr))).
+expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_expr(Expr), [{paper, 120}, {ribbon, 120}])).
 
 
 %% ===== Trace ===== %%
@@ -80,12 +80,12 @@ expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_
 
 -spec trace_entry(cauder_types:trace()) -> [string()].
 
-trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Time}) ->
-  [pid(From), " sends ", to_string(Val), " to ", pid(To), " (", to_string(Time), ")"];
+trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = UID}) ->
+  [pid(From), " sends ", to_string(Val), " to ", pid(To), " (", to_string(UID), ")"];
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
   [pid(From), " spawns ", pid(To)];
-trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Time}) ->
-  [pid(From), " receives ", to_string(Val), " (", to_string(Time), ")"].
+trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = UID}) ->
+  [pid(From), " receives ", to_string(Val), " (", to_string(UID), ")"].
 
 
 %% ===== Utils ===== %%

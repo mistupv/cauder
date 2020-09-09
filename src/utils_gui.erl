@@ -3,10 +3,9 @@
 %% Status check functions
 -export([is_app_loaded/0, is_app_running/0]).
 
-%% Button related functions
--export([enable_control_if/2, enable_replay/0, enable_roll/0,
-         disable_control/1, disable_controls/1, disable_all_buttons/0,
-         button_to_option/1, option_to_button_label/1, set_button_label_from/2, disable_all_inputs/0]).
+%% Control related functions
+-export([enable_control/1, enable_controls/1, enable_control_if/2, enable_controls_if/2, enable_replay/0, enable_roll/0,
+         disable_control/1, disable_controls/1, disable_all_buttons/0, disable_all_inputs/0]).
 
 %% Misc.
 -export([clear_texts/0, sort_opts/1, toggle_opts/0, pp_marked_text/2]).
@@ -14,9 +13,9 @@
 %% ----- Status text update functions ----- %%
 -export([update_status_text/1]).
 %% Manual evaluation functions
--export([sttext_single/1]).
+-export([sttext_noproc/0, sttext_nomatch/0, sttext_reduce/2, sttext_step/2, sttext_step/3]).
 %% Automatic evaluation functions
--export([sttext_mult/2, sttext_norm/1]).
+-export([sttext_mult/3]).
 %% Replay evaluation functions
 -export([sttext_replay/2, sttext_replay_send/2, sttext_replay_spawn/2, sttext_replay_rec/2]).
 %% Rollback evaluation functions
@@ -26,7 +25,7 @@
 %% ETS functions
 -export([stop_refs/0]).
 
--export([update_process_choices/1, current_process/0, update_code_line/0]).
+-export([update_process_choices/1, current_process/0, update_code/0]).
 
 
 -include("cauder.hrl").
@@ -43,50 +42,17 @@ is_app_running() ->
   Status#status.running.
 
 
--spec get_label_from_option(cauder_types:option()) -> string().
+-spec rule_to_string(Rule) -> string() when
+  Rule :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
 
-get_label_from_option(#opt{rule = ?RULE_SEQ})     -> "Seq";
-get_label_from_option(#opt{rule = ?RULE_SELF})    -> "Self";
-get_label_from_option(#opt{rule = ?RULE_SPAWN})   -> "Spawn";
-get_label_from_option(#opt{rule = ?RULE_SEND})    -> "Send";
-get_label_from_option(#opt{rule = ?RULE_RECEIVE}) -> "Receive".
-
-
--spec get_rule_from_button(ButtonId :: integer()) -> ?RULE_SEQ | ?RULE_SEND | ?RULE_RECEIVE | ?RULE_SPAWN | ?RULE_SELF.
-
-get_rule_from_button(ButtonId) ->
-  Label = wxButton:getLabel(ref_lookup(ButtonId)),
-  case Label of
-    "Seq" -> ?RULE_SEQ;
-    "Send" -> ?RULE_SEND;
-    "Receive" -> ?RULE_RECEIVE;
-    "Spawn" -> ?RULE_SPAWN;
-    "Self" -> ?RULE_SELF
-  end.
+rule_to_string(?RULE_SEQ)     -> "Seq";
+rule_to_string(?RULE_SELF)    -> "Self";
+rule_to_string(?RULE_SPAWN)   -> "Spawn";
+rule_to_string(?RULE_SEND)    -> "Send";
+rule_to_string(?RULE_RECEIVE) -> "Receive".
 
 
--spec button_to_option(ButtonId :: integer()) -> cauder_types:option().
-
-button_to_option(ButtonId) ->
-  Rule = get_rule_from_button(ButtonId),
-  Sem =
-    case ButtonId of
-      ?SINGLE_FORWARD_BUTTON -> ?FWD_SEM;
-      ?SINGLE_BACKWARD_BUTTON -> ?BWD_SEM
-    end,
-  #opt{sem = Sem, rule = Rule}.
-
-
--spec option_to_button_label(cauder_types:option()) -> {integer(), string()}.
-
-option_to_button_label(Option) ->
-  Label = get_label_from_option(Option),
-  Button =
-    case Option#opt.sem of
-      ?FWD_SEM -> ?SINGLE_FORWARD_BUTTON;
-      ?BWD_SEM -> ?SINGLE_BACKWARD_BUTTON
-    end,
-  {Button, Label}.
+%% ==================== Control utils evaluation ==================== %%
 
 
 -spec enable_control(ControlId :: integer()) -> ok.
@@ -123,28 +89,16 @@ disable_all_inputs() -> disable_controls(?ALL_INPUTS).
 disable_all_buttons() -> disable_controls(?ALL_BUTTONS).
 
 
--spec set_button_label_from(ButtonId :: integer(), ButtonLabels :: [{integer(), string()}]) -> ok.
-
-set_button_label_from(Id, ButtonLabels) ->
-  Button = ref_lookup(Id),
-  case lists:keyfind(Id, 1, ButtonLabels) of
-    false ->
-      wxButton:disable(Button),
-      wxButton:setLabel(Button, "Seq");
-    {Id, Label} ->
-      wxButton:enable(Button),
-      wxButton:setLabel(Button, Label)
-  end.
-
-
 -spec enable_control_if(ControlId :: integer(), Condition :: boolean()) -> ok.
 
-enable_control_if(Id, true) ->
-  wxWindow:enable(ref_lookup(Id)),
-  ok;
-enable_control_if(Id, false) ->
-  wxWindow:disable(ref_lookup(Id)),
-  ok.
+enable_control_if(Id, true)  -> enable_control(Id);
+enable_control_if(Id, false) -> disable_control(Id).
+
+
+-spec enable_controls_if(ControlIds :: [integer()], Condition :: boolean()) -> ok.
+
+enable_controls_if(Ids, true)  -> enable_controls(Ids);
+enable_controls_if(Ids, false) -> disable_controls(Ids).
 
 
 -spec enable_replay() -> ok.
@@ -216,7 +170,7 @@ update_process_choices(#sys{procs = ProcDict}) ->
   ok.
 
 
-update_code_line() ->
+update_code() ->
   case current_process() of
     none -> ok;
     #proc{exprs = [E | _]} ->
@@ -224,6 +178,7 @@ update_code_line() ->
       Prev = get(line),
       cauder_wx_code:mark_line(ref_lookup(?CODE_TEXT), Prev, Line),
       put(line, Line),
+      cauder_wx_code:update_expr(E),
       ok
   end
 .
@@ -235,31 +190,46 @@ stop_refs() ->
     false -> ok
   end.
 
-sttext_single(Button) ->
-  Option = button_to_option(Button),
-  #opt{sem = Sem} = Option,
-  SemStr =
-    case Sem of
-      ?FWD_SEM -> " forward ";
-      ?BWD_SEM -> " backward "
-    end,
-  LabelStr = get_label_from_option(Option),
-  FullStr = "Fired" ++ SemStr ++ LabelStr ++ " rule",
-  update_status_text(FullStr).
 
-sttext_norm(Steps) ->
-  StepsStr = integer_to_list(Steps),
-  FullStr = StepsStr ++ " steps done",
-  update_status_text(FullStr).
-
-sttext_mult(StepsDone, Steps) ->
-  StepsDoneStr = integer_to_list(StepsDone),
-  StepsStr = integer_to_list(Steps),
-  FullStr = StepsDoneStr ++ " of " ++ StepsStr ++ " steps done",
-  update_status_text(FullStr).
+semantics_to_string(?FWD_SEM) -> "forward";
+semantics_to_string(?BWD_SEM) -> "backward".
 
 
-%% ==================== Rollback status text ==================== %%
+sttext_noproc() -> update_status_text("Cannot perform any action because no process is selected.").
+
+sttext_nomatch() -> update_status_text("Cannot perform any forward action because there is no matching message to be received.").
+
+
+%% ==================== Manual actions ==================== %%
+
+
+sttext_reduce(Sem, Rule) ->
+  Status = io_lib:format("Performed a single ~s reduction step using rule: ~s.",
+                         [semantics_to_string(Sem), rule_to_string(Rule)]),
+  update_status_text(Status).
+
+sttext_step(Sem, Steps) ->
+  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped over to the next expression.",
+                         [Steps, semantics_to_string(Sem)]),
+  update_status_text(Status).
+
+sttext_step(Sem, Steps, {M, F, A}) ->
+  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped into the function '~s:~s/~b'.",
+                         [Steps, semantics_to_string(Sem), M, F, A]),
+  update_status_text(Status).
+
+
+%% ==================== Automatic actions ==================== %%
+
+
+sttext_mult(Sem, Done, Total) ->
+  Dir = semantics_to_string(Sem),
+  DoneStr = integer_to_list(Done),
+  TotalStr = integer_to_list(Total),
+  update_status_text("Performed " ++ DoneStr ++ " " ++ Dir ++ " steps, from a total of " ++ TotalStr ++ ".").
+
+
+%% ==================== Rollback actions ==================== %%
 
 
 sttext_replay(StepsDone, Steps) ->
@@ -278,7 +248,7 @@ sttext_replay_rec(false, _) -> update_status_text("Could not replay the receivin
 sttext_replay_rec(true, Id) -> update_status_text("Replayed receiving of message with id " ++ Id).
 
 
-%% ==================== Rollback status text ==================== %%
+%% ==================== Rollback actions ==================== %%
 
 
 sttext_roll(StepsDone, Steps) ->
@@ -310,7 +280,7 @@ update_status_text(String) ->
   wxFrame:setStatusText(Frame, String).
 
 
-sort_opts(Opts) -> lists:sort(fun(P1, P2) -> P1#opt.id < P2#opt.id end, Opts).
+sort_opts(Opts) -> lists:sort(fun(P1, P2) -> P1#opt.pid < P2#opt.pid end, Opts).
 
 
 -spec toggle_opts() -> [{cauder_types:print_option(), boolean()}].

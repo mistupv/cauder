@@ -1,7 +1,7 @@
 -module(cauder_wx_code).
 
 -export([code_area/1, load_code/2, unload_code/1, mark_line/3,
-         can_zoom_in/1, can_zoom_out/1, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_zoom_buttons/1]).
+         can_zoom_in/1, can_zoom_out/1, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_zoom_buttons/1, update_expr/1]).
 
 
 -include("cauder.hrl").
@@ -66,22 +66,22 @@
 code_area(Parent) ->
   Win = wxPanel:new(Parent),
 
-  Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Code"}]),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Code"}]),
   wxWindow:setSizer(Win, Sizer),
 
-  Font = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
+  FontCode = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
   CodeArea = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
   ref_add(?CODE_TEXT, CodeArea),
-  wxSizer:add(Sizer, CodeArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
+  wxStaticBoxSizer:add(Sizer, CodeArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   %% Styles
   wxStyledTextCtrl:styleClearAll(CodeArea),
-  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_DEFAULT, Font),
-  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_LINENUMBER, Font),
+  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_DEFAULT, FontCode),
+  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_LINENUMBER, FontCode),
 
   lists:foreach(
     fun({Style, Color}) ->
-      wxStyledTextCtrl:styleSetFont(CodeArea, Style, Font),
+      wxStyledTextCtrl:styleSetFont(CodeArea, Style, FontCode),
       wxStyledTextCtrl:styleSetForeground(CodeArea, Style, Color)
     end, ?STYLES),
 
@@ -105,6 +105,21 @@ code_area(Parent) ->
   wxStyledTextCtrl:setZoom(CodeArea, ?ZOOM_DEFAULT),
 
   wxStyledTextCtrl:connect(CodeArea, 'stc_zoom'),
+
+  % -----
+
+  wxStaticBoxSizer:addSpacer(Sizer, ?SPACER_MEDIUM),
+
+  % -----
+
+  ExprArea = wxTextCtrl:new(Win, ?EXPR_TEXT, [{style, ?wxTE_READONLY}]),
+  ref_add(?EXPR_TEXT, ExprArea),
+  wxStaticBoxSizer:add(Sizer, ExprArea, [{proportion, 0}, {flag, ?wxEXPAND}]),
+
+  FontExpr = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxTextCtrl:setFont(ExprArea, FontExpr),
+
+  % -----
 
   Win.
 
@@ -194,6 +209,11 @@ update_margin(This) ->
 update_zoom_buttons(This) ->
   wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_IN), [{enable, cauder_wx_code:can_zoom_in(This)}]),
   wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_OUT), [{enable, cauder_wx_code:can_zoom_out(This)}]).
+
+
+update_expr(Expr) ->
+  ExprText = ref_lookup(?EXPR_TEXT),
+  wxTextCtrl:setValue(ExprText, pretty_print:expression(Expr)).
 
 
 %% ===== Utils ===== %%

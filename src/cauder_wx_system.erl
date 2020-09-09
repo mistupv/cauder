@@ -66,7 +66,7 @@ mail_area(Parent) ->
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 1, Item),
 
-  wxListItem:setText(Item, "Time"),
+  wxListItem:setText(Item, "UID"),
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 2, Item),
 
@@ -88,12 +88,12 @@ update_mail() ->
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   #sys{mail = Mail} = ref_lookup(?SYSTEM),
   lists:foldl(
-    fun(#msg{dest = Dest, val = Value, time = Time}, Row) ->
+    fun(#msg{dest = Dest, val = Value, uid = UID}, Row) ->
       wxListCtrl:insertItem(MailArea, Row, ""),
       wxListCtrl:setItemFont(MailArea, Row, Font),
       wxListCtrl:setItem(MailArea, Row, 0, integer_to_list(Dest)),
       wxListCtrl:setItem(MailArea, Row, 1, io_lib:format("~p", [Value])),
-      wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(Time)),
+      wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(UID)),
       Row + 1
     end, 0, Mail),
   wxListCtrl:thaw(MailArea).
@@ -153,7 +153,7 @@ update_roll_log() ->
   wxListBox:clear(RollLogArea),
   #sys{roll = Roll} = ref_lookup(?SYSTEM),
   lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, Roll),
-  wxListBox:freeze(RollLogArea).
+  wxListBox:thaw(RollLogArea).
 
 
 %% ===== Utils ===== %%

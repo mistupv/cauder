@@ -372,8 +372,8 @@ match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
   MatchedMessage :: cauder_types:message(),
   RestMessages :: [cauder_types:message()].
 
-match_rec(Cs, Bs0, [{'receive', Stamp} | _], Mail) ->
-  case utils:check_msg(Mail, Stamp) of
+match_rec(Cs, Bs0, [{'receive', UID} | _], Mail) ->
+  case utils:check_msg(Mail, UID) of
     none -> nomatch;
     Msg ->
       case match_clause(Bs0, Cs, [abstract(Msg#msg.val)]) of

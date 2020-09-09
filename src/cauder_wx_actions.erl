@@ -61,30 +61,57 @@ manual_actions(Parent) ->
 
   % ----- Buttons -----
 
-  Buttons = wxBoxSizer:new(?wxHORIZONTAL),
+  Buttons = wxBoxSizer:new(?wxVERTICAL),
   wxBoxSizer:add(SizerV, Buttons, ExpandCenterHorizontal),
 
-  % Backward
+  % Step
 
-  BwdTitle = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Backward"}]),
-  wxBoxSizer:add(Buttons, BwdTitle, ExpandCenterHorizontal),
+  Step = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step"}]),
+  wxBoxSizer:add(Buttons, Step, ExpandCenterHorizontal),
 
-  BwdButton = wxButton:new(Win, ?SINGLE_BACKWARD_BUTTON, [{label, "Seq"}]),
-  ref_add(?SINGLE_BACKWARD_BUTTON, BwdButton),
-  wxBoxSizer:add(BwdTitle, BwdButton),
+  StepBwd = wxButton:new(Win, ?STEP_BACKWARD_BUTTON, [{label, "Backward"}]),
+  ref_add(?STEP_BACKWARD_BUTTON, StepBwd),
+  wxBoxSizer:add(Step, StepBwd),
 
-  % -----
+  wxBoxSizer:addSpacer(Step, ?SPACER_SMALL),
+
+  StepFwd = wxButton:new(Win, ?STEP_FORWARD_BUTTON, [{label, "Forward"}]),
+  ref_add(?STEP_FORWARD_BUTTON, StepFwd),
+  wxBoxSizer:add(Step, StepFwd),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
-  % Forward
+  % Step Over
 
-  FwdTitle = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Forward"}]),
-  wxBoxSizer:add(Buttons, FwdTitle, ExpandCenterHorizontal),
+  StepOver = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Over"}]),
+  wxBoxSizer:add(Buttons, StepOver, ExpandCenterHorizontal),
 
-  FwdButton = wxButton:new(Win, ?SINGLE_FORWARD_BUTTON, [{label, "Seq"}]),
-  ref_add(?SINGLE_FORWARD_BUTTON, FwdButton),
-  wxBoxSizer:add(FwdTitle, FwdButton),
+  StepOverBwd = wxButton:new(Win, ?STEP_OVER_BACKWARD_BUTTON, [{label, "Backward"}]),
+  ref_add(?STEP_OVER_BACKWARD_BUTTON, StepOverBwd),
+  wxBoxSizer:add(StepOver, StepOverBwd),
+
+  wxBoxSizer:addSpacer(StepOver, ?SPACER_SMALL),
+
+  StepOverFwd = wxButton:new(Win, ?STEP_OVER_FORWARD_BUTTON, [{label, "Forward"}]),
+  ref_add(?STEP_OVER_FORWARD_BUTTON, StepOverFwd),
+  wxBoxSizer:add(StepOver, StepOverFwd),
+
+  wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
+
+  % Step Into
+
+  StepInto = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Into"}]),
+  wxBoxSizer:add(Buttons, StepInto, ExpandCenterHorizontal),
+
+  StepIntoBwd = wxButton:new(Win, ?STEP_INTO_BACKWARD_BUTTON, [{label, "Backward"}]),
+  ref_add(?STEP_INTO_BACKWARD_BUTTON, StepIntoBwd),
+  wxBoxSizer:add(StepInto, StepIntoBwd),
+
+  wxBoxSizer:addSpacer(StepInto, ?SPACER_SMALL),
+
+  StepIntoFwd = wxButton:new(Win, ?STEP_INTO_FORWARD_BUTTON, [{label, "Forward"}]),
+  ref_add(?STEP_INTO_FORWARD_BUTTON, StepIntoFwd),
+  wxBoxSizer:add(StepInto, StepIntoFwd),
 
   Win.
 
@@ -211,7 +238,7 @@ replay_actions(Parent) ->
   Send = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Send),
 
-  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. ID:", StaticAlignRight),
+  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. UID:", StaticAlignRight),
   wxBoxSizer:add(Send, SendStaticText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
@@ -235,7 +262,7 @@ replay_actions(Parent) ->
   Receive = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Receive),
 
-  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. ID:", StaticAlignRight),
+  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. UID:", StaticAlignRight),
   wxBoxSizer:add(Receive, ReceiveStaticText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
@@ -324,7 +351,7 @@ rollback_actions(Parent) ->
   Send = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Send),
 
-  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. ID:", StaticAlignRight),
+  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. UID:", StaticAlignRight),
   wxBoxSizer:add(Send, SendStaticText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
@@ -348,7 +375,7 @@ rollback_actions(Parent) ->
   Receive = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Receive),
 
-  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. ID:", StaticAlignRight),
+  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. UID:", StaticAlignRight),
   wxBoxSizer:add(Receive, ReceiveStaticText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
@@ -394,4 +421,3 @@ rollback_actions(Parent) ->
 
 
 ref_add(Id, Ref) -> cauder_gui:ref_add(Id, Ref).
-ref_lookup(Id) -> cauder_gui:ref_lookup(Id).

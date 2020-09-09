@@ -53,10 +53,10 @@ eval_step(Sys, Pid) ->
         ghosts = orddict:store(Gid, G, GDict0),
         trace  = lists:delete(T, Trace)
       };
-    {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, time = Time}} ->
-      {_Msg, OldMsgs} = utils:select_msg(Ms, Time),
+    {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = UID}} ->
+      {_Msg, OldMsgs} = utils:select_msg(Ms, UID),
       P = P0#proc{
-        log   = [{send, Time} | Log],
+        log   = [{send, UID} | Log],
         hist  = RestHist,
         stack = Stk,
         env   = Bs,
@@ -67,16 +67,16 @@ eval_step(Sys, Pid) ->
         from = Pid,
         to   = Dest,
         val  = Val,
-        time = Time
+        time = UID
       },
       Sys#sys{
         mail  = OldMsgs,
         procs = orddict:store(Pid, P, PDict0),
         trace = lists:delete(T, Trace)
       };
-    {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, time = Time}} ->
+    {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, uid = UID}} ->
       P = P0#proc{
-        log   = [{'receive', Time} | Log],
+        log   = [{'receive', UID} | Log],
         hist  = RestHist,
         stack = Stk,
         env   = Bs,
@@ -86,7 +86,7 @@ eval_step(Sys, Pid) ->
         type = ?RULE_RECEIVE,
         from = Pid,
         val  = Val,
-        time = Time
+        time = UID
       },
       Sys#sys{
         mail  = [M | Ms],
@@ -129,8 +129,8 @@ eval_proc_opt(#sys{mail = Mail, procs = Procs}, #proc{pid = Pid, hist = Hist}) -
               [] -> ?RULE_SPAWN;
               _ -> ?NULL_RULE
             end;
-          {send, _Bs, _Es, _Stk, #msg{time = Time}} ->
-            case utils:check_msg(Mail, Time) of
+          {send, _Bs, _Es, _Stk, #msg{uid = UID}} ->
+            case utils:check_msg(Mail, UID) of
               none -> ?NULL_RULE;
               _ -> ?RULE_SEND
             end;
@@ -139,5 +139,5 @@ eval_proc_opt(#sys{mail = Mail, procs = Procs}, #proc{pid = Pid, hist = Hist}) -
     end,
   case Rule of
     ?NULL_RULE -> ?NULL_OPT;
-    OtherRule -> #opt{sem = ?MODULE, id = Pid, rule = OtherRule}
+    OtherRule -> #opt{sem = ?MODULE, pid = Pid, rule = OtherRule}
   end.

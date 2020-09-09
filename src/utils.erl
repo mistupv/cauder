@@ -117,9 +117,9 @@ is_temp_variable_name(Name) ->
 -spec fresh_time() -> non_neg_integer().
 
 fresh_time() ->
-  Time = cauder:ref_lookup(?FRESH_TIME),
-  cauder:ref_add(?FRESH_TIME, Time + 1),
-  Time.
+  UID = cauder:ref_lookup(?FRESH_TIME),
+  cauder:ref_add(?FRESH_TIME, UID + 1),
+  UID.
 
 
 -spec pid_exists(cauder_types:process_dict(), pos_integer()) -> boolean().
@@ -140,22 +140,22 @@ take_process(Procs, Pid) -> {_P, _Ps} = orddict:take(Pid, Procs).
 
 
 %%--------------------------------------------------------------------
-%% @doc Returns a tuple with a message with id Time from Msgs and
+%% @doc Returns a tuple with a message with id UID from Msgs and
 %% the rest of messages from Msgs
 %% @end
 %%--------------------------------------------------------------------
 
 -spec select_msg([cauder_types:message()], non_neg_integer()) -> {cauder_types:message(), [cauder_types:message()]}.
 
-select_msg(Mail, Time) ->
-  {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.time == Time end, Mail),
+select_msg(Mail, UID) ->
+  {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.uid == UID end, Mail),
   {Message, RestMessages}.
 
 
 -spec check_msg([cauder_types:message()], pos_integer()) -> cauder_types:message() | none.
 
-check_msg(Msgs, Time) ->
-  MsgsT = [M || M <- Msgs, M#msg.time == Time],
+check_msg(Msgs, UID) ->
+  MsgsT = [M || M <- Msgs, M#msg.uid == UID],
   case MsgsT of
     [] -> none;
     [Msg] -> Msg
@@ -186,66 +186,54 @@ find_spawn_parent(PDict, Pid) -> find_item(PDict, {spawn, Pid}).
 
 -spec find_msg_sender(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
 
-find_msg_sender(PDict, Stamp) -> find_item(PDict, {send, Stamp}).
+find_msg_sender(PDict, UID) -> find_item(PDict, {send, UID}).
 
 -spec find_msg_receiver(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
 
-find_msg_receiver(PDict, Stamp) -> find_item(PDict, {'receive', Stamp}).
+find_msg_receiver(PDict, UID) -> find_item(PDict, {'receive', UID}).
 
 
 %% =====================================================================
 %% @doc Returns the processes that contain a spawn item in history with
 %% pid `Pid`
 
--spec find_proc_with_spawn(cauder_types:process_dict(), pos_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_spawn(cauder_types:process_dict(), pos_integer()) -> {value, cauder_types:process()} | false.
 
 find_proc_with_spawn(PDict, Pid) ->
-  Ps = lists:map(fun({_, P}) -> P end, PDict),
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_spawn(H, Pid) end, Ps) of
-    [Proc | _] -> Proc;
-    [] -> false
-  end.
+  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
+  lists:search(fun(#proc{hist = H}) -> has_spawn(H, Pid) end, Ps).
 
 
 %% =====================================================================
 %% @doc Returns the processes that contain a send item in history with
-%% time `Time`
+%% time `UID`
 
--spec find_proc_with_send(cauder_types:process_dict(), non_neg_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_send(cauder_types:process_dict(), non_neg_integer()) -> {value, cauder_types:process()} | false.
 
-find_proc_with_send(PDict, Time) ->
-  Ps = lists:map(fun({_, P}) -> P end, PDict),
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_send(H, Time) end, Ps) of
-    [Proc | _] -> Proc;
-    [] -> false
-  end.
+find_proc_with_send(PDict, UID) ->
+  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
+  lists:search(fun(#proc{hist = H}) -> has_send(H, UID) end, Ps).
 
 
 %% =====================================================================
 %% @doc Returns the processes that contain a rec item in history with
-%% time `Time`
+%% time `UID`
 
--spec find_proc_with_rec(cauder_types:process_dict(), non_neg_integer()) -> cauder_types:process() | false.
+-spec find_proc_with_rec(cauder_types:process_dict(), non_neg_integer()) -> {value, cauder_types:process()} | false.
 
-find_proc_with_rec(PDict, Time) ->
-  Ps = lists:map(fun({_, P}) -> P end, PDict),
-  case lists:dropwhile(fun(#proc{hist = H}) -> not has_rec(H, Time) end, Ps) of
-    [Proc | _] -> Proc;
-    [] -> false
-  end.
+find_proc_with_rec(PDict, UID) ->
+  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
+  lists:search(fun(#proc{hist = H}) -> has_rec(H, UID) end, Ps).
 
 %% =====================================================================
 %% @doc Returns the process that contain a binding for Var in its
 %% environment
 
--spec find_proc_with_var(cauder_types:process_dict(), atom()) -> cauder_types:process() | false.
+-spec find_proc_with_var(cauder_types:process_dict(), atom()) -> {value, cauder_types:process()} | false.
 
 find_proc_with_var(PDict, Name) ->
-  Ps = lists:map(fun({_, P}) -> P end, PDict),
-  case lists:dropwhile(fun(#proc{env = Bs}) -> not has_var(Bs, Name) end, Ps) of
-    [Proc | _] -> Proc;
-    [] -> false
-  end.
+  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
+  lists:search(fun(#proc{env = Bs}) -> has_var(Bs, Name) end, Ps).
 
 
 %%--------------------------------------------------------------------
@@ -302,9 +290,9 @@ stringToExprs(Str) ->
 %%--------------------------------------------------------------------
 %% @doc Filters the options with identifier Id
 
-filter_options([Opt | Opts], Id) when Opt#opt.id =:= Id -> [Opt | filter_options(Opts, Id)];
-filter_options([_ | Opts], Id)                          -> filter_options(Opts, Id);
-filter_options([], _)                                   -> [].
+filter_options([Opt | Opts], Id) when Opt#opt.pid =:= Id -> [Opt | filter_options(Opts, Id)];
+filter_options([_ | Opts], Id)                           -> filter_options(Opts, Id);
+filter_options([], _)                                    -> [].
 
 
 %%--------------------------------------------------------------------
@@ -355,13 +343,13 @@ has_spawn([], _)                                             -> false;
 has_spawn([{spawn, _Bs, _Es, _Stk, SpawnPid} | _], SpawnPid) -> true;
 has_spawn([_ | RestHist], Pid)                               -> has_spawn(RestHist, Pid).
 
-has_send([], _)                                                 -> false;
-has_send([{send, _Bs, _Es, _Stk, #msg{time = Time}} | _], Time) -> true;
-has_send([_ | RestHist], Time)                                  -> has_send(RestHist, Time).
+has_send([], _)                                              -> false;
+has_send([{send, _Bs, _Es, _Stk, #msg{uid = UID}} | _], UID) -> true;
+has_send([_ | RestHist], UID)                                -> has_send(RestHist, UID).
 
-has_rec([], _)                                                -> false;
-has_rec([{rec, _Bs, _Es, _Stk, #msg{time = Time}} | _], Time) -> true;
-has_rec([_ | RestHist], Time)                                 -> has_rec(RestHist, Time).
+has_rec([], _)                                             -> false;
+has_rec([{rec, _Bs, _Es, _Stk, #msg{uid = UID}} | _], UID) -> true;
+has_rec([_ | RestHist], UID)                               -> has_rec(RestHist, UID).
 
 has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
 
@@ -384,9 +372,9 @@ last_msg_rest(Mail) ->
 gen_log_spawn(OtherPid) ->
   [["Roll spawn of ", pretty_print:pid(OtherPid)]].
 
-gen_log_send(Pid, OtherPid, MsgValue, Time) ->
+gen_log_send(Pid, OtherPid, MsgValue, UID) ->
   [["Roll send from ", pretty_print:pid(Pid), " of ", pretty_print:to_string(MsgValue),
-    " to ", pretty_print:pid(OtherPid), " (", integer_to_list(Time), ")"]].
+    " to ", pretty_print:pid(OtherPid), " (", integer_to_list(UID), ")"]].
 
 
 clear_log(System) -> System#sys{roll = []}.
@@ -397,6 +385,9 @@ must_focus_log(System) ->
     [] -> false;
     _ -> true
   end.
+
+
+%% ==================== Load replay data ==================== %%
 
 
 -spec load_replay_data(file:filename()) -> ok.
@@ -425,7 +416,7 @@ get_all_lines(File) ->
   Lines :: [string()],
   Data :: #{call := Call, main_pid := Pid},
   Call :: {atom(), atom(), [cauder_types:abstract_expr()]},
-  Pid :: integer().
+  Pid :: cauder_types:proc_id().
 
 parse_lines(Lines) -> parse_lines(Lines, #{call => undefined, main_pid => undefined}).
 
@@ -438,7 +429,7 @@ parse_lines(Lines) -> parse_lines(Lines, #{call => undefined, main_pid => undefi
   Data :: #{call := optional(Call), main_pid := optional(Pid)},
   NewData :: #{call := Call, main_pid := Pid},
   Call :: {atom(), atom(), [cauder_types:abstract_expr()]},
-  Pid :: integer().
+  Pid :: cauder_types:proc_id().
 
 parse_lines([], Data) -> Data;
 parse_lines([Line | RestLines], Data) ->

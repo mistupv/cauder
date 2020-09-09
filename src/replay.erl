@@ -27,14 +27,14 @@ can_replay(#sys{procs = Procs}, Pid) ->
 
 replay_step(System, Pid) ->
   Opts = fwd_sem:eval_opts(System),
-  FiltOpts = [Opt || Opt <- Opts, Opt#opt.id == Pid],
+  FiltOpts = [Opt || Opt <- Opts, Opt#opt.pid == Pid],
   case FiltOpts of
     [] ->
       {#proc{log = Log}, _} = utils:take_process(System#sys.procs, Pid),
       case utils:check_log(Log) of
         {spawn, SpawnPid} -> replay_spawn(System, SpawnPid);
-        {send, Stamp} -> replay_send(System, Stamp);
-        {'receive', Stamp} -> replay_rec(System, Stamp)
+        {send, UID} -> replay_send(System, UID);
+        {'receive', UID} -> replay_rec(System, UID)
       end;
     _ -> fwd_sem:eval_step(System, Pid)
   end.
@@ -46,19 +46,19 @@ replay_step(System, Pid) ->
 -spec can_replay_spawn(cauder_types:system(), pos_integer()) -> boolean().
 
 can_replay_spawn(#sys{procs = PDict, ghosts = GDict}, Pid) ->
-  length(utils:find_spawn_parent(PDict, Pid)) > 0 orelse  length(utils:find_spawn_parent(GDict, Pid)) > 0.
+  length(utils:find_spawn_parent(PDict, Pid)) > 0 orelse length(utils:find_spawn_parent(GDict, Pid)) > 0.
 
 
 -spec can_replay_send(cauder_types:system(), pos_integer()) -> boolean().
 
-can_replay_send(#sys{procs = PDict, ghosts = GDict}, Stamp) ->
-  length(utils:find_msg_sender(PDict, Stamp)) > 0 orelse  length(utils:find_msg_sender(GDict, Stamp)) > 0.
+can_replay_send(#sys{procs = PDict, ghosts = GDict}, UID) ->
+  length(utils:find_msg_sender(PDict, UID)) > 0 orelse length(utils:find_msg_sender(GDict, UID)) > 0.
 
 
 -spec can_replay_rec(cauder_types:system(), pos_integer()) -> boolean().
 
-can_replay_rec(#sys{procs = PDict, ghosts = GDict}, Stamp) ->
-  length(utils:find_msg_receiver(PDict, Stamp)) > 0 orelse  length(utils:find_msg_receiver(GDict, Stamp)) > 0.
+can_replay_rec(#sys{procs = PDict, ghosts = GDict}, UID) ->
+  length(utils:find_msg_receiver(PDict, UID)) > 0 orelse length(utils:find_msg_receiver(GDict, UID)) > 0.
 
 
 %% =====================================================================
@@ -78,25 +78,25 @@ replay_spawn(Sys, Pid) ->
 
 -spec replay_send(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
-replay_send(Sys, Stamp) ->
+replay_send(Sys, UID) ->
   #sys{procs = PDict, ghosts = GDict} = Sys,
-  case can_replay_send(Sys, Stamp) of
+  case can_replay_send(Sys, UID) of
     false -> Sys;
     true ->
-      [SenderPid] = utils:find_msg_sender(PDict, Stamp) ++ utils:find_msg_sender(GDict, Stamp),
-      replay_until_send(Sys, SenderPid, Stamp)
+      [SenderPid] = utils:find_msg_sender(PDict, UID) ++ utils:find_msg_sender(GDict, UID),
+      replay_until_send(Sys, SenderPid, UID)
   end.
 
 
 -spec replay_rec(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
-replay_rec(Sys, Stamp) ->
+replay_rec(Sys, UID) ->
   #sys{procs = PDict, ghosts = GDict} = Sys,
-  case can_replay_rec(Sys, Stamp) of
+  case can_replay_rec(Sys, UID) of
     false -> Sys;
     true ->
-      [ReceiverPid] = utils:find_msg_receiver(PDict, Stamp) ++ utils:find_msg_receiver(GDict, Stamp),
-      replay_until_rec(Sys, ReceiverPid, Stamp)
+      [ReceiverPid] = utils:find_msg_receiver(PDict, UID) ++ utils:find_msg_receiver(GDict, UID),
+      replay_until_rec(Sys, ReceiverPid, UID)
   end.
 
 
@@ -127,44 +127,44 @@ replay_until_spawn_1(Sys0, ParentPid, Pid) ->
 
 -spec replay_until_send(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
 
-replay_until_send(Sys0, SenderPid, Stamp) ->
+replay_until_send(Sys0, SenderPid, UID) ->
   Sys1 = replay_spawn(Sys0, SenderPid),
   {ok, #proc{log = SenderLog}} = orddict:find(SenderPid, Sys1#sys.procs),
-  case lists:member({send, Stamp}, SenderLog) of
+  case lists:member({send, UID}, SenderLog) of
     false -> Sys1;
-    true -> replay_until_send_1(Sys1, SenderPid, Stamp)
+    true -> replay_until_send_1(Sys1, SenderPid, UID)
   end.
 
 
 -spec replay_until_send_1(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
 
-replay_until_send_1(Sys0, SenderPid, Stamp) ->
+replay_until_send_1(Sys0, SenderPid, UID) ->
   Sys1 = replay_step(Sys0, SenderPid),
   {ok, #proc{log = SenderLog}} = orddict:find(SenderPid, Sys1#sys.procs),
-  case lists:member({send, Stamp}, SenderLog) of
+  case lists:member({send, UID}, SenderLog) of
     false -> Sys1;
-    true -> replay_until_send_1(Sys1, SenderPid, Stamp)
+    true -> replay_until_send_1(Sys1, SenderPid, UID)
   end.
 
 
 -spec replay_until_rec(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
 
-replay_until_rec(Sys0, ReceiverPid, Stamp) ->
+replay_until_rec(Sys0, ReceiverPid, UID) ->
   Sys1 = replay_spawn(Sys0, ReceiverPid),
-  Sys2 = replay_send(Sys1, Stamp),
+  Sys2 = replay_send(Sys1, UID),
   {ok, #proc{log = ReceiverLog}} = orddict:find(ReceiverPid, Sys1#sys.procs),
-  case lists:member({'receive', Stamp}, ReceiverLog) of
+  case lists:member({'receive', UID}, ReceiverLog) of
     false -> Sys0;
-    true -> replay_until_rec_1(Sys2, ReceiverPid, Stamp)
+    true -> replay_until_rec_1(Sys2, ReceiverPid, UID)
   end.
 
 
 -spec replay_until_rec_1(cauder_types:system(), pos_integer(), pos_integer()) -> cauder_types:system().
 
-replay_until_rec_1(Sys0, ReceiverPid, Stamp) ->
+replay_until_rec_1(Sys0, ReceiverPid, UID) ->
   Sys1 = replay_step(Sys0, ReceiverPid),
   {ok, #proc{log = ReceiverLog}} = orddict:find(ReceiverPid, Sys1#sys.procs),
-  case lists:member({'receive', Stamp}, ReceiverLog) of
+  case lists:member({'receive', UID}, ReceiverLog) of
     false -> Sys1;
-    true -> replay_until_rec_1(Sys1, ReceiverPid, Stamp)
+    true -> replay_until_rec_1(Sys1, ReceiverPid, UID)
   end.

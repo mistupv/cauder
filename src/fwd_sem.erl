@@ -76,13 +76,13 @@ eval_step(Sys, Pid) ->
       };
     {send, Dest, Val} ->
       % TODO Without Log
-      %Time = utils:fresh_time(),
-      {send, Time} = hd(Log),
+      %UID = utils:fresh_time(),
+      {send, UID} = hd(Log),
 
       M = #msg{
         dest = Dest,
         val  = Val,
-        time = Time
+        uid  = UID
       },
       P = P0#proc{
         log   = tl(Log),
@@ -96,7 +96,7 @@ eval_step(Sys, Pid) ->
         from = Pid,
         to   = Dest,
         val  = Val,
-        time = Time
+        time = UID
       },
       Sys#sys{
         mail  = [M | Ms],
@@ -105,7 +105,7 @@ eval_step(Sys, Pid) ->
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
       % TODO Without Log
-      {Bs1, Es1, M = #msg{dest = Pid, val = Val, time = Time}, Ms1} = cauder_eval:match_rec(Cs, Bs, Log, Ms),
+      {Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = UID}, Ms1} = cauder_eval:match_rec(Cs, Bs, Log, Ms),
 
       P = P0#proc{
         log   = tl(Log),
@@ -118,7 +118,7 @@ eval_step(Sys, Pid) ->
         type = ?RULE_RECEIVE,
         from = Pid,
         val  = Val,
-        time = Time
+        time = UID
       },
       Sys#sys{
         mail  = Ms1,
@@ -143,7 +143,7 @@ eval_opts(#sys{mail = Mail, procs = PDict}) ->
           Rule ->
             {true, #opt{
               sem  = ?MODULE,
-              id   = Pid,
+              pid  = Pid,
               rule = Rule
             }}
         end

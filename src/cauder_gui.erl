@@ -264,8 +264,8 @@ openReplayDialog(Parent) ->
   Module :: atom(),
   Function :: atom(),
   Args :: [cauder_types:abstract_expr()],
-  Pid :: pos_integer(),
-  Log :: list(). % TODO
+  Pid :: cauder_types:proc_id(),
+  Log :: cauder_types:log().
 
 init_system(M, F, As, Pid, Log) ->
   Proc = #proc{
@@ -292,7 +292,7 @@ init_system(M, F, As, Pid, Log) ->
 %% @doc Loads the replay data for all the processes in the current replay
 %% data, except for the one with the MainPid, which has already been loaded.
 
--spec load_ghosts(MainPid :: pos_integer()) -> cauder_types:process_dict().
+-spec load_ghosts(MainPid :: cauder_types:proc_id()) -> cauder_types:process_dict().
 
 load_ghosts(MainPid) ->
   #replay{log_path = Path} = get(replay_data),
@@ -346,8 +346,8 @@ start(M, F, As) -> start(M, F, As, 1, []).
   Module :: atom(),
   Function :: atom(),
   Args :: [erl_parse:abstract_expr()],
-  Pid :: pos_integer(),
-  Log :: list(). % TODO
+  Pid :: cauder_types:proc_id(),
+  Log :: cauder_types:log().
 
 start(M, F, As, Pid, Log) ->
   cauder:reset_fresh_refs(Pid),
@@ -362,13 +362,15 @@ start(M, F, As, Pid, Log) ->
 refresh_buttons(Opts) ->
   ?LOG("full options: " ++ ?TO_STRING(utils_gui:sort_opts(Opts))),
 
+  FwdButtons = [?STEP_FORWARD_BUTTON, ?STEP_OVER_FORWARD_BUTTON, ?STEP_INTO_FORWARD_BUTTON],
+  BwdButtons = [?STEP_BACKWARD_BUTTON, ?STEP_OVER_BACKWARD_BUTTON, ?STEP_INTO_BACKWARD_BUTTON],
+
   case utils_gui:current_process() of
     none ->
-      utils_gui:disable_controls([?SINGLE_BACKWARD_BUTTON, ?SINGLE_FORWARD_BUTTON]);
+      utils_gui:disable_controls(FwdButtons ++ BwdButtons);
     #proc{pid = Pid} ->
-      Buttons = lists:map(fun utils_gui:option_to_button_label/1, utils:filter_options(Opts, Pid)),
-      utils_gui:set_button_label_from(?SINGLE_BACKWARD_BUTTON, Buttons),
-      utils_gui:set_button_label_from(?SINGLE_FORWARD_BUTTON, Buttons)
+      utils_gui:enable_controls_if(FwdButtons, lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= ?FWD_SEM end, Opts)),
+      utils_gui:enable_controls_if(BwdButtons, lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= ?BWD_SEM end, Opts))
   end,
 
   HasFwd = utils:has_fwd(Opts),
@@ -392,7 +394,7 @@ refresh(RefreshState) ->
           if
             RefreshState ->
               utils_gui:update_process_choices(System),
-              utils_gui:update_code_line(),
+              utils_gui:update_code(),
               cauder_wx_system:update_system_info(),
               cauder_wx_process:update_process_info();
             true -> ok
@@ -423,38 +425,53 @@ refresh(RefreshState) ->
 %% ==================== Manual evaluation ==================== %%
 
 
--spec exec_with(?SINGLE_FORWARD_BUTTON | ?SINGLE_BACKWARD_BUTTON) -> ok.
+-spec eval_reduce(Semantics) -> noproc | {ok, Rule} when
+  Semantics :: cauder_types:semantics(),
+  Rule :: cauder_types:rule().
 
-exec_with(Button) ->
+eval_reduce(Sem) ->
   case utils_gui:current_process() of
-    none -> ok;
+    none -> noproc;
     #proc{pid = Pid} ->
       Sys0 = ref_lookup(?SYSTEM),
-      Opt0 = utils_gui:button_to_option(Button),
-      Opt1 = Opt0#opt{id = Pid},
-      Sys1 = cauder:eval_step(Sys0, Opt1),
+      Opts = utils:filter_options(cauder:eval_opts(Sys0), Pid),
+      {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
+      Sys1 = cauder:eval_reduce(Sem, Sys0, Pid),
       ref_add(?SYSTEM, Sys1),
-      ok
+      {ok, Rule}
+  end.
+
+
+-spec eval_step(Semantics) -> noproc | nomatch | {ok, Steps} when
+  Semantics :: cauder_types:semantics(),
+  Steps :: pos_integer().
+
+eval_step(Sem) ->
+  case utils_gui:current_process() of
+    none -> noproc;
+    #proc{pid = Pid} ->
+      Sys0 = ref_lookup(?SYSTEM),
+      case cauder:eval_step(Sem, Sys0, Pid) of
+        {Sys1, Steps} ->
+          ref_add(?SYSTEM, Sys1),
+          {ok, Steps};
+        nomatch -> nomatch
+      end
   end.
 
 
 %% ==================== Automatic evaluation ==================== %%
 
 
--spec eval_mult(Button) -> {StepsDone, Steps} when
-  Button :: ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
+-spec eval_mult(Semantics) -> {StepsDone, Steps} when
+  Semantics :: cauder_types:semantics(),
   StepsDone :: non_neg_integer(),
   Steps :: pos_integer().
 
-eval_mult(Button) ->
+eval_mult(Sem) ->
   Steps = wxSpinCtrl:getValue(ref_lookup(?STEPS_SPIN)),
   Sys0 = ref_lookup(?SYSTEM),
-  Dir =
-    case Button of
-      ?MULTIPLE_FORWARD_BUTTON -> ?MULT_FWD;
-      ?MULTIPLE_BACKWARD_BUTTON -> ?MULT_BWD
-    end,
-  {Sys1, StepsDone} = cauder:eval_mult(Sys0, Dir, Steps),
+  {Sys1, StepsDone} = cauder:eval_mult(Sys0, Sem, Steps),
   ref_add(?SYSTEM, Sys1),
   {StepsDone, Steps}.
 
@@ -476,46 +493,46 @@ eval_replay() ->
   end.
 
 
--spec eval_replay_spawn() -> {Success :: boolean(), SpawnPid :: none | string()}.
+-spec eval_replay_spawn() -> {Success :: boolean(), StrPid :: none | string()}.
 
 eval_replay_spawn() ->
   PidText = wxTextCtrl:getValue(ref_lookup(?REPLAY_SPAWN_TEXT)),
   case string:to_integer(PidText) of
     % What if error?
     {error, _} -> {false, none};
-    {SpawnPid, _} ->
+    {Pid, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      {Success, Sys1} = cauder:eval_replay_spawn(Sys0, SpawnPid),
+      {Success, Sys1} = cauder:eval_replay_spawn(Sys0, Pid),
       ref_add(?SYSTEM, Sys1),
       {Success, PidText}
   end.
 
 
--spec eval_replay_send() -> {Success :: boolean(), Id :: none | string()}.
+-spec eval_replay_send() -> {Success :: boolean(), StrUID :: none | string()}.
 
 eval_replay_send() ->
   IdText = wxTextCtrl:getValue(ref_lookup(?REPLAY_SEND_TEXT)),
   case string:to_integer(IdText) of
     % What if error?
     {error, _} -> {false, none};
-    {Id, _} ->
+    {UID, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      {Success, Sys1} = cauder:eval_replay_send(Sys0, Id),
+      {Success, Sys1} = cauder:eval_replay_send(Sys0, UID),
       ref_add(?SYSTEM, Sys1),
       {Success, IdText}
   end.
 
 
--spec eval_replay_rec() -> {Success :: boolean(), Id :: none | string()}.
+-spec eval_replay_rec() -> {Success :: boolean(), StrUID :: none | string()}.
 
 eval_replay_rec() ->
   IdText = wxTextCtrl:getValue(ref_lookup(?REPLAY_REC_TEXT)),
   case string:to_integer(IdText) of
     % What if error?
     {error, _} -> {false, none};
-    {Id, _} ->
+    {UID, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      {Success, Sys1} = cauder:eval_replay_rec(Sys0, Id),
+      {Success, Sys1} = cauder:eval_replay_rec(Sys0, UID),
       ref_add(?SYSTEM, Sys1),
       {Success, IdText}
   end.
@@ -541,80 +558,91 @@ eval_roll() ->
   end.
 
 
--spec eval_roll_spawn() -> {CanRoll, SpawnPid, FocusLog} when
+-spec eval_roll_spawn() -> {CanRoll, StrPid, FocusLog} when
   CanRoll :: boolean(),
-  SpawnPid :: string() | none,
+  StrPid :: string() | none,
   FocusLog :: boolean().
 
 eval_roll_spawn() ->
-  PidText = wxTextCtrl:getValue(ref_lookup(?ROLL_SPAWN_TEXT)),
-  case string:to_integer(PidText) of
+  StrPid = wxTextCtrl:getValue(ref_lookup(?ROLL_SPAWN_TEXT)),
+  case string:to_integer(StrPid) of
     {error, _} -> {false, none, false};
     {Pid, _} ->
       Sys0 = ref_lookup(?SYSTEM),
       {CanRoll, FocusLog, Sys1} = cauder:eval_roll_spawn(Sys0, Pid),
       ref_add(?SYSTEM, Sys1),
-      {CanRoll, PidText, FocusLog}
+      {CanRoll, StrPid, FocusLog}
   end.
 
 
--spec eval_roll_send() -> {CanRoll, Id, FocusLog} when
+-spec eval_roll_send() -> {CanRoll, StrUID, FocusLog} when
   CanRoll :: boolean(),
-  Id :: string() | none,
+  StrUID :: string() | none,
   FocusLog :: boolean().
 
 eval_roll_send() ->
-  IdTextCtrl = ref_lookup(?ROLL_SEND_TEXT),
-  IdText = wxTextCtrl:getValue(IdTextCtrl),
-  case string:to_integer(IdText) of
+  StrUID = wxTextCtrl:getValue(ref_lookup(?ROLL_SEND_TEXT)),
+  case string:to_integer(StrUID) of
     {error, _} -> {false, none, false};
-    {Id, _} ->
+    {UID, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_send(Sys0, Id),
+      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_send(Sys0, UID),
       ref_add(?SYSTEM, Sys1),
-      {CanRoll, IdText, FocusLog}
+      {CanRoll, StrUID, FocusLog}
   end.
 
 
--spec eval_roll_rec() -> {CanRoll, Id, FocusLog} when
+-spec eval_roll_rec() -> {CanRoll, StrUID, FocusLog} when
   CanRoll :: boolean(),
-  Id :: string() | none,
+  StrUID :: string() | none,
   FocusLog :: boolean().
 
 eval_roll_rec() ->
-  IdTextCtrl = ref_lookup(?ROLL_REC_TEXT),
-  IdText = wxTextCtrl:getValue(IdTextCtrl),
-  case string:to_integer(IdText) of
+  StrUID = wxTextCtrl:getValue(ref_lookup(?ROLL_REC_TEXT)),
+  case string:to_integer(StrUID) of
     {error, _} -> {false, none, false};
-    {Id, _} ->
+    {UID, _} ->
       Sys0 = ref_lookup(?SYSTEM),
-      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_rec(Sys0, Id),
+      {CanRoll, FocusLog, Sys1} = cauder:eval_roll_rec(Sys0, UID),
       ref_add(?SYSTEM, Sys1),
-      {CanRoll, IdText, FocusLog}
+      {CanRoll, StrUID, FocusLog}
   end.
 
 
--spec eval_roll_var() -> {CanRoll, Name, FocusLog} when
+-spec eval_roll_var() -> {CanRoll, StrName, FocusLog} when
   CanRoll :: boolean(),
-  Name :: string() | none,
+  StrName :: string() | none,
   FocusLog :: boolean().
 
 eval_roll_var() ->
-  TextCtrl = ref_lookup(?ROLL_VAR_TEXT),
-  case wxTextCtrl:getValue(TextCtrl) of
+  StrName = wxTextCtrl:getValue(ref_lookup(?ROLL_VAR_TEXT)),
+  case StrName of
     "" -> {false, none, false};
-    Text ->
+    _ ->
       System = ref_lookup(?SYSTEM),
-      VarName = list_to_atom(Text),
-      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_var(System, VarName),
+      Name = list_to_atom(StrName),
+      {CanRoll, FocusLog, NewSystem} = cauder:eval_roll_var(System, Name),
       ref_add(?SYSTEM, NewSystem),
-      {CanRoll, Text, FocusLog}
+      {CanRoll, StrName, FocusLog}
   end.
 
 focus_roll_log(false) -> ok;
 focus_roll_log(true) ->
   RBotNotebook = ref_lookup(?SYSTEM_INFO_NOTEBOOK),
   wxNotebook:setSelection(RBotNotebook, ?PAGEPOS_ROLL).
+
+
+button_to_semantics(?STEP_FORWARD_BUTTON)       -> ?FWD_SEM;
+button_to_semantics(?STEP_BACKWARD_BUTTON)      -> ?BWD_SEM;
+
+button_to_semantics(?STEP_OVER_FORWARD_BUTTON)  -> ?FWD_SEM;
+button_to_semantics(?STEP_OVER_BACKWARD_BUTTON) -> ?BWD_SEM;
+
+button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
+button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
+
+button_to_semantics(?MULTIPLE_FORWARD_BUTTON)   -> ?FWD_SEM;
+button_to_semantics(?MULTIPLE_BACKWARD_BUTTON)  -> ?BWD_SEM.
 
 
 loop() ->
@@ -662,26 +690,45 @@ loop() ->
       #wx{id = ?PROC_CHOICE, event = #wxCommand{type = command_choice_selected}} -> refresh(true);
 
     %% ---------- Manual panel buttons ---------- %%
-      #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
-        when (Button =:= ?SINGLE_FORWARD_BUTTON) orelse (Button =:= ?SINGLE_BACKWARD_BUTTON) ->
+      #wx{id = Button, event = #wxCommand{type = command_button_clicked}} when ?IS_STEP_BUTTON(Button) ->
         utils_gui:disable_all_buttons(),
-        exec_with(Button),
-        utils_gui:sttext_single(Button),
-        refresh(true);
+        Sem = button_to_semantics(Button),
+        case eval_reduce(Sem) of
+          noproc ->
+            utils_gui:sttext_noproc(),
+            refresh(false);
+          {ok, Rule} ->
+            utils_gui:sttext_reduce(Sem, Rule),
+            refresh(true)
+        end;
+      #wx{id = Button, event = #wxCommand{type = command_button_clicked}} when ?IS_STEP_OVER_BUTTON(Button) ->
+        utils_gui:disable_all_buttons(),
+        Sem = button_to_semantics(Button),
+        case eval_step(Sem) of
+          noproc ->
+            utils_gui:sttext_noproc(),
+            refresh(false);
+          nomatch ->
+            utils_gui:sttext_nomatch(),
+            refresh(false);
+          {ok, Steps} ->
+            utils_gui:sttext_step(Sem, Steps),
+            refresh(true)
+        end;
 
     %% ---------- Automatic panel buttons ---------- %%
-      #wx{id = Button, event = #wxCommand{type = command_button_clicked}}
-        when (Button =:= ?MULTIPLE_FORWARD_BUTTON) orelse (Button =:= ?MULTIPLE_BACKWARD_BUTTON) ->
+      #wx{id = Button, event = #wxCommand{type = command_button_clicked}} when ?IS_MULT_BUTTON(Button) ->
         utils_gui:disable_all_buttons(),
-        {StepsDone, TotalSteps} = eval_mult(Button),
-        utils_gui:sttext_mult(StepsDone, TotalSteps),
+        Sem = button_to_semantics(Button),
+        {StepsDone, StepsTotal} = eval_mult(Sem),
+        utils_gui:sttext_mult(Sem, StepsDone, StepsTotal),
         refresh(true);
 
     %% ---------- Replay panel buttons ---------- %%
       #wx{id = ?REPLAY_STEPS_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
         utils_gui:disable_all_buttons(),
-        {StepsDone, TotalSteps} = eval_replay(),
-        utils_gui:sttext_replay(StepsDone, TotalSteps),
+        {StepsDone, StepsTotal} = eval_replay(),
+        utils_gui:sttext_replay(StepsDone, StepsTotal),
         refresh(true);
       #wx{id = ?REPLAY_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
         utils_gui:disable_all_buttons(),
@@ -702,8 +749,8 @@ loop() ->
     %% ---------- Rollback panel buttons ---------- %%
       #wx{id = ?ROLL_STEPS_BUTTON, event = #wxCommand{type = command_button_clicked}} ->
         utils_gui:disable_all_buttons(),
-        {MustFocus, StepsDone, TotalSteps} = eval_roll(),
-        utils_gui:sttext_roll(StepsDone, TotalSteps),
+        {MustFocus, StepsDone, StepsTotal} = eval_roll(),
+        utils_gui:sttext_roll(StepsDone, StepsTotal),
         focus_roll_log(MustFocus),
         refresh(true);
       #wx{id = ?ROLL_SPAWN_BUTTON, event = #wxCommand{type = command_button_clicked}} ->

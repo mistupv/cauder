@@ -29,9 +29,6 @@
 -define(FRESH_TIME, fresh_time).
 -define(FRESH_VAR,  fresh_var).
 
--define(MULT_FWD,   mult_fwd).
--define(MULT_BWD,   mult_bwd).
-
 -define(NOT_EXP,    not_exp).
 -define(NULL_RULE,  null_rule).
 -define(NULL_OPT,   null_opt).
@@ -69,7 +66,7 @@
 %% Process
 -record(proc, {
   % Process identifier
-  pid :: pos_integer(),
+  pid :: cauder_types:proc_id(),
   % Log
   log = [] :: cauder_types:log(),
   % History
@@ -87,19 +84,19 @@
 %% Message
 -record(msg, {
   % Target process identifier
-  dest :: pos_integer(),
+  dest :: cauder_types:proc_id(),
   % Message
   val :: term(),
-  % Timestamp
-  time :: non_neg_integer()
+  % UID
+  uid :: cauder_types:msg_id()
 }).
 
 % Option
 -record(opt, {
-  % forward or backward
-  sem :: ?FWD_SEM | ?BWD_SEM,
   % integer
-  id :: undefined | non_neg_integer(),
+  pid :: cauder_types:proc_id(),
+  % forward or backward
+  sem :: cauder_types:semantics(),
   % seq, spawn, ...
   rule :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE
 }).
@@ -107,17 +104,17 @@
 % Trace
 -record(trace, {
   type :: ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE,
-  from :: pos_integer(),
-  to :: undefined | pos_integer(),
+  from :: cauder_types:proc_id(),
+  to :: undefined | cauder_types:proc_id(),
   val :: undefined | term(),
-  time :: undefined | pos_integer()
+  time :: undefined | cauder_types:msg_id()
 }).
 
 % Replay info
 -record(replay, {
   log_path :: file:filename(),
   call :: {atom(), atom(), [cauder_types:abstract_expr()]},
-  main_pid :: pos_integer()
+  main_pid :: cauder_types:proc_id()
 }).
 
 % Evaluation step result

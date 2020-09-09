@@ -67,32 +67,48 @@
 
 %% ===== Code Panel ===== %%
 
--define(CODE_TEXT,                2001).
+-define(CODE_TEXT,                  2001).
 
 %% ===== Action Panel ===== %%
 
--define(ACTION_NOTEBOOK,          2100).
+-define(ACTION_NOTEBOOK,            2100).
 
 %% ----- Manual Panel ----- %%
 
--define(PROC_CHOICE,              2101).
+-define(PROC_CHOICE,                2101).
 
--define(SINGLE_FORWARD_BUTTON,    2102).
--define(SINGLE_BACKWARD_BUTTON,   2104).
+-define(STEP_FORWARD_BUTTON,        2102).
+-define(STEP_BACKWARD_BUTTON,       2103).
+
+-define(IS_STEP_BUTTON(Button), (Button =:= ?STEP_FORWARD_BUTTON) orelse (Button =:= ?STEP_BACKWARD_BUTTON)).
+
+-define(STEP_OVER_FORWARD_BUTTON,   2104).
+-define(STEP_OVER_BACKWARD_BUTTON,  2105).
+
+-define(IS_STEP_OVER_BUTTON(Button), (Button =:= ?STEP_OVER_FORWARD_BUTTON) orelse (Button =:= ?STEP_OVER_BACKWARD_BUTTON)).
+
+-define(STEP_INTO_FORWARD_BUTTON,   2106).
+-define(STEP_INTO_BACKWARD_BUTTON,  2107).
+
+-define(IS_STEP_INTO_BUTTON(Button), (Button =:= ?STEP_INTO_FORWARD_BUTTON) orelse (Button =:= ?STEP_INTO_BACKWARD_BUTTON)).
+
+-define(EXPR_TEXT,                  2108).
 
 %% ----- Automatic Panel ----- %%
 
--define(STEPS_SPIN, 2106).
+-define(STEPS_SPIN,                 2110).
 
--define(MULTIPLE_FORWARD_BUTTON,  2107).
--define(MULTIPLE_BACKWARD_BUTTON, 2108).
+-define(MULTIPLE_FORWARD_BUTTON,    2111).
+-define(MULTIPLE_BACKWARD_BUTTON,   2112).
+
+-define(IS_MULT_BUTTON(Button), (Button =:= ?MULTIPLE_FORWARD_BUTTON) orelse (Button =:= ?MULTIPLE_BACKWARD_BUTTON)).
 
 %% ----- Replay Panel ----- %%
 
--define(REPLAY_STEPS_SPIN,        2111).
--define(REPLAY_SPAWN_TEXT,        2113).
--define(REPLAY_SEND_TEXT,         2112).
--define(REPLAY_REC_TEXT,          2114).
+-define(REPLAY_STEPS_SPIN,          2120).
+-define(REPLAY_SPAWN_TEXT,          2121).
+-define(REPLAY_SEND_TEXT,           2122).
+-define(REPLAY_REC_TEXT,            2123).
 
 -define(REPLAY_INPUTS, [
   ?REPLAY_STEPS_SPIN,
@@ -101,10 +117,10 @@
   ?REPLAY_REC_TEXT
 ]).
 
--define(REPLAY_STEPS_BUTTON,      2115).
--define(REPLAY_SPAWN_BUTTON,      2117).
--define(REPLAY_SEND_BUTTON,       2116).
--define(REPLAY_REC_BUTTON,        2118).
+-define(REPLAY_STEPS_BUTTON,        2130).
+-define(REPLAY_SPAWN_BUTTON,        2131).
+-define(REPLAY_SEND_BUTTON,         2132).
+-define(REPLAY_REC_BUTTON,          2133).
 
 -define(REPLAY_BUTTONS, [
   ?REPLAY_STEPS_BUTTON,
@@ -115,11 +131,11 @@
 
 %% ----- Rollback Panel ----- %%
 
--define(ROLL_STEPS_SPIN,          2120).
--define(ROLL_SPAWN_TEXT,          2122).
--define(ROLL_SEND_TEXT,           2121).
--define(ROLL_REC_TEXT,            2123).
--define(ROLL_VAR_TEXT,            2124).
+-define(ROLL_STEPS_SPIN,            2140).
+-define(ROLL_SPAWN_TEXT,            2142).
+-define(ROLL_SEND_TEXT,             2141).
+-define(ROLL_REC_TEXT,              2143).
+-define(ROLL_VAR_TEXT,              2144).
 
 -define(ROLL_INPUTS, [
   ?ROLL_STEPS_SPIN,
@@ -129,11 +145,11 @@
   ?ROLL_VAR_TEXT
 ]).
 
--define(ROLL_STEPS_BUTTON,        2125).
--define(ROLL_SPAWN_BUTTON,        2127).
--define(ROLL_SEND_BUTTON,         2126).
--define(ROLL_REC_BUTTON,          2128).
--define(ROLL_VAR_BUTTON,          2129).
+-define(ROLL_STEPS_BUTTON,        2150).
+-define(ROLL_SPAWN_BUTTON,        2151).
+-define(ROLL_SEND_BUTTON,         2152).
+-define(ROLL_REC_BUTTON,          2153).
+-define(ROLL_VAR_BUTTON,          2154).
 
 -define(ROLL_BUTTONS, [
   ?ROLL_STEPS_BUTTON,
@@ -154,7 +170,9 @@
 ]).
 
 -define(ALL_BUTTONS, [
-  ?SINGLE_FORWARD_BUTTON, ?SINGLE_BACKWARD_BUTTON,
+  ?STEP_FORWARD_BUTTON, ?STEP_BACKWARD_BUTTON,
+  ?STEP_OVER_FORWARD_BUTTON, ?STEP_OVER_BACKWARD_BUTTON,
+  ?STEP_INTO_FORWARD_BUTTON, ?STEP_INTO_BACKWARD_BUTTON,
   ?MULTIPLE_FORWARD_BUTTON, ?MULTIPLE_BACKWARD_BUTTON |
   ?REPLAY_BUTTONS ++ ?ROLL_BUTTONS
 ]).
