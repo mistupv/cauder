@@ -4,7 +4,7 @@
 
 
 -include("cauder.hrl").
--include("cauder_gui.hrl").
+-include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
 

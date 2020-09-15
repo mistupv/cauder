@@ -29,7 +29,7 @@
 
 
 -include("cauder.hrl").
--include("cauder_gui.hrl").
+-include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
 
@@ -327,4 +327,4 @@ pp_marked_text(Ctrl, TextList) ->
   wxTextCtrl:thaw(Ctrl).
 
 
-ref_lookup(Id) -> cauder_gui:ref_lookup(Id).
+ref_lookup(Id) -> cauder_wx:ref_lookup(Id).

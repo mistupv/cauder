@@ -1,8 +1,8 @@
--module(cauder_gui).
+-module(cauder_wx).
 -export([init/0, ref_add/2, ref_lookup/1]).
 
 -include("cauder.hrl").
--include("cauder_gui.hrl").
+-include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
 

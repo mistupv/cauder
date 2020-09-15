@@ -4,7 +4,7 @@
 
 
 -include("cauder.hrl").
--include("cauder_gui.hrl").
+-include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
 
@@ -420,4 +420,4 @@ rollback_actions(Parent) ->
 %% ===== Utils ===== %%
 
 
-ref_add(Id, Ref) -> cauder_gui:ref_add(Id, Ref).
+ref_add(Id, Ref) -> cauder_wx:ref_add(Id, Ref).
