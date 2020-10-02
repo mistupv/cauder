@@ -11,8 +11,6 @@
 %%-define(TO_STRING(X), "").
 %%-endif.
 
--define(SYSTEM, 601).
-
 -define(FWD_SEM, fwd_sem).
 -define(BWD_SEM, bwd_sem).
 
@@ -28,9 +26,6 @@
 
 -define(REPLAY_DATA,  200).
 
--define(FRESH_PID,  fresh_pid).
--define(FRESH_TIME, fresh_time).
--define(FRESH_VAR,  fresh_var).
 
 -define(NOT_EXP,    not_exp).
 -define(NULL_RULE,  null_rule).
@@ -50,10 +45,6 @@
 -define(SCHED_PRIO_RANDOM, prio_random).
 
 -define(CAUDER_GREEN, {34,139,34}).
-
--define(STATUS,       status).
--define(LAST_PATH,    last_path).
--define(MODULE_PATH,  module_path).
 
 
 -record(status, {

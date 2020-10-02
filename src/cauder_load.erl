@@ -44,7 +44,7 @@ store_forms(Mod, [{function, _, Name, Arity, Cs0} | Fs], Exp) ->
   put(current_function, FA),
   Cs = cauder_syntax:clauses(Cs0),
   Exported = sets:is_element(FA, Exp),
-  cauder:ref_add({Mod, Name, Arity, Exported}, Cs),
+  ets:insert(get(db), {{Mod, Name, Arity, Exported}, Cs}),
   store_forms(Mod, Fs, Exp);
 store_forms(Mod, [_ | Fs], Exp) -> store_forms(Mod, Fs, Exp);
 store_forms(_, [], _)           -> ok.

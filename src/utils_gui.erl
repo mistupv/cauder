@@ -1,8 +1,5 @@
 -module(utils_gui).
 
-%% Status check functions
--export([is_app_loaded/0, is_app_running/0]).
-
 -export([find/2]).
 
 %% Control related functions
@@ -20,15 +17,6 @@
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
-
-
-is_app_loaded() ->
-  Status = cauder:ref_lookup(?STATUS),
-  Status#status.loaded.
-
-is_app_running() ->
-  Status = cauder:ref_lookup(?STATUS),
-  Status#status.running.
 
 
 -spec find(Id :: integer(), Type :: atom()) -> wx:wx_object().

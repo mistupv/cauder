@@ -6,7 +6,11 @@
 %%%-------------------------------------------------------------------
 
 -module(cauder).
--export([start/0, load_file/1, system/0, init_system/5]).
+
+%% API
+-export([start/0]).
+
+-export([load_file/1, init_system/5, entry_points/1, system/0, status/0]).
 %% Manual evaluation functions
 -export([eval_opts/1, eval_reduce/2, eval_step/2]).
 %% Automatic evaluation functions
@@ -16,21 +20,11 @@
 %% Rollback evaluation functions
 -export([eval_roll/2, eval_roll_send/1, eval_roll_spawn/1, eval_roll_rec/1, eval_roll_var/1]).
 %% ETS functions
--export([start_refs/0, stop_refs/0, reset_fresh_refs/1, ref_add/2, ref_lookup/1, ref_match_object/1]).
+-export([db_get/1, db_match/1]).
 
 -export([edit_binding/2]).
 
 -include("cauder.hrl").
-
-
-%%-record(state, {
-%%  ui :: wxWindow:wxWindow() | undefined,
-%%  filename :: filename:filename(), % The filename of the source file
-%%  loaded :: boolean(), % Whether a source files has been loaded or not
-%%  running :: boolean(), % Whether the executions has started, either a manually or by loading a trace
-%%  system :: cauder_types:system(),
-%%  modules :: ordsets:ordd({Module :: atom(), Name :: atom(), Arity :: arity(), Exported :: boolean()})
-%%}).
 
 
 %% ===================================================================
@@ -43,64 +37,58 @@ start() ->
   ok.
 
 
--spec load_file(File) -> {Src, [MFA]} when
+-spec load_file(File) -> {ok, Module} when
   File :: file:filename(),
-  Src :: binary(),
-  MFA :: string().
+  Module :: atom().
 
 load_file(File) ->
-  {ok, Src, _} = erl_prim_loader:get_file(File),
-  Module = cauder_load:file(File),
-  % TODO Only allow to start system from an exported function?
-  Defs0 = ref_match_object({{Module, '_', '_', '_'}, '_'}),
-  Defs1 = lists:sort(fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end, Defs0),
-  MFAs = lists:map(fun({{M, F, A, _}, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, Defs1),
-
-  Status = cauder:ref_lookup(?STATUS),
-  cauder:ref_add(?STATUS, Status#status{loaded = true}),
-  cauder:ref_add(?MODULE_PATH, filename:dirname(File)),
-
-  {Src, MFAs}.
+  Status = get(status),
+  put(status, Status#status{loaded = true}),
+  put(path, filename:absname(File)),
+  cauder_load:file(File).
 
 
-%% ===================================================================
-
-
-%%--------------------------------------------------------------------
-%% @doc Initializes the system.
-%%
-%% @param Fun Entry point of the system.
-%% @param Args Arguments of the entry point.
-%% @param Pid Pid for the new system.
-%% @param Log Initial system log.
-%% @end
-%%--------------------------------------------------------------------
--spec init_system(Module, Function, Args, Pid, Log) -> ok when
+-spec init_system(Module, Function, Args, Pid, Log) -> 'ok' when
   Module :: atom(),
   Function :: atom(),
   Args :: [cauder_types:abstract_expr()],
   Pid :: cauder_types:proc_id(),
   Log :: cauder_types:log().
 
-init_system(M, F, As, Pid, Log) ->
+init_system(Mod, Fun, Args, Pid, Log) ->
   Proc = #proc{
     pid   = Pid,
     log   = Log,
-    exprs = [{remote_call, 0, M, F, As}],
-    spf   = {M, F, length(As)}
+    exprs = [{remote_call, 0, Mod, Fun, Args}],
+    spf   = {Mod, Fun, length(Args)}
   },
   System = #sys{
-    procs  = [{Pid, Proc}],
+    procs  = orddict:from_list([{Pid, Proc}]),
     ghosts = load_ghosts(Pid)
   },
-  ref_add(?SYSTEM, System),
 
+  Status = get(status),
+  put(status, Status#status{running = true}),
+  put(system, System),
+  put(last_pid, Pid),
   put(line, 0),
 
-  % Update system status
-  Status = ref_lookup(?STATUS),
-  NewStatus = Status#status{running = true},
-  ref_add(?STATUS, NewStatus).
+  ok.
+
+
+-spec entry_points(Module :: atom()) -> list({Module :: atom(), Function :: atom(), Arity :: arity()}).
+
+entry_points(Module) ->
+  Defs = db_match({{Module, '_', '_', '_'}, '_'}),
+  SortedDefs = lists:sort(fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end, Defs),
+  % TODO Only allow to start system from an exported function?
+  lists:map(fun({{M, F, A, _}, _}) -> {M, F, A} end, SortedDefs).
+
+
+-spec system() -> cauder_types:system().
+
+system() -> get(system). % TODO Remove
+status() -> get(status). % TODO Remove
 
 
 %% -------------------------------------------------------------------
@@ -132,11 +120,6 @@ load_ghosts(MainPid) ->
   orddict:from_list(Ghosts).
 
 
--spec system() -> cauder_types:system().
-
-system() -> ref_lookup(?SYSTEM).
-
-
 %% ===================================================================
 
 
@@ -160,11 +143,11 @@ eval_opts(Sys) -> fwd_sem:eval_opts(Sys) ++ bwd_sem:eval_opts(Sys).
   Rule :: cauder_types:rule().
 
 eval_reduce(Sem, Pid) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   Opts = utils:filter_options(cauder:eval_opts(Sys0), Pid),
   {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
   Sys1 = Sem:eval_step(Sys0, Pid),
-  ref_add(?SYSTEM, Sys1),
+  put(system, Sys1),
   Rule.
 
 
@@ -174,11 +157,11 @@ eval_reduce(Sem, Pid) ->
   ReductionSteps :: pos_integer().
 
 eval_step(Sem, Pid) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   {#proc{exprs = Es}, _} = utils:take_process(Sys0#sys.procs, Pid),
   case catch eval_step_1(Sem, Sys0, Pid, Es, 0) of
     {Sys1, Steps} ->
-      ref_add(?SYSTEM, Sys1),
+      put(system, Sys1),
       Steps;
     nomatch -> nomatch
   end.
@@ -212,9 +195,9 @@ eval_step_1(Sem, Sys0, Pid, Es0, Steps) ->
   StepsDone :: non_neg_integer().
 
 eval_mult(Sem, Steps) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   {Sys1, StepsDone} = eval_mult_1(Sys0, Sem, Steps, 0),
-  ref_add(?SYSTEM, Sys1),
+  put(system, Sys1),
   StepsDone.
 
 
@@ -245,9 +228,9 @@ eval_mult_1(Sys, Sem, Steps, StepsDone) ->
   StepsDone :: non_neg_integer().
 
 eval_replay(Pid, Steps) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   {Sys1, StepsDone} = eval_replay_1(Sys0, Pid, Steps, 0),
-  ref_add(?SYSTEM, Sys1),
+  put(system, Sys1),
   StepsDone.
 
 
@@ -268,12 +251,12 @@ eval_replay_1(Sys0, Pid, Steps, StepsDone) ->
   Success :: boolean().
 
 eval_replay_spawn(SpawnPid) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case replay:can_replay_spawn(Sys0, SpawnPid) of
     false -> false;
     true ->
       Sys1 = replay:replay_spawn(Sys0, SpawnPid),
-      ref_add(?SYSTEM, Sys1),
+      put(system, Sys1),
       true
   end.
 
@@ -283,12 +266,12 @@ eval_replay_spawn(SpawnPid) ->
   Success :: boolean().
 
 eval_replay_send(UID) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case replay:can_replay_send(Sys0, UID) of
     false -> false;
     true ->
       Sys1 = replay:replay_send(Sys0, UID),
-      ref_add(?SYSTEM, Sys1),
+      put(system, Sys1),
       true
   end.
 
@@ -298,12 +281,12 @@ eval_replay_send(UID) ->
   Success :: boolean().
 
 eval_replay_rec(UID) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case replay:can_replay_rec(Sys0, UID) of
     false -> false;
     true ->
       Sys1 = replay:replay_rec(Sys0, UID),
-      ref_add(?SYSTEM, Sys1),
+      put(system, Sys1),
       true
   end.
 
@@ -318,10 +301,10 @@ eval_replay_rec(UID) ->
   StepsDone :: non_neg_integer().
 
 eval_roll(Pid, Steps) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   Sys1 = utils:clear_log(Sys0),
   {Sys2, StepsDone} = eval_roll_1(Sys1, Pid, Steps, 0),
-  ref_add(?SYSTEM, Sys2),
+  put(system, Sys2),
   FocusLog = utils:must_focus_log(Sys2),
   {FocusLog, StepsDone}.
 
@@ -344,13 +327,13 @@ eval_roll_1(Sys0, Pid, Steps, StepsDone) ->
   FocusLog :: boolean().
 
 eval_roll_spawn(SpawnPid) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case roll:can_roll_spawn(Sys0, SpawnPid) of
     false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_spawn(Sys1, SpawnPid),
-      ref_add(?SYSTEM, Sys2),
+      put(system, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
       {true, FocusLog}
   end.
@@ -362,13 +345,13 @@ eval_roll_spawn(SpawnPid) ->
   FocusLog :: boolean().
 
 eval_roll_send(UID) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case roll:can_roll_send(Sys0, UID) of
     false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_send(Sys1, UID),
-      ref_add(?SYSTEM, Sys2),
+      put(system, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
       {true, FocusLog}
   end.
@@ -380,13 +363,13 @@ eval_roll_send(UID) ->
   FocusLog :: boolean().
 
 eval_roll_rec(UID) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case roll:can_roll_rec(Sys0, UID) of
     false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_rec(Sys1, UID),
-      ref_add(?SYSTEM, Sys2),
+      put(system, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
       {true, FocusLog}
   end.
@@ -398,13 +381,13 @@ eval_roll_rec(UID) ->
   FocusLog :: boolean().
 
 eval_roll_var(Name) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   case roll:can_roll_var(Sys0, Name) of
     false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_var(Sys1, Name),
-      ref_add(?SYSTEM, Sys2),
+      put(system, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
       {true, FocusLog}
   end.
@@ -414,7 +397,7 @@ eval_roll_var(Name) ->
 
 
 edit_binding(Pid, {Key, NewValue}) ->
-  Sys0 = ref_lookup(?SYSTEM),
+  Sys0 = get(system),
   PDict0 = Sys0#sys.procs,
   P0 = utils:find_process(PDict0, Pid),
   Bs0 = P0#proc.env,
@@ -424,53 +407,12 @@ edit_binding(Pid, {Key, NewValue}) ->
   PDict1 = orddict:store(Pid, P1, PDict0),
   Sys1 = Sys0#sys{procs = PDict1},
 
-  ref_add(?SYSTEM, Sys1).
+  put(system, Sys1).
 
 
 %% =====================================================================
-%% @doc Starts the ETS servers
-
--spec start_refs() -> ok.
-
-start_refs() ->
-  ?LOG("Starting refs"),
-  ref_start().
 
 
-%% =====================================================================
-%% @doc Resets the fresh values for: Pid, UID and Var
+db_get(Key) -> ets:lookup_element(get(db), Key, 2).
 
--spec reset_fresh_refs(pos_integer()) -> ok.
-
-reset_fresh_refs(FirstPid) ->
-  ?LOG("Resetting fresh refs"),
-  ref_add(?FRESH_PID, FirstPid + 1),
-  ref_add(?FRESH_TIME, 1),
-  ref_add(?FRESH_VAR, 1).
-
-
-%% =====================================================================
-%% @doc Stops the ETS servers
-
--spec stop_refs() -> ok.
-
-stop_refs() ->
-  ?LOG("Stopping refs"),
-  ref_stop().
-
-
-ref_start() ->
-  ?APP_REF = ets:new(?APP_REF, [set, public, named_table]),
-  ok.
-
-ref_stop() ->
-  true = ets:delete(?APP_REF),
-  ok.
-
-ref_add(Id, Ref) ->
-  true = ets:insert(?APP_REF, {Id, Ref}),
-  ok.
-
-ref_lookup(Id) -> ets:lookup_element(?APP_REF, Id, 2).
-
-ref_match_object(Id) -> ets:match_object(?APP_REF, Id).
+db_match(Key) -> ets:match_object(get(db), Key).

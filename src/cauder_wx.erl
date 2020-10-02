@@ -48,8 +48,12 @@ stop() -> wx_object:stop(?MODULE).
 -spec init(Args :: list()) -> {wxFrame:wxFrame(), state()}.
 
 init([]) ->
-  cauder:start_refs(),
-  cauder:ref_add(?STATUS, #status{}),
+  %% ----------
+  %% TODO Move to 'cauder' process, once fully decoupled
+  Db = ets:new(?MODULE, [set, public, named_table]),
+  put(db, Db),
+  put(status, #status{}),
+  %% ----------
 
   wx:new(),
 
@@ -438,6 +442,12 @@ handle_info(Info, State) ->
 terminate(_Reason, #wx_state{frame = Frame}) ->
   wxFrame:destroy(Frame),
   wx:destroy(),
+
+  %% ----------
+  %% TODO Move to 'cauder' process, once fully decoupled
+  ets:delete(?MODULE),
+  %% ----------
+
   ok.
 
 
@@ -454,16 +464,16 @@ code_change(_OldVsn, State, _Extra) ->
 %% Loads the specified '.erl' source file
 loadFile(File, #wx_state{menubar = Menu}) ->
   %utils_gui:stop_refs(), % TODO
-  {Src, MFAs} = cauder:load_file(File),
 
+  {ok, Module} = cauder:load_file(File),
+
+  {ok, Src, _} = erl_prim_loader:get_file(File),
   CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
-  Status = cauder:ref_lookup(?STATUS),
-  cauder:ref_add(?STATUS, Status#status{loaded = true}),
-
   wxMenuBar:enable(Menu, ?MENU_File_LoadTrace, true),
 
+  _MFAs = cauder:entry_points(Module),
 %%  utils_gui:set_choices(MFAs),
   utils_gui:disable_all_buttons(),
   utils_gui:clear_texts(),
@@ -521,7 +531,6 @@ start(M, F, As) -> start(M, F, As, 1, []).
   Log :: cauder_types:log().
 
 start(M, F, As, Pid, Log) ->
-  cauder:reset_fresh_refs(Pid),
   cauder:init_system(M, F, As, Pid, Log),
   refresh(true),
 
@@ -555,7 +564,8 @@ refresh_buttons(Opts) ->
 -spec refresh(boolean()) -> ok.
 
 refresh(RefreshState) ->
-  case utils_gui:is_app_running() of
+  #status{running = IsRunning} = cauder:status(), % TODO Remove
+  case IsRunning of
     false -> ok;
     true ->
       System = cauder:system(),

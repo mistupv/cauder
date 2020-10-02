@@ -5,7 +5,7 @@
 
 -module(utils).
 -export([fundef_lookup/3, fundef_rename/1,
-         temp_variable/1, is_temp_variable_name/1, fresh_time/0, pid_exists/2,
+         temp_variable/1, is_temp_variable_name/1, fresh_uid/0, pid_exists/2,
          take_process/2, select_msg/2,
          find_proc_with_send/2,
          find_proc_with_spawn/2, find_proc_with_rec/2,
@@ -34,15 +34,14 @@
   Clauses :: cauder_types:af_clause_seq().
 
 fundef_lookup(M, F, A) ->
-  case cauder:ref_match_object({{M, F, A, '_'}, '_'}) of
+  case cauder:db_match({{M, F, A, '_'}, '_'}) of
     [{{M, F, A, Exported}, Cs}] -> {Exported, Cs};
     [] ->
-      Dir = cauder:ref_lookup(?MODULE_PATH),
-      File = filename:join(Dir, atom_to_list(M) ++ ".erl"),
+      File = filename:join(get(path), atom_to_list(M) ++ ".erl"),
       case filelib:is_regular(File) of
         true ->
-          cauder_load:load_module(M, File),
-          [{{M, F, A, Exported}, Cs}] = cauder:ref_match_object({{M, F, A, '_'}, '_'}),
+          {ok, M} = cauder_load:file(File),
+          [{{M, F, A, Exported}, Cs}] = cauder:db_match({{M, F, A, '_'}, '_'}),
           {Exported, Cs};
         false -> error
       end
@@ -114,12 +113,6 @@ is_temp_variable_name(Name) ->
   end.
 
 
--spec fresh_time() -> non_neg_integer().
-
-fresh_time() ->
-  UID = cauder:ref_lookup(?FRESH_TIME),
-  cauder:ref_add(?FRESH_TIME, UID + 1),
-  UID.
 
 
 -spec pid_exists(cauder_types:process_dict(), pos_integer()) -> boolean().
@@ -359,14 +352,39 @@ has_rec([_ | RestHist], UID)                               -> has_rec(RestHist, 
 has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
 
 
+-spec fresh_pid() -> cauder_types:proc_id().
+
+fresh_pid() ->
+  NewPid = get(last_pid) + 1,
+  put(last_pid, NewPid),
+  NewPid.
+
+
+-spec fresh_uid() -> cauder_types:msg_id().
+
+fresh_uid() ->
+  NewUid =
+    case get(last_uid) of
+      undefined -> 0;
+      OldUid -> OldUid + 1
+    end,
+  put(last_uid, NewUid),
+  NewUid.
+
+
 fresh_variable_name(Name) ->
   Number = fresh_variable_number(),
   list_to_atom(atom_to_list(Name) ++ "_" ++ integer_to_list(Number)).
 
 fresh_variable_number() ->
-  Number = cauder:ref_lookup(?FRESH_VAR),
-  cauder:ref_add(?FRESH_VAR, Number + 1),
-  Number.
+  NewVar =
+    case get(last_var) of
+      undefined -> 0;
+      OldVar -> OldVar + 1
+    end,
+  put(last_var, NewVar),
+  NewVar.
+
 
 last_msg_rest(Mail) ->
   LastMsg = lists:last(Mail),
@@ -504,14 +522,6 @@ parse_log_entry(String, Pid) ->
       end;
     _Err -> error({parse_error, String})
   end.
-
-
--spec fresh_pid() -> pos_integer().
-
-fresh_pid() ->
-  Pid = cauder:ref_lookup(?FRESH_PID),
-  cauder:ref_add(?FRESH_PID, Pid + 1),
-  Pid.
 
 
 -spec current_line(Process) -> non_neg_integer() when
