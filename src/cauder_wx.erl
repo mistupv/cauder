@@ -45,6 +45,8 @@ stop() -> wx_object:stop(?MODULE).
 %%% wx_object callbacks
 %%%===================================================================
 
+-spec init(Args :: list()) -> {wxFrame:wxFrame(), state()}.
+
 init([]) ->
   cauder:start_refs(),
   cauder:ref_add(?STATUS, #status{}),
@@ -89,6 +91,367 @@ init([]) ->
     content   = Content,
     statusbar = StatusBar
   }}.
+
+
+-spec handle_event(Event :: wx(), State :: state()) -> {'noreply', state()} | {'stop', 'normal', state()}.
+
+%% -------------------- File Menu -------------------- %%
+
+handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
+  Message = "Select an Erlang file",
+  Wildcard = "Erlang (*.erl)|*.erl|All files (*.*)|*.*",
+  Dialog = wxFileDialog:new(Frame, [{message, Message},
+                                    {wildCard, Wildcard},
+                                    {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST}]),
+  State1 =
+    case wxDialog:showModal(Dialog) of
+      ?wxID_OK ->
+        Path = wxFileDialog:getPath(Dialog),
+        loadFile(Path, State),
+        State#wx_state{last_path = Path};
+      _Other -> State
+    end,
+  wxDialog:destroy(Dialog),
+  {noreply, State1};
+
+handle_event(?MENU_EVENT(?MENU_File_LoadTrace), #wx_state{frame = Frame, last_path = DefaultPath} = State) ->
+  Title = "Select a log folder",
+  Dialog = wxDirDialog:new(Frame, [{title, Title},
+                                   {defaultPath, DefaultPath},
+                                   {style, ?wxDD_DIR_MUST_EXIST}]),
+  case wxDialog:showModal(Dialog) of
+    ?wxID_OK ->
+      Path = wxDirDialog:getPath(Dialog),
+      loadReplayData(Path);
+    _Other -> ok
+  end,
+  wxDialog:destroy(Dialog),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
+  %% TODO Add confirmation dialog?
+  {stop, normal, State};
+
+%% -------------------- View Menu -------------------- %%
+
+handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  cauder_wx_code:zoom_in(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  cauder_wx_code:zoom_out(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  cauder_wx_code:zoom_reset(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(Mode), State) when ?IS_HISTORY_MODE(Mode) ->
+  refresh(true),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(Mode), State) when ?IS_ENVIRONMENT_MODE(Mode) ->
+  refresh(true),
+  {noreply, State};
+
+%% -------------------- Help Menu -------------------- %%
+
+handle_event(?MENU_EVENT(?MENU_Help_ViewHelp), State) ->
+  wx_misc:launchDefaultBrowser(?WEBPAGE),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
+  cauder_wx_dialog:about(Frame),
+  {noreply, State};
+
+%% -------------------- Code Area -------------------- %%
+
+handle_event(#wx{id = ?CODE_TEXT, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+%% -------------------- Process Selector -------------------- %%
+
+handle_event(#wx{id = ?PROC_CHOICE, event = #wxCommand{type = command_choice_selected}}, State) ->
+  refresh(true),
+  {noreply, State};
+
+%% -------------------- Manual Actions -------------------- %%
+
+handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
+  utils_gui:disable_all_buttons(),
+  case cauder_wx_actions:selected_pid() of
+    none ->
+      utils_gui:sttext_noproc(),
+      refresh(false);
+    Pid ->
+      Sem = button_to_semantics(Button),
+      Rule = cauder:eval_reduce(Sem, Pid),
+      utils_gui:sttext_reduce(Sem, Rule),
+      refresh(true)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
+  utils_gui:disable_all_buttons(),
+  case cauder_wx_actions:selected_pid() of
+    none ->
+      utils_gui:sttext_noproc(),
+      refresh(false);
+    Pid ->
+      Sem = button_to_semantics(Button),
+      case cauder:eval_step(Sem, Pid) of
+        nomatch ->
+          utils_gui:sttext_nomatch(),
+          refresh(false);
+        Steps ->
+          utils_gui:sttext_step(Sem, Steps),
+          refresh(true)
+      end
+  end,
+  {noreply, State};
+
+%% -------------------- Automatic Actions -------------------- %%
+
+handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
+  utils_gui:disable_all_buttons(),
+  Sem = button_to_semantics(Button),
+  Spinner = utils_gui:find(?STEPS_SPIN, wxSpinCtrl),
+  Steps = wxSpinCtrl:getValue(Spinner),
+  StepsDone = cauder:eval_mult(Sem, Steps),
+  utils_gui:sttext_mult(Sem, StepsDone, Steps),
+  refresh(true),
+  {noreply, State};
+
+%% -------------------- Replay Actions -------------------- %%
+
+handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  case cauder_wx_actions:selected_pid() of
+    none ->
+      utils_gui:sttext_noproc(),
+      refresh(false);
+    Pid ->
+      Spinner = utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl),
+      Steps = wxSpinCtrl:getValue(Spinner),
+      StepsDone = cauder:eval_replay(Pid, Steps),
+      utils_gui:sttext_replay(StepsDone, Steps),
+      refresh(true)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  PidCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
+  PidStr = wxTextCtrl:getValue(PidCtrl),
+  case string:to_integer(PidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_replay_spawn(false, none),
+      refresh(false);
+    {Pid, _} ->
+      Success = cauder:eval_replay_spawn(Pid),
+      utils_gui:sttext_replay_spawn(Success, PidStr),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  UidCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
+  UidStr = wxTextCtrl:getValue(UidCtrl),
+  case string:to_integer(UidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_replay_send(false, none),
+      refresh(false);
+    {Uid, _} ->
+      Success = cauder:eval_replay_send(Uid),
+      utils_gui:sttext_replay_send(Success, UidStr),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  UidCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
+  UidStr = wxTextCtrl:getValue(UidCtrl),
+  case string:to_integer(UidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_replay_rec(false, none),
+      refresh(false);
+    {Uid, _} ->
+      Success = cauder:eval_replay_rec(Uid),
+      utils_gui:sttext_replay_rec(Success, UidStr),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+%% -------------------- Rollback Actions -------------------- %%
+
+handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  case cauder_wx_actions:selected_pid() of
+    none ->
+      utils_gui:sttext_noproc(),
+      refresh(false);
+    Pid ->
+      Spinner = utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl),
+      Steps = wxSpinCtrl:getValue(Spinner),
+      {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
+      utils_gui:sttext_roll(StepsDone, Steps),
+      focus_roll_log(FocusLog),
+      refresh(true)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  PidCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
+  PidStr = wxTextCtrl:getValue(PidCtrl),
+  case string:to_integer(PidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_roll_spawn(false, none),
+      refresh(false);
+    {Pid, _} ->
+      {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
+      utils_gui:sttext_roll_spawn(Success, PidStr),
+      focus_roll_log(FocusLog),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  UidCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
+  UidStr = wxTextCtrl:getValue(UidCtrl),
+  case string:to_integer(UidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_roll_send(false, none),
+      refresh(false);
+    {Uid, _} ->
+      {Success, FocusLog} = cauder:eval_roll_send(Uid),
+      utils_gui:sttext_roll_send(Success, UidStr),
+      focus_roll_log(FocusLog),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  UidCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
+  UidStr = wxTextCtrl:getValue(UidCtrl),
+  case string:to_integer(UidStr) of
+    % What if error?
+    {error, _} ->
+      utils_gui:sttext_roll_rec(false, none),
+      refresh(false);
+    {Uid, _} ->
+      {Success, FocusLog} = cauder:eval_roll_rec(Uid),
+      utils_gui:sttext_roll_rec(Success, UidStr),
+      focus_roll_log(FocusLog),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
+  utils_gui:disable_all_buttons(),
+  NameCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
+  NameStr = wxTextCtrl:getValue(NameCtrl),
+  case NameStr of
+    "" ->
+      utils_gui:sttext_roll_var(false, none),
+      refresh(false);
+    _ ->
+      Name = list_to_atom(NameStr),
+      {Success, FocusLog} = cauder:eval_roll_var(Name),
+      utils_gui:sttext_roll_var(Success, NameStr),
+      focus_roll_log(FocusLog),
+      refresh(Success)
+  end,
+  {noreply, State};
+
+%% -------------------- Bindings handler -------------------- %%
+
+handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
+  Sys = cauder:system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  #proc{env = Bs} = utils:find_process(Sys#sys.procs, Pid),
+  Nth = wxListCtrl:getItemData(BindingList, Index),
+  {Key, Value} = lists:nth(Nth, Bs),
+  case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
+    {Key, NewValue} ->
+      cauder:edit_binding(Pid, {Key, NewValue}),
+      refresh(true);
+    cancel -> ok
+  end,
+  {noreply, State};
+
+%% -------------------- Text handler -------------------- %%
+
+handle_event(#wx{id = ?STEPS_SPIN, event = #wxCommand{type = command_text_updated}}, State) ->
+  refresh(false),
+  {noreply, State};
+
+handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
+
+%% -------------------- Other handler -------------------- %%
+
+handle_event(#wx{event = #wxClose{}}, State) ->
+  %% TODO Add confirmation dialog?
+  {stop, normal, State};
+
+handle_event(Event, State) ->
+  io:format("Unhandled Event:~n~p~n", [Event]),
+  {noreply, State}.
+
+
+-spec handle_call(Request :: any(), From :: any(), State :: state()) -> {reply, ok, state()}.
+
+handle_call(Request, _From, State) ->
+  io:format("Unhandled Call:~n~p~n", [Request]),
+  {reply, ok, State}.
+
+
+-spec handle_cast(Request :: any(), State :: state()) -> {'noreply', state()}.
+
+handle_cast(Request, State) ->
+  io:format("Unhandled Cast:~n~p~n", [Request]),
+  {noreply, State}.
+
+
+-spec handle_info(Info :: any(), State :: state()) -> {'noreply', state()}.
+
+handle_info(Info, State) ->
+  io:format("Unhandled Info:~n~p~n", [Info]),
+  {noreply, State}.
+
+
+-spec terminate(Reason :: any(), State :: state()) -> 'ok'.
+
+terminate(_Reason, #wx_state{frame = Frame}) ->
+  wxFrame:destroy(Frame),
+  wx:destroy(),
+  ok.
+
+
+-spec code_change(any(), state(), any()) -> {'ok', state()}.
+code_change(_OldVsn, State, _Extra) ->
+  {ok, State}.
 
 
 %%%===================================================================
@@ -247,384 +610,25 @@ refresh(RefreshState) ->
 %%  end.
 
 
-%% ==================== Rollback evaluation ==================== %%
-
-
 focus_roll_log(false) -> ok;
-focus_roll_log(true) ->
-  RBotNotebook = utils_gui:find(?SYSTEM_INFO_NOTEBOOK, wxNotebook),
-  wxNotebook:setSelection(RBotNotebook, ?PAGEPOS_ROLL).
+focus_roll_log(true)  -> wxNotebook:setSelection(utils_gui:find(?SYSTEM_INFO_NOTEBOOK, wxNotebook), ?PAGEPOS_ROLL).
 
+
+-spec button_to_semantics(ButtonId) -> Semantics when
+  ButtonId :: ?STEP_FORWARD_BUTTON | ?STEP_BACKWARD_BUTTON |
+              ?STEP_OVER_FORWARD_BUTTON | ?STEP_OVER_BACKWARD_BUTTON |
+              ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
+              ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
+  Semantics :: ?FWD_SEM | ?BWD_SEM.
 
 button_to_semantics(?STEP_FORWARD_BUTTON)       -> ?FWD_SEM;
 button_to_semantics(?STEP_BACKWARD_BUTTON)      -> ?BWD_SEM;
-
 button_to_semantics(?STEP_OVER_FORWARD_BUTTON)  -> ?FWD_SEM;
 button_to_semantics(?STEP_OVER_BACKWARD_BUTTON) -> ?BWD_SEM;
-
 button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
 button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
-
 button_to_semantics(?MULTIPLE_FORWARD_BUTTON)   -> ?FWD_SEM;
 button_to_semantics(?MULTIPLE_BACKWARD_BUTTON)  -> ?BWD_SEM.
 
 
--spec handle_event(Event :: wx(), State :: state()) -> {'noreply', state()} | {'stop', 'normal', state()}.
 
-%% ==================== File Menu ==================== %%
-
-handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
-  Message = "Select an Erlang file",
-  Wildcard = "Erlang (*.erl)|*.erl|All files (*.*)|*.*",
-  Dialog = wxFileDialog:new(Frame, [{message, Message},
-                                    {wildCard, Wildcard},
-                                    {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST}]),
-  State1 =
-    case wxDialog:showModal(Dialog) of
-      ?wxID_OK ->
-        Path = wxFileDialog:getPath(Dialog),
-        loadFile(Path, State),
-        State#wx_state{last_path = Path};
-      _Other -> State
-    end,
-  wxDialog:destroy(Dialog),
-  {noreply, State1};
-
-handle_event(?MENU_EVENT(?MENU_File_LoadTrace), #wx_state{frame = Frame, last_path = DefaultPath} = State) ->
-  Title = "Select a log folder",
-  Dialog = wxDirDialog:new(Frame, [{title, Title},
-                                   {defaultPath, DefaultPath},
-                                   {style, ?wxDD_DIR_MUST_EXIST}]),
-  case wxDialog:showModal(Dialog) of
-    ?wxID_OK ->
-      Path = wxDirDialog:getPath(Dialog),
-      loadReplayData(Path);
-    _Other -> ok
-  end,
-  wxDialog:destroy(Dialog),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
-  %% TODO Add confirmation dialog?
-  {stop, normal, State};
-
-%% ==================== View Menu ==================== %%
-
-handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
-  cauder_wx_code:zoom_in(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
-  cauder_wx_code:zoom_out(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
-  cauder_wx_code:zoom_reset(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(Mode), State) when ?IS_HISTORY_MODE(Mode) ->
-  refresh(true),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(Mode), State) when ?IS_ENVIRONMENT_MODE(Mode) ->
-  refresh(true),
-  {noreply, State};
-
-%% ==================== Help Menu ==================== %%
-
-handle_event(?MENU_EVENT(?MENU_Help_ViewHelp), State) ->
-  wx_misc:launchDefaultBrowser(?WEBPAGE),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
-  cauder_wx_dialog:about(Frame),
-  {noreply, State};
-
-%% ==================== Code Area ==================== %%
-
-handle_event(#wx{id = ?CODE_TEXT, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-%% ==================== Process Selector ==================== %%
-
-handle_event(#wx{id = ?PROC_CHOICE, event = #wxCommand{type = command_choice_selected}}, State) ->
-  refresh(true),
-  {noreply, State};
-
-%% ==================== Manual Actions ==================== %%
-
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      utils_gui:sttext_noproc(),
-      refresh(false);
-    Pid ->
-      Sem = button_to_semantics(Button),
-      Rule = cauder:eval_reduce(Sem, Pid),
-      utils_gui:sttext_reduce(Sem, Rule),
-      refresh(true)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      utils_gui:sttext_noproc(),
-      refresh(false);
-    Pid ->
-      Sem = button_to_semantics(Button),
-      case cauder:eval_step(Sem, Pid) of
-        nomatch ->
-          utils_gui:sttext_nomatch(),
-          refresh(false);
-        Steps ->
-          utils_gui:sttext_step(Sem, Steps),
-          refresh(true)
-      end
-  end,
-  {noreply, State};
-
-%% ==================== Automatic Actions ==================== %%
-
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
-  Sem = button_to_semantics(Button),
-  Spinner = utils_gui:find(?STEPS_SPIN, wxSpinCtrl),
-  Steps = wxSpinCtrl:getValue(Spinner),
-  StepsDone = cauder:eval_mult(Sem, Steps),
-  utils_gui:sttext_mult(Sem, StepsDone, Steps),
-  refresh(true),
-  {noreply, State};
-
-%% ==================== Replay Actions ==================== %%
-
-handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      utils_gui:sttext_noproc(),
-      refresh(false);
-    Pid ->
-      Spinner = utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl),
-      Steps = wxSpinCtrl:getValue(Spinner),
-      StepsDone = cauder:eval_replay(Pid, Steps),
-      utils_gui:sttext_replay(StepsDone, Steps),
-      refresh(true)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  PidCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
-  PidStr = wxTextCtrl:getValue(PidCtrl),
-  case string:to_integer(PidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_replay_spawn(false, none),
-      refresh(false);
-    {Pid, _} ->
-      Success = cauder:eval_replay_spawn(Pid),
-      utils_gui:sttext_replay_spawn(Success, PidStr),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_replay_send(false, none),
-      refresh(false);
-    {Uid, _} ->
-      Success = cauder:eval_replay_send(Uid),
-      utils_gui:sttext_replay_send(Success, UidStr),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_replay_rec(false, none),
-      refresh(false);
-    {Uid, _} ->
-      Success = cauder:eval_replay_rec(Uid),
-      utils_gui:sttext_replay_rec(Success, UidStr),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-%% ==================== Rollback Actions ==================== %%
-
-handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      utils_gui:sttext_noproc(),
-      refresh(false);
-    Pid ->
-      Spinner = utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl),
-      Steps = wxSpinCtrl:getValue(Spinner),
-      {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
-      utils_gui:sttext_roll(StepsDone, Steps),
-      focus_roll_log(FocusLog),
-      refresh(true)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  PidCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
-  PidStr = wxTextCtrl:getValue(PidCtrl),
-  case string:to_integer(PidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_roll_spawn(false, none),
-      refresh(false);
-    {Pid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
-      utils_gui:sttext_roll_spawn(Success, PidStr),
-      focus_roll_log(FocusLog),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_roll_send(false, none),
-      refresh(false);
-    {Uid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_send(Uid),
-      utils_gui:sttext_roll_send(Success, UidStr),
-      focus_roll_log(FocusLog),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
-    % What if error?
-    {error, _} ->
-      utils_gui:sttext_roll_rec(false, none),
-      refresh(false);
-    {Uid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_rec(Uid),
-      utils_gui:sttext_roll_rec(Success, UidStr),
-      focus_roll_log(FocusLog),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
-  NameCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
-  NameStr = wxTextCtrl:getValue(NameCtrl),
-  case NameStr of
-    "" ->
-      utils_gui:sttext_roll_var(false, none),
-      refresh(false);
-    _ ->
-      Name = list_to_atom(NameStr),
-      {Success, FocusLog} = cauder:eval_roll_var(Name),
-      utils_gui:sttext_roll_var(Success, NameStr),
-      focus_roll_log(FocusLog),
-      refresh(Success)
-  end,
-  {noreply, State};
-
-%% ==================== Bindings handler ==================== %%
-
-handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
-  Sys = cauder:system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  #proc{env = Bs} = utils:find_process(Sys#sys.procs, Pid),
-  Nth = wxListCtrl:getItemData(BindingList, Index),
-  {Key, Value} = lists:nth(Nth, Bs),
-  case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
-    {Key, NewValue} ->
-      cauder:edit_binding(Pid, {Key, NewValue}),
-      refresh(true);
-    cancel -> ok
-  end,
-  {noreply, State};
-
-%% ==================== Text handler ==================== %%
-
-handle_event(#wx{id = ?STEPS_SPIN, event = #wxCommand{type = command_text_updated}}, State) ->
-  refresh(false),
-  {noreply, State};
-
-handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
-
-%% ==================== Text handler ==================== %%
-
-handle_event(#wx{event = #wxClose{}}, State) ->
-  %% TODO Add confirmation dialog?
-  {stop, normal, State};
-
-handle_event(Event, State) ->
-  io:format("Unhandled Event:~n~p~n", [Event]),
-  {noreply, State}.
-
-
--spec handle_call(Request :: any(), From :: any(), State :: state()) -> {reply, ok, state()}.
-
-handle_call(Request, _From, State) ->
-  io:format("Unhandled Call:~n~p~n", [Request]),
-  {reply, ok, State}.
-
-
--spec handle_cast(Request :: any(), State :: state()) -> {'noreply', state()}.
-
-handle_cast(Request, State) ->
-  io:format("Unhandled Cast:~n~p~n", [Request]),
-  {noreply, State}.
-
-
--spec handle_info(Info :: any(), State :: state()) -> {'noreply', state()}.
-
-handle_info(Info, State) ->
-  io:format("Unhandled Info:~n~p~n", [Info]),
-  {noreply, State}.
-
-
--spec terminate(Reason :: any(), State :: state()) -> 'ok'.
-
-terminate(_Reason, #wx_state{frame = Frame}) ->
-  wxFrame:destroy(Frame),
-  wx:destroy(),
-  ok.
-
-
--spec code_change(any(), state(), any()) -> {'ok', state()}.
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
