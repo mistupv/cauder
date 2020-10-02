@@ -74,7 +74,7 @@ update_bindings(#proc{env = Bs, exprs = Es}) ->
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
   Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs),
-  Bs1 = Bs0, % TDOO
+  Bs1 = Bs0, % TODO
 %%    case wxMenu:isChecked(MenuView, ?MENU_View_FullEnvironment) of
 %%      true -> Bs0;
 %%      false ->
