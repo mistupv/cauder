@@ -454,21 +454,17 @@ code_change(_OldVsn, State, _Extra) ->
 %% Loads the specified '.erl' source file
 loadFile(File, #wx_state{menubar = Menu}) ->
   %utils_gui:stop_refs(), % TODO
-  cauder:ref_add(?MODULE_PATH, filename:dirname(File)),
-
-  {ok, Src, _} = erl_prim_loader:get_file(File),
+  {Src, MFAs} = cauder:load_file(File),
 
   CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
-
-%%  FunNames = cauder:load_file(File),
 
   Status = cauder:ref_lookup(?STATUS),
   cauder:ref_add(?STATUS, Status#status{loaded = true}),
 
   wxMenuBar:enable(Menu, ?MENU_File_LoadTrace, true),
 
-%%  utils_gui:set_choices(FunNames),
+%%  utils_gui:set_choices(MFAs),
   utils_gui:disable_all_buttons(),
   utils_gui:clear_texts(),
 

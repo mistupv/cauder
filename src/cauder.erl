@@ -43,17 +43,24 @@ start() ->
   ok.
 
 
--spec load_file(File) -> [MFA] when
+-spec load_file(File) -> {Src, [MFA]} when
   File :: file:filename(),
+  Src :: binary(),
   MFA :: string().
 
 load_file(File) ->
-  Mod = list_to_atom(filename:basename(File, ".erl")),
-  cauder_load:load_module(Mod, File),
+  {ok, Src, _} = erl_prim_loader:get_file(File),
+  Module = cauder_load:file(File),
   % TODO Only allow to start system from an exported function?
-  Defs0 = ref_match_object({{Mod, '_', '_', '_'}, '_'}),
+  Defs0 = ref_match_object({{Module, '_', '_', '_'}, '_'}),
   Defs1 = lists:sort(fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end, Defs0),
-  lists:map(fun({{M, F, A, _}, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, Defs1).
+  MFAs = lists:map(fun({{M, F, A, _}, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, Defs1),
+
+  Status = cauder:ref_lookup(?STATUS),
+  cauder:ref_add(?STATUS, Status#status{loaded = true}),
+  cauder:ref_add(?MODULE_PATH, filename:dirname(File)),
+
+  {Src, MFAs}.
 
 
 %% ===================================================================

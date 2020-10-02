@@ -1,28 +1,36 @@
 -module(cauder_load).
 
--export([load_module/2]).
+-export([file/1]).
 
--spec load_module(atom(), file:filename()) -> ok.
+-spec file(File) -> {ok, Module} when
+  File :: file:filename(),
+  Module :: atom().
 
-load_module(Mod, File) -> store_module(Mod, File).
+file(File) -> store_module(File).
 
 
--spec store_module(atom(), file:filename()) -> ok.
+-spec store_module(File) -> {ok, Module} when
+  File :: file:filename(),
+  Module :: atom().
 
-store_module(Mod, File) ->
+store_module(File) ->
   {ok, Forms0} = epp:parse_file(File, [], []),
   Forms1 = epp:interpret_file_attribute(Forms0),
   Forms = erl_expand_records:module(Forms1, []),
 
-  [Mod] = [M || {attribute, _, module, M} <- Forms],
+  [Module] = [M || {attribute, _, module, M} <- Forms],
   Exp = sets:union([sets:from_list(FAs) || {attribute, _, export, FAs} <- Forms]),
+
+  % TODO Check module name matches filename
 
   put(var_count, 0),
   put(fun_count, 0),
-  store_forms(Mod, Forms, Exp),
+  store_forms(Module, Forms, Exp),
   erase(var_count),
   erase(fun_count),
-  erase(current_function).
+  erase(current_function),
+
+  {ok, Module}.
 
 
 -type abstract_form() :: af_function_decl() | erl_parse:abstract_form().
