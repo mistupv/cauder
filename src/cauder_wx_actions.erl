@@ -36,10 +36,10 @@ create(Frame) ->
   Notebook = wxNotebook:new(Win, ?ACTION_NOTEBOOK),
   wxStaticBoxSizer:add(Sizer, Notebook, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
-  wxNotebook:addPage(Notebook, manual_actions(Notebook), "Manual"),
-  wxNotebook:addPage(Notebook, automatic_actions(Notebook), "Automatic"),
-  wxNotebook:addPage(Notebook, replay_actions(Notebook), "Replay"),
-  wxNotebook:addPage(Notebook, rollback_actions(Notebook), "Rollback"),
+  wxNotebook:addPage(Notebook, create_manual(Notebook), "Manual"),
+  wxNotebook:addPage(Notebook, create_automatic(Notebook), "Automatic"),
+  wxNotebook:addPage(Notebook, create_replay(Notebook), "Replay"),
+  wxNotebook:addPage(Notebook, create_rollback(Notebook), "Rollback"),
 
   Win.
 
@@ -76,7 +76,7 @@ update(#sys{procs = ProcDict}) ->
   ok.
 
 
-manual_actions(Parent) ->
+create_manual(Parent) ->
   Win = wxPanel:new(Parent),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
@@ -141,7 +141,7 @@ manual_actions(Parent) ->
   Win.
 
 
-automatic_actions(Parent) ->
+create_automatic(Parent) ->
   Win = wxPanel:new(Parent),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
@@ -189,7 +189,7 @@ automatic_actions(Parent) ->
   Win.
 
 
-replay_actions(Parent) ->
+create_replay(Parent) ->
   Win = wxPanel:new(Parent),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
@@ -294,7 +294,7 @@ replay_actions(Parent) ->
   Win.
 
 
-rollback_actions(Parent) ->
+create_rollback(Parent) ->
   Win = wxPanel:new(Parent),
 
   Border = wxBoxSizer:new(?wxVERTICAL),

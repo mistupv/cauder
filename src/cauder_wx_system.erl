@@ -18,13 +18,13 @@ create(Parent) ->
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-  wxSizer:add(Sizer, mail_area(Win), Expand),
+  wxSizer:add(Sizer, create_mail(Win), Expand),
 
   wxSizer:addSpacer(Sizer, 5),
 
   Notebook = wxNotebook:new(Win, ?SYSTEM_INFO_NOTEBOOK),
-  wxNotebook:addPage(Notebook, trace_area(Notebook), "Trace"),
-  wxNotebook:addPage(Notebook, roll_log_area(Notebook), "Roll Log"),
+  wxNotebook:addPage(Notebook, create_trace(Notebook), "Trace"),
+  wxNotebook:addPage(Notebook, create_roll_log(Notebook), "Roll Log"),
   wxSizer:add(Sizer, Notebook, Expand),
 
   Win.
@@ -41,7 +41,7 @@ update(System) ->
 %% ===== Mail ===== %%
 
 
-mail_area(Parent) ->
+create_mail(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Mail"}]),
@@ -96,7 +96,7 @@ update_mail(#sys{mail = Mail}) ->
 %% ===== Trace ===== %%
 
 
-trace_area(Parent) ->
+create_trace(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
@@ -123,7 +123,7 @@ update_trace(#sys{trace = Trace}) ->
 %% ===== Roll Log ===== %%
 
 
-roll_log_area(Parent) ->
+create_roll_log(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
