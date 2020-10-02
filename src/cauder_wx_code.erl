@@ -1,13 +1,12 @@
 -module(cauder_wx_code).
 
--export([code_area/1, load_code/2, unload_code/1, mark_line/3,
-         can_zoom_in/1, can_zoom_out/1, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_zoom_buttons/1, update_expr/1]).
-
-
+-include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
--include_lib("wx/include/wx.hrl").
 
+%% API
+-export([create/1, update/1]).
+-export([load_code/2, unload_code/1, mark_line/3, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
 
 -define(KEYWORDS, ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
                    "end", "fun", "if", "let", "of", "receive", "when", "bnot", "not",
@@ -59,52 +58,50 @@
 -define(LINE_BACKGROUND, 1).
 
 
--spec code_area(Parent) -> Panel when
-  Parent :: wxWindow:wxWindow(),
-  Panel :: wxPanel:wxPanel().
+-spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
-code_area(Parent) ->
+create(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Code"}]),
   wxWindow:setSizer(Win, Sizer),
 
+  % -----
+
+  CodeCtrl = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
+  wxStaticBoxSizer:add(Sizer, CodeCtrl, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
   FontCode = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
-  CodeArea = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
-  ref_add(?CODE_TEXT, CodeArea),
-  wxStaticBoxSizer:add(Sizer, CodeArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   %% Styles
-  wxStyledTextCtrl:styleClearAll(CodeArea),
-  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_DEFAULT, FontCode),
-  wxStyledTextCtrl:styleSetFont(CodeArea, ?wxSTC_STYLE_LINENUMBER, FontCode),
+  wxStyledTextCtrl:styleClearAll(CodeCtrl),
+  wxStyledTextCtrl:styleSetFont(CodeCtrl, ?wxSTC_STYLE_DEFAULT, FontCode),
+  wxStyledTextCtrl:styleSetFont(CodeCtrl, ?wxSTC_STYLE_LINENUMBER, FontCode),
 
   lists:foreach(
     fun({Style, Color}) ->
-      wxStyledTextCtrl:styleSetFont(CodeArea, Style, FontCode),
-      wxStyledTextCtrl:styleSetForeground(CodeArea, Style, Color)
+      wxStyledTextCtrl:styleSetFont(CodeCtrl, Style, FontCode),
+      wxStyledTextCtrl:styleSetForeground(CodeCtrl, Style, Color)
     end, ?STYLES),
 
-  wxStyledTextCtrl:setLexer(CodeArea, ?wxSTC_LEX_ERLANG),
-  wxStyledTextCtrl:setKeyWords(CodeArea, 0, keyWords()),
-  wxStyledTextCtrl:setMarginType(CodeArea, 0, ?wxSTC_MARGIN_NUMBER),
-  wxStyledTextCtrl:setSelectionMode(CodeArea, ?wxSTC_SEL_LINES),
+  wxStyledTextCtrl:setLexer(CodeCtrl, ?wxSTC_LEX_ERLANG),
+  wxStyledTextCtrl:setKeyWords(CodeCtrl, 0, keyWords()),
+  wxStyledTextCtrl:setMarginType(CodeCtrl, 0, ?wxSTC_MARGIN_NUMBER),
+  wxStyledTextCtrl:setSelectionMode(CodeCtrl, ?wxSTC_SEL_LINES),
 
   %% Current Line
-  wxStyledTextCtrl:markerDefine(CodeArea, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
-  wxStyledTextCtrl:markerDefine(CodeArea, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
-  wxStyledTextCtrl:markerDefine(CodeArea, ?LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
+  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
+  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
+  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
 
   %% Scrolling
   Policy = ?wxSTC_CARET_SLOP bor ?wxSTC_CARET_JUMPS bor ?wxSTC_CARET_EVEN,
-  wxStyledTextCtrl:setYCaretPolicy(CodeArea, Policy, 3),
-  wxStyledTextCtrl:setVisiblePolicy(CodeArea, Policy, 3),
+  wxStyledTextCtrl:setYCaretPolicy(CodeCtrl, Policy, 3),
+  wxStyledTextCtrl:setVisiblePolicy(CodeCtrl, Policy, 3),
 
-  wxStyledTextCtrl:setReadOnly(CodeArea, true),
-
-  wxStyledTextCtrl:setZoom(CodeArea, ?ZOOM_DEFAULT),
-
-  wxStyledTextCtrl:connect(CodeArea, 'stc_zoom'),
+  wxStyledTextCtrl:setReadOnly(CodeCtrl, true),
+  wxStyledTextCtrl:setZoom(CodeCtrl, ?ZOOM_DEFAULT),
+  wxStyledTextCtrl:connect(CodeCtrl, 'stc_zoom'),
 
   % -----
 
@@ -112,112 +109,99 @@ code_area(Parent) ->
 
   % -----
 
-  ExprArea = wxTextCtrl:new(Win, ?EXPR_TEXT, [{style, ?wxTE_READONLY}]),
-  ref_add(?EXPR_TEXT, ExprArea),
-  wxStaticBoxSizer:add(Sizer, ExprArea, [{proportion, 0}, {flag, ?wxEXPAND}]),
+  ExprCtrl = wxTextCtrl:new(Win, ?EXPR_TEXT, [{style, ?wxTE_READONLY}]),
+  wxStaticBoxSizer:add(Sizer, ExprCtrl, [{proportion, 0}, {flag, ?wxEXPAND}]),
 
   FontExpr = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  wxTextCtrl:setFont(ExprArea, FontExpr),
+  wxTextCtrl:setFont(ExprCtrl, FontExpr),
 
   % -----
 
   Win.
 
 
+update(#proc{exprs = [E | _]}) ->
+  Line = element(2, E),
+  Prev = get(line),
+  CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  cauder_wx_code:mark_line(CodeCtrl, Prev, Line),
+  put(line, Line),
+  ExprCtrl = utils_gui:find(?EXPR_TEXT, wxTextCtrl),
+  Expr = pretty_print:expression(E),
+  wxTextCtrl:setValue(ExprCtrl, Expr).
+
+
+
 keyWords() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
 
 
--spec load_code(This, Code) -> 'ok' when
-  This :: wxStyledTextCtrl:wxStyledTextCtrl(),
-  Code :: binary().
+-spec load_code(wxStyledTextCtrl:wxStyledTextCtrl(), Code :: binary()) -> 'ok'.
 
-load_code(This, Code) ->
-  wxStyledTextCtrl:freeze(This),
-  wxStyledTextCtrl:setReadOnly(This, false),
-  wxStyledTextCtrl:setTextRaw(This, Code),
-  update_margin(This),
-  wxStyledTextCtrl:setReadOnly(This, true),
-  wxStyledTextCtrl:thaw(This).
+load_code(CodeCtrl, Code) ->
+  wxStyledTextCtrl:freeze(CodeCtrl),
+  wxStyledTextCtrl:setReadOnly(CodeCtrl, false),
+  wxStyledTextCtrl:setTextRaw(CodeCtrl, Code),
+  update_margin(CodeCtrl),
+  wxStyledTextCtrl:setReadOnly(CodeCtrl, true),
+  wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec unload_code(This) -> 'ok' when
-  This :: wxStyledTextCtrl:wxStyledTextCtrl().
+-spec unload_code(wxStyledTextCtrl:wxStyledTextCtrl()) -> 'ok'.
 
-unload_code(This) ->
-  wxStyledTextCtrl:freeze(This),
-  wxStyledTextCtrl:setReadOnly(This, false),
-  wxStyledTextCtrl:setTextRaw(This, <<0:8>>),
-  wxStyledTextCtrl:setMarginWidth(This, 0, 0),
-  wxStyledTextCtrl:setReadOnly(This, true),
-  wxStyledTextCtrl:thaw(This).
-
-
--spec mark_line(This, Prev, Line) -> 'ok' when
-  This :: wxStyledTextCtrl:wxStyledTextCtrl(),
-  Prev :: non_neg_integer(),
-  Line :: non_neg_integer().
-
-mark_line(This, Prev, Line) ->
-  wxStyledTextCtrl:freeze(This),
-  goto_line(This, Line),
-  wxStyledTextCtrl:markerDelete(This, Prev - 1, ?LINE_MARKER),
-  wxStyledTextCtrl:markerDelete(This, Prev - 1, ?LINE_BACKGROUND),
-  wxStyledTextCtrl:markerAdd(This, Line - 1, ?LINE_MARKER),
-  wxStyledTextCtrl:markerAdd(This, Line - 1, ?LINE_BACKGROUND),
-  wxStyledTextCtrl:thaw(This).
+unload_code(CodeCtrl) ->
+  wxStyledTextCtrl:freeze(CodeCtrl),
+  wxStyledTextCtrl:setReadOnly(CodeCtrl, false),
+  wxStyledTextCtrl:setTextRaw(CodeCtrl, <<0:8>>),
+  wxStyledTextCtrl:setMarginWidth(CodeCtrl, 0, 0),
+  wxStyledTextCtrl:setReadOnly(CodeCtrl, true),
+  wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec goto_line(This, Line) -> 'ok' | ignore when
-  This :: wxStyledTextCtrl:wxStyledTextCtrl(),
-  Line :: non_neg_integer().
+-spec mark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Prev :: non_neg_integer(), Line :: non_neg_integer()) -> 'ok'.
 
-goto_line(_This, 0)   -> ignore;
-goto_line(This, Line) -> wxStyledTextCtrl:gotoLine(This, Line - 1).
-
-
-can_zoom_in(This) -> wxStyledTextCtrl:getZoom(This) < ?ZOOM_MAX.
-
-
-can_zoom_out(This) -> wxStyledTextCtrl:getZoom(This) > ?ZOOM_MIN.
+mark_line(CodeCtrl, Prev, Line) ->
+  wxStyledTextCtrl:freeze(CodeCtrl),
+  wxStyledTextCtrl:markerDelete(CodeCtrl, Prev - 1, ?LINE_MARKER),
+  wxStyledTextCtrl:markerDelete(CodeCtrl, Prev - 1, ?LINE_BACKGROUND),
+  goto_line(CodeCtrl, Line),
+  wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_MARKER),
+  wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
+  wxStyledTextCtrl:thaw(CodeCtrl).
 
 
-zoom_in(This) ->
-  wxStyledTextCtrl:zoomIn(This),
-  update_margin(This),
-  update_zoom_buttons(This).
+-spec goto_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: non_neg_integer()) -> 'ok' | ignore.
+
+goto_line(_CodeCtrl, 0)   -> ignore;
+goto_line(CodeCtrl, Line) -> wxStyledTextCtrl:gotoLine(CodeCtrl, Line - 1).
 
 
-zoom_out(This) ->
-  wxStyledTextCtrl:zoomOut(This),
-  update_margin(This),
-  update_zoom_buttons(This).
+-spec zoom_in(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
+-spec zoom_out(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
+-spec zoom_reset(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
+
+zoom_in(CodeCtrl) -> wxStyledTextCtrl:zoomIn(CodeCtrl).
+zoom_out(CodeCtrl) -> wxStyledTextCtrl:zoomOut(CodeCtrl).
+zoom_reset(CodeCtrl) -> wxStyledTextCtrl:setZoom(CodeCtrl, ?ZOOM_DEFAULT).
 
 
-zoom_reset(This) ->
-  wxStyledTextCtrl:setZoom(This, ?ZOOM_DEFAULT),
-  update_margin(This),
-  update_zoom_buttons(This).
+-spec update_margin(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
 
-
-update_margin(This) ->
-  Lines = wxStyledTextCtrl:getLineCount(This),
+update_margin(CodeCtrl) ->
+  Lines = wxStyledTextCtrl:getLineCount(CodeCtrl),
   Digits = trunc(math:log10(Lines)) + 1,
-  Width = wxStyledTextCtrl:textWidth(This, ?wxSTC_STYLE_LINENUMBER, lists:duplicate(Digits, $0)),
-  wxStyledTextCtrl:setMarginWidth(This, 0, Width + 5).
+  Width = wxStyledTextCtrl:textWidth(CodeCtrl, ?wxSTC_STYLE_LINENUMBER, lists:duplicate(Digits, $0)),
+  wxStyledTextCtrl:setMarginWidth(CodeCtrl, 0, Width + 5).
 
 
-update_zoom_buttons(This) ->
-  wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_IN), [{enable, cauder_wx_code:can_zoom_in(This)}]),
-  wxMenuItem:enable(ref_lookup(?BUTTON_ZOOM_OUT), [{enable, cauder_wx_code:can_zoom_out(This)}]).
+-spec update_buttons(wxStyledTextCtrl:wxStyledTextCtrl(), wxMenuBar:wxMenuBar()) -> ok.
+
+update_buttons(CodeCtrl, Menubar) ->
+  wxMenuBar:enable(Menubar, ?MENU_View_ZoomIn, can_zoom_in(CodeCtrl)),
+  wxMenuBar:enable(Menubar, ?MENU_View_ZoomOut, can_zoom_out(CodeCtrl)).
 
 
-update_expr(Expr) ->
-  ExprText = ref_lookup(?EXPR_TEXT),
-  wxTextCtrl:setValue(ExprText, pretty_print:expression(Expr)).
+-spec can_zoom_in(wxStyledTextCtrl:wxStyledTextCtrl()) -> boolean().
+-spec can_zoom_out(wxStyledTextCtrl:wxStyledTextCtrl()) -> boolean().
 
-
-%% ===== Utils ===== %%
-
-
-ref_add(Id, Ref) -> cauder_wx:ref_add(Id, Ref).
-ref_lookup(Id) -> cauder_wx:ref_lookup(Id).
+can_zoom_in(CodeCtrl) -> wxStyledTextCtrl:getZoom(CodeCtrl) < ?ZOOM_MAX.
+can_zoom_out(CodeCtrl) -> wxStyledTextCtrl:getZoom(CodeCtrl) > ?ZOOM_MIN.

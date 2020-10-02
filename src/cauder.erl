@@ -6,29 +6,40 @@
 %%%-------------------------------------------------------------------
 
 -module(cauder).
--export([start/0, load_file/1]).
+-export([start/0, load_file/1, system/0, init_system/5]).
 %% Manual evaluation functions
--export([eval_opts/1, eval_reduce/3, eval_step/3]).
+-export([eval_opts/1, eval_reduce/2, eval_step/2]).
 %% Automatic evaluation functions
--export([eval_mult/3]).
+-export([eval_mult/2]).
 %% Replay evaluation functions
--export([eval_replay/3, eval_replay_send/2, eval_replay_spawn/2, eval_replay_rec/2]).
+-export([eval_replay/2, eval_replay_send/1, eval_replay_spawn/1, eval_replay_rec/1]).
 %% Rollback evaluation functions
--export([eval_roll/3, eval_roll_send/2, eval_roll_spawn/2, eval_roll_rec/2, eval_roll_var/2]).
+-export([eval_roll/2, eval_roll_send/1, eval_roll_spawn/1, eval_roll_rec/1, eval_roll_var/1]).
 %% ETS functions
 -export([start_refs/0, stop_refs/0, reset_fresh_refs/1, ref_add/2, ref_lookup/1, ref_match_object/1]).
 
+-export([edit_binding/2]).
 
 -include("cauder.hrl").
 
 
-%% =====================================================================
+%%-record(state, {
+%%  ui :: wxWindow:wxWindow() | undefined,
+%%  filename :: filename:filename(), % The filename of the source file
+%%  loaded :: boolean(), % Whether a source files has been loaded or not
+%%  running :: boolean(), % Whether the executions has started, either a manually or by loading a trace
+%%  system :: cauder_types:system(),
+%%  modules :: ordsets:ordd({Module :: atom(), Name :: atom(), Arity :: arity(), Exported :: boolean()})
+%%}).
+
+
+%% ===================================================================
 %% @doc Starts the GUI
 
 -spec start() -> ok.
 
 start() ->
-  cauder_wx:init(),
+  cauder_wx:start(),
   ok.
 
 
@@ -45,7 +56,81 @@ load_file(File) ->
   lists:map(fun({{M, F, A, _}, _}) -> io_lib:format("~s:~s/~p", [M, F, A]) end, Defs1).
 
 
-%% ==================== Manual evaluation ==================== %%
+%% ===================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc Initializes the system.
+%%
+%% @param Fun Entry point of the system.
+%% @param Args Arguments of the entry point.
+%% @param Pid Pid for the new system.
+%% @param Log Initial system log.
+%% @end
+%%--------------------------------------------------------------------
+-spec init_system(Module, Function, Args, Pid, Log) -> ok when
+  Module :: atom(),
+  Function :: atom(),
+  Args :: [cauder_types:abstract_expr()],
+  Pid :: cauder_types:proc_id(),
+  Log :: cauder_types:log().
+
+init_system(M, F, As, Pid, Log) ->
+  Proc = #proc{
+    pid   = Pid,
+    log   = Log,
+    exprs = [{remote_call, 0, M, F, As}],
+    spf   = {M, F, length(As)}
+  },
+  System = #sys{
+    procs  = [{Pid, Proc}],
+    ghosts = load_ghosts(Pid)
+  },
+  ref_add(?SYSTEM, System),
+
+  put(line, 0),
+
+  % Update system status
+  Status = ref_lookup(?STATUS),
+  NewStatus = Status#status{running = true},
+  ref_add(?STATUS, NewStatus).
+
+
+%% -------------------------------------------------------------------
+%% @doc Loads the replay data for all the processes in the current replay
+%% data, except for the one with the MainPid, which has already been loaded.
+
+-spec load_ghosts(MainPid :: cauder_types:proc_id()) -> cauder_types:process_dict().
+
+load_ghosts(MainPid) ->
+  #replay{log_path = Path} = get(replay_data),
+  {ok, Filenames} = file:list_dir(Path),
+  Ghosts =
+    lists:filtermap(
+      fun(Filename) ->
+        case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
+          {match, [StrPid]} ->
+            case list_to_integer(StrPid) of
+              MainPid -> false;
+              Pid ->
+                Proc = #proc{
+                  pid = Pid,
+                  log = utils:get_log_data(Path, Pid)
+                },
+                {true, {Pid, Proc}}
+            end;
+          nomatch -> false
+        end
+      end, Filenames),
+  orddict:from_list(Ghosts).
+
+
+-spec system() -> cauder_types:system().
+
+system() -> ref_lookup(?SYSTEM).
+
+
+%% ===================================================================
 
 
 %% ---------------------------------------------------------------------
@@ -56,33 +141,45 @@ load_file(File) ->
 eval_opts(Sys) -> fwd_sem:eval_opts(Sys) ++ bwd_sem:eval_opts(Sys).
 
 
+%% ==================== Manual evaluation ==================== %%
+
+
 %% ---------------------------------------------------------------------
-%% @doc Performs a single reduction step in the given System
+%% @doc Performs a single reduction step using the given semantics on the given process
 
--spec eval_reduce(Semantics, System, Pid) -> NewSystem when
+-spec eval_reduce(Semantics, Pid) -> Rule when
   Semantics :: cauder_types:semantics(),
-  System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  NewSystem :: cauder_types:system().
+  Rule :: cauder_types:rule().
 
-eval_reduce(Sem, Sys, Pid) -> Sem:eval_step(Sys, Pid).
+eval_reduce(Sem, Pid) ->
+  Sys0 = ref_lookup(?SYSTEM),
+  Opts = utils:filter_options(cauder:eval_opts(Sys0), Pid),
+  {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
+  Sys1 = Sem:eval_step(Sys0, Pid),
+  ref_add(?SYSTEM, Sys1),
+  Rule.
 
 
--spec eval_step(Semantics, System, Pid) -> nomatch | {NewSystem, ReductionSteps} when
+-spec eval_step(Semantics, Pid) -> nomatch | ReductionSteps when
   Semantics :: cauder_types:semantics(),
-  System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  NewSystem :: cauder_types:system(),
   ReductionSteps :: pos_integer().
 
-eval_step(Sem, Sys, Pid) ->
-  {#proc{exprs = Es}, _} = utils:take_process(Sys#sys.procs, Pid),
-  catch eval_step_1(Sem, Sys, Pid, Es, 0).
+eval_step(Sem, Pid) ->
+  Sys0 = ref_lookup(?SYSTEM),
+  {#proc{exprs = Es}, _} = utils:take_process(Sys0#sys.procs, Pid),
+  case catch eval_step_1(Sem, Sys0, Pid, Es, 0) of
+    {Sys1, Steps} ->
+      ref_add(?SYSTEM, Sys1),
+      Steps;
+    nomatch -> nomatch
+  end.
 
 eval_step_1(Sem, Sys0, Pid, Es0, Steps) ->
   Sys1 =
     try
-      eval_reduce(Sem, Sys0, Pid)
+      Sem:eval_step(Sys0, Pid)
     catch
       error:{badmatch, nomatch} -> throw(nomatch)
     end,
@@ -102,14 +199,16 @@ eval_step_1(Sem, Sys0, Pid, Es0, Steps) ->
 %% @doc Performs Steps evaluation steps in the given System in the
 %% specified Direction
 
--spec eval_mult(System, Semantics, Steps) -> {NewSystem, StepsDone} when
-  System :: cauder_types:system(),
+-spec eval_mult(Semantics, Steps) -> StepsDone when
   Semantics :: cauder_types:semantics(),
   Steps :: pos_integer(),
-  NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-eval_mult(Sys, Sem, Steps) -> eval_mult_1(Sys, Sem, Steps, 0).
+eval_mult(Sem, Steps) ->
+  Sys0 = ref_lookup(?SYSTEM),
+  {Sys1, StepsDone} = eval_mult_1(Sys0, Sem, Steps, 0),
+  ref_add(?SYSTEM, Sys1),
+  StepsDone.
 
 
 -spec eval_mult_1(System, Semantics, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
@@ -125,7 +224,7 @@ eval_mult_1(Sys, Sem, Steps, StepsDone) ->
   case Sem:eval_opts(Sys) of
     [] -> {Sys, StepsDone};
     [#opt{pid = Pid, sem = Sem} | _] ->
-      Sys1 = eval_reduce(Sem, Sys, Pid),
+      Sys1 = Sem:eval_step(Sys, Pid),
       eval_mult_1(Sys1, Sem, Steps, StepsDone + 1)
   end.
 
@@ -133,14 +232,16 @@ eval_mult_1(Sys, Sem, Steps, StepsDone) ->
 %% ==================== Replay evaluation ==================== %%
 
 
--spec eval_replay(System, Pid, Steps) -> {NewSystem, StepsDone} when
-  System :: cauder_types:system(),
+-spec eval_replay(Pid, Steps) -> StepsDone when
   Pid :: cauder_types:proc_id(),
   Steps :: pos_integer(),
-  NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-eval_replay(Sys, Pid, Steps) -> eval_replay_1(Sys, Pid, Steps, 0).
+eval_replay(Pid, Steps) ->
+  Sys0 = ref_lookup(?SYSTEM),
+  {Sys1, StepsDone} = eval_replay_1(Sys0, Pid, Steps, 0),
+  ref_add(?SYSTEM, Sys1),
+  StepsDone.
 
 
 -spec eval_replay_1(cauder_types:system(), pos_integer(), pos_integer(), non_neg_integer()) -> {cauder_types:system(), non_neg_integer()}.
@@ -155,67 +256,67 @@ eval_replay_1(Sys0, Pid, Steps, StepsDone) ->
   end.
 
 
--spec eval_replay_spawn(System, SpawnPid) -> {CanReplay, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_replay_spawn(SpawnPid) -> Success when
   SpawnPid :: cauder_types:proc_id(),
-  CanReplay :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean().
 
-eval_replay_spawn(Sys0, SpawnPid) ->
+eval_replay_spawn(SpawnPid) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case replay:can_replay_spawn(Sys0, SpawnPid) of
-    false -> {false, Sys0};
+    false -> false;
     true ->
       Sys1 = replay:replay_spawn(Sys0, SpawnPid),
-      {true, Sys1}
+      ref_add(?SYSTEM, Sys1),
+      true
   end.
 
 
--spec eval_replay_send(System, UID) -> {CanReplay, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_replay_send(UID) -> Success when
   UID :: cauder_types:msg_id(),
-  CanReplay :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean().
 
-eval_replay_send(Sys0, UID) ->
+eval_replay_send(UID) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case replay:can_replay_send(Sys0, UID) of
-    false -> {false, Sys0};
+    false -> false;
     true ->
       Sys1 = replay:replay_send(Sys0, UID),
-      {true, Sys1}
+      ref_add(?SYSTEM, Sys1),
+      true
   end.
 
 
--spec eval_replay_rec(System, UID) -> {CanReplay, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_replay_rec(UID) -> Success when
   UID :: cauder_types:msg_id(),
-  CanReplay :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean().
 
-eval_replay_rec(Sys0, UID) ->
+eval_replay_rec(UID) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case replay:can_replay_rec(Sys0, UID) of
-    false -> {false, Sys0};
+    false -> false;
     true ->
       Sys1 = replay:replay_rec(Sys0, UID),
-      {true, Sys1}
+      ref_add(?SYSTEM, Sys1),
+      true
   end.
 
 
 %% ==================== Rollback evaluation ==================== %%
 
 
--spec eval_roll(System, Pid, Steps) -> {FocusLog, NewSystem, StepsDone} when
-  System :: cauder_types:system(),
+-spec eval_roll(Pid, Steps) -> {FocusLog, StepsDone} when
   Pid :: cauder_types:proc_id(),
   Steps :: pos_integer(),
   FocusLog :: boolean(),
-  NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-eval_roll(Sys0, Pid, Steps) ->
+eval_roll(Pid, Steps) ->
+  Sys0 = ref_lookup(?SYSTEM),
   Sys1 = utils:clear_log(Sys0),
   {Sys2, StepsDone} = eval_roll_1(Sys1, Pid, Steps, 0),
+  ref_add(?SYSTEM, Sys2),
   FocusLog = utils:must_focus_log(Sys2),
-  {FocusLog, Sys2, StepsDone}.
+  {FocusLog, StepsDone}.
 
 
 -spec eval_roll_1(cauder_types:system(), pos_integer(), pos_integer(), non_neg_integer()) -> {cauder_types:system(), non_neg_integer()}.
@@ -230,79 +331,93 @@ eval_roll_1(Sys0, Pid, Steps, StepsDone) ->
   end.
 
 
--spec eval_roll_spawn(System, SpawnPid) -> {CanRoll, FocusLog, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_roll_spawn(SpawnPid) -> {Success, FocusLog} when
   SpawnPid :: cauder_types:proc_id(),
-  CanRoll :: boolean(),
-  FocusLog :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean(),
+  FocusLog :: boolean().
 
-eval_roll_spawn(Sys0, SpawnPid) ->
+eval_roll_spawn(SpawnPid) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case roll:can_roll_spawn(Sys0, SpawnPid) of
-    false -> {false, false, Sys0};
+    false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_spawn(Sys1, SpawnPid),
+      ref_add(?SYSTEM, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2}
+      {true, FocusLog}
   end.
 
 
--spec eval_roll_send(System, UID) -> {CanRoll, FocusLog, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_roll_send(UID) -> {Success, FocusLog} when
   UID :: cauder_types:msg_id(),
-  CanRoll :: boolean(),
-  FocusLog :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean(),
+  FocusLog :: boolean().
 
-eval_roll_send(Sys0, UID) ->
+eval_roll_send(UID) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case roll:can_roll_send(Sys0, UID) of
-    false -> {false, false, Sys0};
+    false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_send(Sys1, UID),
+      ref_add(?SYSTEM, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2}
+      {true, FocusLog}
   end.
 
 
--spec eval_roll_rec(System, UID) -> {CanRoll, FocusLog, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_roll_rec(UID) -> {Success, FocusLog} when
   UID :: cauder_types:msg_id(),
-  CanRoll :: boolean(),
-  FocusLog :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean(),
+  FocusLog :: boolean().
 
-eval_roll_rec(Sys0, UID) ->
+eval_roll_rec(UID) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case roll:can_roll_rec(Sys0, UID) of
-    false -> {false, false, Sys0};
+    false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_rec(Sys1, UID),
+      ref_add(?SYSTEM, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2}
+      {true, FocusLog}
   end.
 
 
--spec eval_roll_var(System, Name) -> {CanRoll, FocusLog, NewSystem} when
-  System :: cauder_types:system(),
+-spec eval_roll_var(Name) -> {Success, FocusLog} when
   Name :: atom(),
-  CanRoll :: boolean(),
-  FocusLog :: boolean(),
-  NewSystem :: cauder_types:system().
+  Success :: boolean(),
+  FocusLog :: boolean().
 
-eval_roll_var(Sys0, Name) ->
+eval_roll_var(Name) ->
+  Sys0 = ref_lookup(?SYSTEM),
   case roll:can_roll_var(Sys0, Name) of
-    false -> {false, false, Sys0};
+    false -> {false, false};
     true ->
       Sys1 = utils:clear_log(Sys0),
       Sys2 = roll:roll_var(Sys1, Name),
+      ref_add(?SYSTEM, Sys2),
       FocusLog = utils:must_focus_log(Sys2),
-      {true, FocusLog, Sys2}
+      {true, FocusLog}
   end.
 
 
 %% =====================================================================
+
+
+edit_binding(Pid, {Key, NewValue}) ->
+  Sys0 = ref_lookup(?SYSTEM),
+  PDict0 = Sys0#sys.procs,
+  P0 = utils:find_process(PDict0, Pid),
+  Bs0 = P0#proc.env,
+
+  Bs1 = orddict:store(Key, NewValue, Bs0),
+  P1 = P0#proc{env = Bs1},
+  PDict1 = orddict:store(Pid, P1, PDict0),
+  Sys1 = Sys0#sys{procs = PDict1},
+
+  ref_add(?SYSTEM, Sys1).
 
 
 %% =====================================================================

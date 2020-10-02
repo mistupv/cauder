@@ -1,18 +1,16 @@
 -module(cauder_wx_process).
 
--export([process_info_area/1, update_process_info/0]).
-
-
+-include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
--include_lib("wx/include/wx.hrl").
+
+%% API
+-export([create/1, update/1]).
 
 
-%% ===== Process Info ===== %%
+-spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
--spec process_info_area(Parent :: wxWindow:wxWindow()) -> ProcessInfoArea :: wxPanel:wxPanel().
-
-process_info_area(Parent) ->
+create(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Process Info"}]),
@@ -23,36 +21,33 @@ process_info_area(Parent) ->
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-  wxSizer:add(Content, bind_area(Win), Expand),
-  wxSizer:add(Content, stack_area(Win), Expand),
-  wxSizer:add(Content, log_area(Win), Expand),
-  wxSizer:add(Content, history_area(Win), Expand),
+  wxSizer:add(Content, create_bindings(Win), Expand),
+  wxSizer:add(Content, create_stack(Win), Expand),
+  wxSizer:add(Content, create_log(Win), Expand),
+  wxSizer:add(Content, create_history(Win), Expand),
 
   Win.
 
 
--spec update_process_info() -> ok.
+-spec update(Process :: cauder_types:process()) -> ok.
 
-update_process_info() ->
-  _ViewOpts = utils_gui:toggle_opts(),
-
-  update_bindings(),
-  update_stack(),
-  update_log(),
-  update_history().
+update(Process) ->
+  update_bindings(Process),
+  update_stack(Process),
+  update_log(Process),
+  update_history(Process).
 
 
 %% ===== Bindings ===== %%
 
 
-bind_area(Parent) ->
+create_bindings(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Bindings"}]),
   wxPanel:setSizer(Win, Sizer),
 
   BindArea = wxListCtrl:new(Win, [{winid, ?BINDINGS_LIST}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
-  ref_add(?BINDINGS_LIST, BindArea),
   wxBoxSizer:add(Sizer, BindArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Item = wxListItem:new(),
@@ -74,42 +69,41 @@ bind_area(Parent) ->
   Win.
 
 
-update_bindings() ->
-  MenuView = ref_lookup(?MENU_VIEW),
-  BindArea = ref_lookup(?BINDINGS_LIST),
+update_bindings(#proc{env = Bs, exprs = Es}) ->
+  BindArea = utils_gui:find(?BINDINGS_LIST, wxListCtrl),
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
-  case utils_gui:current_process() of
-    none -> ok;
-    #proc{env = Bs, exprs = Es} ->
-      Bs1 =
-        case wxMenu:isChecked(MenuView, ?RADIO_FULL_ENV) of
-          true -> Bs;
-          false -> pretty_print:relevant_bindings(Bs, Es)
-        end,
-      lists:foldl(
-        fun({Var, Val}, Row) ->
-          wxListCtrl:insertItem(BindArea, Row, ""),
-          wxListCtrl:setItemFont(BindArea, Row, wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL)),
-          wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Var)),
-          wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
-          Row + 1
-        end, 0, Bs1)
-  end,
+  Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs),
+  Bs1 = Bs0, % TDOO
+%%    case wxMenu:isChecked(MenuView, ?MENU_View_FullEnvironment) of
+%%      true -> Bs0;
+%%      false ->
+%%        Es1 = cauder_syntax:to_abstract_expr(Es),
+%%        Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+%%        lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
+%%    end,
+  lists:foldl(
+    fun({Id, {Key, Val}}, Row) ->
+      wxListCtrl:insertItem(BindArea, Row, ""),
+      wxListCtrl:setItemFont(BindArea, Row, wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL)),
+      wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Key)),
+      wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
+      wxListCtrl:setItemData(BindArea, Row, Id),
+      Row + 1
+    end, 0, Bs1),
   wxListCtrl:thaw(BindArea).
 
 
 %% ===== Stack ===== %%
 
 
-stack_area(Parent) ->
+create_stack(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Stack"}]),
   wxPanel:setSizer(Win, Sizer),
 
   StackArea = wxListBox:new(Win, ?STACK_LIST),
-  ref_add(?STACK_LIST, StackArea),
   wxStaticBoxSizer:add(Sizer, StackArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -118,30 +112,25 @@ stack_area(Parent) ->
   Win.
 
 
-update_stack() ->
-  StackArea = ref_lookup(?STACK_LIST),
+update_stack(#proc{stack = Stk}) ->
+  StackArea = utils_gui:find(?STACK_LIST, wxListBox),
   wxListBox:freeze(StackArea),
   wxListBox:clear(StackArea),
-  case utils_gui:current_process() of
-    none -> ok;
-    #proc{stack = Stk} ->
-      Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
-      lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
-  end,
+  Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
+  lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries),
   wxListBox:thaw(StackArea).
 
 
 %% ===== Log ===== %%
 
 
-log_area(Parent) ->
+create_log(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Log"}]),
   wxPanel:setSizer(Win, Sizer),
 
   LogArea = wxTextCtrl:new(Win, ?LOG_TEXT, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
-  ref_add(?LOG_TEXT, LogArea),
   wxStaticBoxSizer:add(Sizer, LogArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -150,30 +139,25 @@ log_area(Parent) ->
   Win.
 
 
-update_log() ->
-  LogArea = ref_lookup(?LOG_TEXT),
+update_log(#proc{log = Log}) ->
+  LogArea = utils_gui:find(?LOG_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(LogArea),
   wxTextCtrl:clear(LogArea),
-  case utils_gui:current_process() of
-    none -> ok;
-    #proc{log = Log} ->
-      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
-      utils_gui:pp_marked_text(LogArea, Entries)
-  end,
+  Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
+  utils_gui:pp_marked_text(LogArea, Entries),
   wxTextCtrl:thaw(LogArea).
 
 
 %% ===== History ===== %%
 
 
-history_area(Parent) ->
+create_history(Parent) ->
   Win = wxPanel:new(Parent),
 
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "History"}]),
   wxPanel:setSizer(Win, Sizer),
 
   HistoryArea = wxTextCtrl:new(Win, ?HISTORY_TEXT, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
-  ref_add(?HISTORY_TEXT, HistoryArea),
   wxStaticBoxSizer:add(Sizer, HistoryArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -182,27 +166,15 @@ history_area(Parent) ->
   Win.
 
 
-update_history() ->
-  MenuView = ref_lookup(?MENU_VIEW),
-  HistoryArea = ref_lookup(?HISTORY_TEXT),
+update_history(#proc{hist = Hist0}) ->
+  HistoryArea = utils_gui:find(?HISTORY_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(HistoryArea),
   wxTextCtrl:clear(HistoryArea),
-  case utils_gui:current_process() of
-    none -> ok;
-    #proc{hist = Hist0} ->
-      Hist1 =
-        case wxMenu:isChecked(MenuView, ?RADIO_FULL_HIST) of
-          true -> Hist0;
-          false -> lists:filter(fun pretty_print:is_conc_item/1, Hist0)
-        end,
-      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
-      utils_gui:pp_marked_text(HistoryArea, Entries)
-  end,
+  Hist1 = Hist0, % FIXME
+%%    case wxMenu:isChecked(MenuView, ?MENU_View_FullHistory) of
+%%      true -> Hist0;
+%%      false -> lists:filter(fun pretty_print:is_conc_item/1, Hist0)
+%%    end,
+  Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
+  utils_gui:pp_marked_text(HistoryArea, Entries),
   wxTextCtrl:thaw(HistoryArea).
-
-
-%% ===== Utils ===== %%
-
-
-ref_add(Id, Ref) -> cauder_wx:ref_add(Id, Ref).
-ref_lookup(Id) -> cauder_wx:ref_lookup(Id).

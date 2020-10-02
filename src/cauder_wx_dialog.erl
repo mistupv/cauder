@@ -1,14 +1,21 @@
 -module(cauder_wx_dialog).
 
--export([edit_binding/2]).
-
-
+-include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
--include_lib("wx/include/wx.hrl").
+
+%% API
+-export([about/1, edit_binding/2]).
 
 
-%% ===== Binding editor ===== %%
+-spec about(Parent :: wxWindow:wxWindow()) -> 'ok'.
+
+about(Parent) ->
+  Caption = "About " ++ ?APPNAME,
+  Dialog = wxMessageDialog:new(Parent, ?INFO_TEXT, [{style, ?wxOK}, {caption, Caption}]),
+  wxDialog:showModal(Dialog),
+  wxWindow:destroy(Dialog).
+
 
 -spec edit_binding(Parent, Binding) -> NewBinding | cancel when
   Parent :: wxWindow:wxWindow(),

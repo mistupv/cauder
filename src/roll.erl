@@ -43,7 +43,7 @@ roll_step(Sys0, Pid) ->
       roll_send(Sys, Pid, Dest, UID);
     _ ->
       [#opt{pid = Pid, sem = Sem} | _] = roll_opts(Sys0, Pid),
-      cauder:eval_reduce(Sem, Sys0, Pid)
+      Sem:eval_step(Sys0, Pid)
   end.
 
 
@@ -56,7 +56,7 @@ roll_spawn(Sys0, Pid, SpawnPid) ->
       Sys1 = roll_step(Sys0, SpawnPid),
       roll_spawn(Sys1, Pid, SpawnPid);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      cauder:eval_reduce(Sem, Sys0, Pid)
+      Sem:eval_step(Sys0, Pid)
   end.
 
 
@@ -69,7 +69,7 @@ roll_send(Sys0, Pid, DestPid, UID) ->
       Sys1 = roll_step(Sys0, DestPid),
       roll_send(Sys1, Pid, DestPid, UID);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      cauder:eval_reduce(Sem, Sys0, Pid)
+      Sem:eval_step(Sys0, Pid)
   end.
 
 

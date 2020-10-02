@@ -1,14 +1,17 @@
--define(APP_STRING, "CauDEr").
+-define(APPNAME, "CauDEr").
+-define(WEBPAGE, "https://github.com/mistupv/cauder-v2").
 
 -define(ID_GAMMA, 0).
 
--ifdef(debug).
+%%-ifdef(debug).
 -define(LOG(X), io:format("{~p,~p}: ~p~n", [?MODULE, ?LINE, X])).
 -define(TO_STRING(X), lists:flatten(io_lib:format("~p",[X]))).
--else.
--define(LOG(X), ok).
--define(TO_STRING(X), "").
--endif.
+%%-else.
+%%-define(LOG(X), ok).
+%%-define(TO_STRING(X), "").
+%%-endif.
+
+-define(SYSTEM, 601).
 
 -define(FWD_SEM, fwd_sem).
 -define(BWD_SEM, bwd_sem).
@@ -48,8 +51,15 @@
 
 -define(CAUDER_GREEN, {34,139,34}).
 
+-define(STATUS,       status).
 -define(LAST_PATH,    last_path).
 -define(MODULE_PATH,  module_path).
+
+
+-record(status, {
+  loaded = false :: boolean(),
+  running = false :: boolean()
+}).
 
 
 % System

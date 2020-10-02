@@ -4,7 +4,7 @@
 %%%-------------------------------------------------------------------
 -module(pretty_print).
 
--export([process/1, log_entry/1, history_entry/1, stack_entry/1, relevant_bindings/2, expression/1, trace_entry/1]).
+-export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
 -export([pid/1, to_string/1, is_conc_item/1]).
 
 
@@ -54,17 +54,6 @@ history_entry({rec, _Bs, _Es, _Stk, #msg{val = Val, uid = UID}})  -> "rec(" ++ t
 
 stack_entry({{M, F, A}, _Bs, _Es, _Var}) -> io_lib:format("~s:~s/~b", [M, F, A]);
 stack_entry({Type, _Es, _Var})           -> atom_to_list(Type).
-
-
-%% ===== Environment ===== %%
-
-
--spec relevant_bindings(cauder_types:environment(), [cauder_types:abstract_expr()]) -> cauder_types:environment().
-
-relevant_bindings(Bs, Es) ->
-  Es1 = cauder_syntax:to_abstract_expr(Es),
-  Vs = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-  lists:filter(fun({V, _}) -> sets:is_element(V, Vs) end, Bs).
 
 
 %% ===== Expressions ===== %%

@@ -1,17 +1,18 @@
 -module(cauder_wx_actions).
 
--export([actions_area/1]).
-
-
+-include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
--include_lib("wx/include/wx.hrl").
+
+%% API
+-export([create/1, update/1]).
+-export([selected_pid/0]).
 
 
-%% ===== Actions Area ===== %%
+-spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
-actions_area(Parent) ->
-  Win = wxPanel:new(Parent),
+create(Frame) ->
+  Win = wxPanel:new(Frame),
 
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Actions"}]),
   wxWindow:setSizer(Win, Sizer),
@@ -22,7 +23,6 @@ actions_area(Parent) ->
   wxStaticBoxSizer:add(Sizer, Process, [{flag, ?wxEXPAND}]),
 
   ProcessChoice = wxChoice:new(Win, ?PROC_CHOICE, []),
-  ref_add(?PROC_CHOICE, ProcessChoice),
   wxStaticBoxSizer:add(Process, ProcessChoice, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   wxEvtHandler:connect(ProcessChoice, command_choice_selected),
@@ -44,6 +44,38 @@ actions_area(Parent) ->
   Win.
 
 
+%%--------------------------------------------------------------------
+%% @doc Updates the elements of the process selector
+
+update(#sys{procs = []}) ->
+  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  wxChoice:freeze(Choice),
+  wxChoice:disable(Choice),
+  wxChoice:clear(Choice),
+  wxChoice:thaw(Choice);
+update(#sys{procs = ProcDict}) ->
+  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  wxChoice:freeze(Choice),
+  wxChoice:enable(Choice),
+  PrevSel = wxChoice:getStringSelection(Choice),
+  wxChoice:clear(Choice),
+  {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
+  lists:foreach(
+    fun(Proc) ->
+      Label = pretty_print:process(Proc),
+      wxChoice:append(Choice, Label, Proc#proc.pid)
+    end,
+    Procs
+  ),
+  wxChoice:setStringSelection(Choice, PrevSel),
+  case wxChoice:getSelection(Choice) of
+    ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
+    _ -> ok
+  end,
+  wxChoice:thaw(Choice),
+  ok.
+
+
 manual_actions(Parent) ->
   Win = wxPanel:new(Parent),
 
@@ -57,7 +89,6 @@ manual_actions(Parent) ->
   wxBoxSizer:add(SizerH, SizerV, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
   ExpandCenterHorizontal = [{flag, ?wxEXPAND bor ?wxALIGN_CENTER_HORIZONTAL}],
-  CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
   % ----- Buttons -----
 
@@ -70,13 +101,11 @@ manual_actions(Parent) ->
   wxBoxSizer:add(Buttons, Step, ExpandCenterHorizontal),
 
   StepBwd = wxButton:new(Win, ?STEP_BACKWARD_BUTTON, [{label, "Backward"}]),
-  ref_add(?STEP_BACKWARD_BUTTON, StepBwd),
   wxBoxSizer:add(Step, StepBwd),
 
   wxBoxSizer:addSpacer(Step, ?SPACER_SMALL),
 
   StepFwd = wxButton:new(Win, ?STEP_FORWARD_BUTTON, [{label, "Forward"}]),
-  ref_add(?STEP_FORWARD_BUTTON, StepFwd),
   wxBoxSizer:add(Step, StepFwd),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
@@ -87,13 +116,11 @@ manual_actions(Parent) ->
   wxBoxSizer:add(Buttons, StepOver, ExpandCenterHorizontal),
 
   StepOverBwd = wxButton:new(Win, ?STEP_OVER_BACKWARD_BUTTON, [{label, "Backward"}]),
-  ref_add(?STEP_OVER_BACKWARD_BUTTON, StepOverBwd),
   wxBoxSizer:add(StepOver, StepOverBwd),
 
   wxBoxSizer:addSpacer(StepOver, ?SPACER_SMALL),
 
   StepOverFwd = wxButton:new(Win, ?STEP_OVER_FORWARD_BUTTON, [{label, "Forward"}]),
-  ref_add(?STEP_OVER_FORWARD_BUTTON, StepOverFwd),
   wxBoxSizer:add(StepOver, StepOverFwd),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
@@ -104,13 +131,11 @@ manual_actions(Parent) ->
   wxBoxSizer:add(Buttons, StepInto, ExpandCenterHorizontal),
 
   StepIntoBwd = wxButton:new(Win, ?STEP_INTO_BACKWARD_BUTTON, [{label, "Backward"}]),
-  ref_add(?STEP_INTO_BACKWARD_BUTTON, StepIntoBwd),
   wxBoxSizer:add(StepInto, StepIntoBwd),
 
   wxBoxSizer:addSpacer(StepInto, ?SPACER_SMALL),
 
   StepIntoFwd = wxButton:new(Win, ?STEP_INTO_FORWARD_BUTTON, [{label, "Forward"}]),
-  ref_add(?STEP_INTO_FORWARD_BUTTON, StepIntoFwd),
   wxBoxSizer:add(StepInto, StepIntoFwd),
 
   Win.
@@ -142,7 +167,6 @@ automatic_actions(Parent) ->
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
   StepsSpin = wxSpinCtrl:new(Win, [{id, ?STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}]),
-  ref_add(?STEPS_SPIN, StepsSpin),
   wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALIGN_CENTER}]),
 
   % -----
@@ -155,13 +179,11 @@ automatic_actions(Parent) ->
   wxBoxSizer:add(Content, Buttons, ExpandCenterHorizontal),
 
   BwdButton = wxButton:new(Win, ?MULTIPLE_BACKWARD_BUTTON, [{label, "Backward"}]),
-  ref_add(?MULTIPLE_BACKWARD_BUTTON, BwdButton),
   wxBoxSizer:add(Buttons, BwdButton, CenterVertical),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
   FwdButton = wxButton:new(Win, ?MULTIPLE_FORWARD_BUTTON, [{label, "Forward"}]),
-  ref_add(?MULTIPLE_FORWARD_BUTTON, FwdButton),
   wxBoxSizer:add(Buttons, FwdButton, CenterVertical),
 
   Win.
@@ -196,13 +218,11 @@ replay_actions(Parent) ->
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
   StepsText = wxSpinCtrl:new(Win, [{id, ?REPLAY_STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}, InputSize]),
-  ref_add(?REPLAY_STEPS_SPIN, StepsText),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
   StepsButton = wxButton:new(Win, ?REPLAY_STEPS_BUTTON, [{label, "Replay steps"}, ButtonSize]),
-  ref_add(?REPLAY_STEPS_BUTTON, StepsButton),
   wxBoxSizer:add(Steps, StepsButton, CenterVertical),
 
   % -----
@@ -220,13 +240,11 @@ replay_actions(Parent) ->
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
   SpawnText = wxTextCtrl:new(Win, ?REPLAY_SPAWN_TEXT, [InputSize]),
-  ref_add(?REPLAY_SPAWN_TEXT, SpawnText),
   wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
   SpawnButton = wxButton:new(Win, ?REPLAY_SPAWN_BUTTON, [{label, "Replay spawn"}, ButtonSize]),
-  ref_add(?REPLAY_SPAWN_BUTTON, SpawnButton),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
 
   % -----
@@ -244,13 +262,11 @@ replay_actions(Parent) ->
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
   SendText = wxTextCtrl:new(Win, ?REPLAY_SEND_TEXT, [InputSize]),
-  ref_add(?REPLAY_SEND_TEXT, SendText),
   wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
   SendButton = wxButton:new(Win, ?REPLAY_SEND_BUTTON, [{label, "Replay send"}, ButtonSize]),
-  ref_add(?REPLAY_SEND_BUTTON, SendButton),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
 
   % -----
@@ -268,13 +284,11 @@ replay_actions(Parent) ->
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
   ReceiveText = wxTextCtrl:new(Win, ?REPLAY_REC_TEXT, [InputSize]),
-  ref_add(?REPLAY_REC_TEXT, ReceiveText),
   wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
   ReceiveButton = wxButton:new(Win, ?REPLAY_REC_BUTTON, [{label, "Replay receive"}, ButtonSize]),
-  ref_add(?REPLAY_REC_BUTTON, ReceiveButton),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
 
   Win.
@@ -309,13 +323,11 @@ rollback_actions(Parent) ->
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
   StepsText = wxSpinCtrl:new(Win, [{id, ?ROLL_STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}, InputSize]),
-  ref_add(?ROLL_STEPS_SPIN, StepsText),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
   StepsButton = wxButton:new(Win, ?ROLL_STEPS_BUTTON, [{label, "Roll steps"}, ButtonSize]),
-  ref_add(?ROLL_STEPS_BUTTON, StepsButton),
   wxBoxSizer:add(Steps, StepsButton, CenterVertical),
 
   % -----
@@ -333,13 +345,11 @@ rollback_actions(Parent) ->
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
   SpawnText = wxTextCtrl:new(Win, ?ROLL_SPAWN_TEXT, [InputSize]),
-  ref_add(?ROLL_SPAWN_TEXT, SpawnText),
   wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
   SpawnButton = wxButton:new(Win, ?ROLL_SPAWN_BUTTON, [{label, "Roll spawn"}, ButtonSize]),
-  ref_add(?ROLL_SPAWN_BUTTON, SpawnButton),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
 
   % -----
@@ -357,13 +367,11 @@ rollback_actions(Parent) ->
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
   SendText = wxTextCtrl:new(Win, ?ROLL_SEND_TEXT, [InputSize]),
-  ref_add(?ROLL_SEND_TEXT, SendText),
   wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
   SendButton = wxButton:new(Win, ?ROLL_SEND_BUTTON, [{label, "Roll send"}, ButtonSize]),
-  ref_add(?ROLL_SEND_BUTTON, SendButton),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
 
   % -----
@@ -381,13 +389,11 @@ rollback_actions(Parent) ->
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
   ReceiveText = wxTextCtrl:new(Win, ?ROLL_REC_TEXT, [InputSize]),
-  ref_add(?ROLL_REC_TEXT, ReceiveText),
   wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
   ReceiveButton = wxButton:new(Win, ?ROLL_REC_BUTTON, [{label, "Roll receive"}, ButtonSize]),
-  ref_add(?ROLL_REC_BUTTON, ReceiveButton),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
 
   % -----
@@ -405,19 +411,24 @@ rollback_actions(Parent) ->
   wxBoxSizer:addSpacer(Variable, ?SPACER_SMALL),
 
   VariableText = wxTextCtrl:new(Win, ?ROLL_VAR_TEXT, [InputSize]),
-  ref_add(?ROLL_VAR_TEXT, VariableText),
   wxBoxSizer:add(Variable, VariableText, CenterVertical),
 
   wxBoxSizer:addSpacer(Variable, ?SPACER_MEDIUM),
 
   VariableButton = wxButton:new(Win, ?ROLL_VAR_BUTTON, [{label, "Roll variable"}, ButtonSize]),
-  ref_add(?ROLL_VAR_BUTTON, VariableButton),
   wxBoxSizer:add(Variable, VariableButton, CenterVertical),
 
   Win.
 
 
-%% ===== Utils ===== %%
+%% ===================================================================
 
 
-ref_add(Id, Ref) -> cauder_wx:ref_add(Id, Ref).
+-spec selected_pid() -> cauder_types:proc_id() | none.
+
+selected_pid() ->
+  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  case wxChoice:getSelection(Choice) of
+    ?wxNOT_FOUND -> none;
+    Idx -> wxChoice:getClientData(Choice, Idx)
+  end.

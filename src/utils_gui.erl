@@ -3,12 +3,14 @@
 %% Status check functions
 -export([is_app_loaded/0, is_app_running/0]).
 
+-export([find/2]).
+
 %% Control related functions
 -export([enable_control/1, enable_controls/1, enable_control_if/2, enable_controls_if/2, enable_replay/0, enable_roll/0,
          disable_control/1, disable_controls/1, disable_all_buttons/0, disable_all_inputs/0]).
 
 %% Misc.
--export([clear_texts/0, sort_opts/1, toggle_opts/0, pp_marked_text/2]).
+-export([clear_texts/0, sort_opts/1, pp_marked_text/2]).
 
 %% ----- Status text update functions ----- %%
 -export([update_status_text/1]).
@@ -23,9 +25,7 @@
 -export([sttext_comp/0]).
 
 %% ETS functions
--export([stop_refs/0]).
-
--export([update_process_choices/1, current_process/0, update_code/0]).
+%%-export([stop_refs/0]).
 
 
 -include("cauder.hrl").
@@ -34,12 +34,17 @@
 
 
 is_app_loaded() ->
-  Status = ref_lookup(?STATUS),
+  Status = cauder:ref_lookup(?STATUS),
   Status#status.loaded.
 
 is_app_running() ->
-  Status = ref_lookup(?STATUS),
+  Status = cauder:ref_lookup(?STATUS),
   Status#status.running.
+
+
+-spec find(Id :: integer(), Type :: atom()) -> wx:wx_object().
+
+find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 
 
 -spec rule_to_string(Rule) -> string() when
@@ -58,14 +63,14 @@ rule_to_string(?RULE_RECEIVE) -> "Receive".
 -spec enable_control(ControlId :: integer()) -> ok.
 
 enable_control(Id) ->
-  wxWindow:enable(ref_lookup(Id)),
+  wxWindow:enable(wxWindow:findWindowById(Id)),
   ok.
 
 
 -spec disable_control(ControlId :: integer()) -> ok.
 
 disable_control(Id) ->
-  wxWindow:disable(ref_lookup(Id)),
+  wxWindow:disable(wxWindow:findWindowById(Id)),
   ok.
 
 
@@ -125,70 +130,22 @@ enable_roll() ->
 clear_texts() ->
   Batch =
     fun() ->
-      wxListBox:clear(ref_lookup(?TRACE_LIST)),
-      wxListBox:clear(ref_lookup(?ROLL_LOG_LIST)),
-      wxListCtrl:deleteAllItems(ref_lookup(?BINDINGS_LIST)),
-      wxListBox:clear(ref_lookup(?STACK_LIST)),
-      wxTextCtrl:clear(ref_lookup(?LOG_TEXT)),
-      wxTextCtrl:clear(ref_lookup(?HISTORY_TEXT))
+      wxListBox:clear(find(?TRACE_LIST, wxListBox)),
+      wxListBox:clear(find(?ROLL_LOG_LIST, wxListBox)),
+      wxListCtrl:deleteAllItems(find(?BINDINGS_LIST, wxListCtrl)),
+      wxListBox:clear(find(?STACK_LIST, wxListBox)),
+      wxTextCtrl:clear(find(?LOG_TEXT, wxTextCtrl)),
+      wxTextCtrl:clear(find(?HISTORY_TEXT, wxTextCtrl))
     end,
 
   wx:batch(Batch).
 
 
-current_process() ->
-  Choice = ref_lookup(?PROC_CHOICE),
-  case wxChoice:getSelection(Choice) of
-    ?wxNOT_FOUND -> none;
-    Idx ->
-      #sys{procs = ProcDict} = ref_lookup(?SYSTEM),
-      {_, Proc} = lists:nth(Idx + 1, ProcDict),
-      Proc
-  end.
-
-
-update_process_choices(#sys{procs = []}) ->
-  Choice = ref_lookup(?PROC_CHOICE),
-  wxChoice:freeze(Choice),
-  wxChoice:disable(Choice),
-  wxChoice:clear(Choice),
-  wxChoice:thaw(Choice);
-update_process_choices(#sys{procs = ProcDict}) ->
-  Choice = ref_lookup(?PROC_CHOICE),
-  wxChoice:freeze(Choice),
-  wxChoice:enable(Choice),
-  PrevSel = wxChoice:getStringSelection(Choice),
-  wxChoice:clear(Choice),
-  Procs = lists:map(fun({_, Proc}) -> Proc end, ProcDict),
-  Values = lists:map(fun pretty_print:process/1, Procs),
-  wxChoice:appendStrings(Choice, Values),
-  case lists:member(PrevSel, Values) of
-    true -> wxChoice:setStringSelection(Choice, PrevSel);
-    false -> wxChoice:setSelection(Choice, 0)
-  end,
-  wxChoice:thaw(Choice),
-  ok.
-
-
-update_code() ->
-  case current_process() of
-    none -> ok;
-    #proc{exprs = [E | _]} ->
-      Line = element(2, E),
-      Prev = get(line),
-      cauder_wx_code:mark_line(ref_lookup(?CODE_TEXT), Prev, Line),
-      put(line, Line),
-      cauder_wx_code:update_expr(E),
-      ok
-  end
-.
-
-
-stop_refs() ->
-  case is_app_loaded() of
-    true -> cauder:stop_refs();
-    false -> ok
-  end.
+%%stop_refs() ->
+%%  case is_app_loaded() of
+%%    true -> cauder:stop_refs();
+%%    false -> ok
+%%  end.
 
 
 semantics_to_string(?FWD_SEM) -> "forward";
@@ -276,27 +233,11 @@ sttext_comp() ->
   update_status_text(FullStr).
 
 update_status_text(String) ->
-  Frame = ref_lookup(?FRAME),
+  Frame = find(?FRAME, wxFrame), % TODO
   wxFrame:setStatusText(Frame, String).
 
 
 sort_opts(Opts) -> lists:sort(fun(P1, P2) -> P1#opt.pid < P2#opt.pid end, Opts).
-
-
--spec toggle_opts() -> [{cauder_types:print_option(), boolean()}].
-
-toggle_opts() ->
-  MenuView = ref_lookup(?MENU_VIEW),
-  MenuComp = ref_lookup(?MENU_COMP),
-  [{?PRINT_MAIL, wxMenu:isChecked(MenuView, ?TOGGLE_MAIL)},
-   {?PRINT_LOG, wxMenu:isChecked(MenuView, ?TOGGLE_LOG)},
-   {?PRINT_HIST, wxMenu:isChecked(MenuView, ?TOGGLE_HIST)},
-   {?PRINT_STACK, wxMenu:isChecked(MenuView, ?TOGGLE_STACK)},
-   {?PRINT_ENV, wxMenu:isChecked(MenuView, ?TOGGLE_ENV)},
-   {?PRINT_EXP, wxMenu:isChecked(MenuView, ?TOGGLE_EXP)},
-   {?FULL_HIST, wxMenu:isChecked(MenuView, ?RADIO_FULL_HIST)},
-   {?FULL_ENV, wxMenu:isChecked(MenuView, ?RADIO_FULL_ENV)},
-   {?COMP_OPT, wxMenu:isChecked(MenuComp, ?TOGGLE_COMP)}].
 
 
 -spec marked(wxTextCtrl:wxTextCtrl(), [char() | {wx:wx_colour(), string()}], string()) -> ok.
@@ -325,6 +266,3 @@ pp_marked_text(Ctrl, TextList) ->
   wxTextCtrl:setInsertionPoint(Ctrl, 0),
   % Unfreeze control
   wxTextCtrl:thaw(Ctrl).
-
-
-ref_lookup(Id) -> cauder_wx:ref_lookup(Id).

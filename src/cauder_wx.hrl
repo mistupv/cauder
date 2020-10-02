@@ -1,8 +1,3 @@
--record(status, {
-  loaded = false :: boolean(),
-  running = false :: boolean()
-}).
-
 -define(FRAME, 500).
 
 -define(FRAME_SIZE_INIT, {900, 800}).
@@ -27,40 +22,45 @@
 
 %% File Menu
 
--define(OPEN,             ?wxID_OPEN).
--define(LOAD_TRACE,       1000).
--define(EXIT,             ?wxID_EXIT).
+-define(MENU_File_Open,                 ?wxID_OPEN).
+-define(MENU_File_LoadTrace,            1000).
+-define(MENU_File_Exit,                 ?wxID_EXIT).
+
+%% Edit Menu
+
+-define(MENU_Edit_Undo,                 ?wxID_UNDO).
+-define(MENU_Edit_Redo,                 ?wxID_REDO).
 
 %% View Menu
 
--define(MENU_VIEW,        1100).
+-define(MENU_View_ZoomIn,               ?wxID_ZOOM_IN).
+-define(MENU_View_ZoomOut,              ?wxID_ZOOM_OUT).
+-define(MENU_View_Zoom100,              ?wxID_ZOOM_100).
 
--define(BUTTON_ZOOM_IN,   ?wxID_ZOOM_IN).
--define(BUTTON_ZOOM_OUT,  ?wxID_ZOOM_OUT).
--define(BUTTON_ZOOM_100,  ?wxID_ZOOM_100).
+-define(MENU_View_Mailbox,              1010).
+-define(MENU_View_Log,                  1011).
+-define(MENU_View_History,              1012).
+-define(MENU_View_Stack,                1013).
+-define(MENU_View_Environment,          1014).
+-define(MENU_View_CurrentExpression,    1015).
 
--define(TOGGLE_MAIL,      1110).
--define(TOGGLE_LOG,       1111).
--define(TOGGLE_HIST,      1112).
--define(TOGGLE_STACK,     1113).
--define(TOGGLE_ENV,       1114).
--define(TOGGLE_EXP,       1115).
+-define(IS_HISTORY_MODE(HistoryMode), HistoryMode =:= ?MENU_View_ConcurrentHistory orelse HistoryMode =:= ?MENU_View_FullHistory).
 
--define(RADIO_CONC_HIST,  1120).
--define(RADIO_FULL_HIST,  1121).
+-define(MENU_View_ConcurrentHistory,    1016).
+-define(MENU_View_FullHistory,          1017).
 
--define(RADIO_REL_ENV,    1130).
--define(RADIO_FULL_ENV,   1131).
+-define(IS_ENVIRONMENT_MODE(EnvironmentMode), EnvironmentMode =:= ?MENU_View_RelevantEnvironment orelse EnvironmentMode =:= ?MENU_View_FullEnvironment).
 
-%% Compiler Menu
+-define(MENU_View_RelevantEnvironment,  1018).
+-define(MENU_View_FullEnvironment,      1019).
 
--define(MENU_COMP,        1200).
-
--define(TOGGLE_COMP,      1201).
+-define(MENU_View_StatusBar,            1020).
 
 %% Help Menu
 
--define(ABOUT,            ?wxID_ABOUT).
+-define(MENU_Help_ViewHelp,             1030).
+
+-define(MENU_Help_About,                ?wxID_ABOUT).
 
 
 %% ========== Main Panel ========== %%
@@ -180,52 +180,27 @@
 
 %% ===== System Info Panel ===== %%
 
--define(MAIL_LIST,            2199).
+-define(MAIL_LIST, 2199).
 
 -define(SYSTEM_INFO_NOTEBOOK, 2200).
--define(PAGEPOS_TRACE,        0).
--define(PAGEPOS_ROLL,         1).
+-define(PAGEPOS_TRACE, 0).
+-define(PAGEPOS_ROLL, 1).
 
--define(TRACE_LIST,           2201).
--define(ROLL_LOG_LIST,        2202).
+-define(TRACE_LIST, 2201).
+-define(ROLL_LOG_LIST, 2202).
 
 
 %% ===== Process Info Panel ===== %%
 
--define(BINDINGS_LIST,        2222).
--define(STACK_LIST,           2223).
--define(LOG_TEXT,             2224).
--define(HISTORY_TEXT,         2225).
+-define(BINDINGS_LIST, 2222).
+-define(STACK_LIST, 2223).
+-define(LOG_TEXT, 2224).
+-define(HISTORY_TEXT, 2225).
 
 
 %% ========== Status bar ========== %%
 
--define(STATUS_BAR,           2300).
-
-
-%% =====================================================================
-
-
-%% =====================================================================
-
-
-%%-define(LEFT_NOTEBOOK, 2000).
-%%
-%%-define(FUN_SIZER, 2002).
-%%-define(FUN_CHOICE, 2003).
-%%-define(ARGS_TEXT, 2004).
-%%-define(START_BUTTON, 2005).
-%%
-%%%% ========== State Panel ========== %%
-%%
-%%-define(STATE_TEXT, 2006).
-
-
-%% =====================================================================
-
-
--define(SYSTEM, 601).
--define(STATUS, 602).
+-define(STATUS_BAR, 2300).
 
 
 %% =====================================================================
@@ -236,22 +211,22 @@
 -define(ERROR_NUM_STEP, "The number of steps is not correct.").
 -define(ERROR_NUM_ARGS, "The number of arguments is not correct.").
 
--define(HELP_OPEN_ITEM,      "Open and compile an Erlang file").
--define(HELP_REPLAY_ITEM,    "Replay an execution from a log file").
--define(HELP_QUIT_ITEM,      "Quit this program").
--define(HELP_ZOOM_100_ITEM,  "Reset text font size").
--define(HELP_ZOOM_IN_ITEM,   "Increase text font size").
--define(HELP_ZOOM_OUT_ITEM,  "Decrease text font size").
--define(HELP_TOGGLE_MAIL,    "Show or hide process mailbox").
--define(HELP_TOGGLE_HIST,    "Show or hide process history").
--define(HELP_TOGGLE_LOG,     "Show or hide process logs").
--define(HELP_TOGGLE_STACK,   "Show or hide process stack").
--define(HELP_TOGGLE_ENV,     "Show or hide process environment").
--define(HELP_TOGGLE_EXP,     "Show or hide process expressions").
--define(HELP_RADIO_CONC,     "Show only concurrent history").
--define(HELP_RADIO_FULL,     "Show complete history").
--define(HELP_RADIO_REN_ENV,  "Show relevant bindings from environment").
--define(HELP_RADIO_FULL_ENV, "Show all bindings from environment").
--define(HELP_TOGGLE_COMP,    "Allow compiler optimizations when loading files").
--define(HELP_RADIO_RAND,     "Set scheduler to random choice among options").
--define(HELP_RADIO_PRIO,     "Set scheduler to random choice among options (priority to process options)").
+-define(HELP_OPEN_ITEM, "Open and compile an Erlang file").
+-define(HELP_REPLAY_ITEM, "Replay an execution from a log file").
+-define(HELP_QUIT_ITEM, "Quit this program").
+-define(HELP_View_Zoom100, "Reset text font size").
+-define(HELP_View_ZoomIn, "Increase text font size").
+-define(HELP_View_ZoomOut, "Decrease text font size").
+-define(HELP_View_Mailbox, "Show or hide process mailbox").
+-define(HELP_View_History, "Show or hide process history").
+-define(HELP_View_Log, "Show or hide process logs").
+-define(HELP_View_Stack, "Show or hide process stack").
+-define(HELP_View_Environment, "Show or hide process environment").
+-define(HELP_View_CurrentExpression, "Show or hide process expressions").
+-define(HELP_View_ConcurrentHistory, "Show only concurrent history").
+-define(HELP_View_FullHistory, "Show complete history").
+-define(HELP_View_RelevantEnvironment, "Show relevant bindings from environment").
+-define(HELP_View_FullEnvironment, "Show all bindings from environment").
+-define(HELP_TOGGLE_COMP, "Allow compiler optimizations when loading files").
+-define(HELP_RADIO_RAND, "Set scheduler to random choice among options").
+-define(HELP_RADIO_PRIO, "Set scheduler to random choice among options (priority to process options)").

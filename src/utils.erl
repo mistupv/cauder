@@ -16,7 +16,7 @@
          has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1,
-         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2, current_line/1]).
+         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2, current_line/1, find_process/2]).
 
 -include("cauder.hrl").
 
@@ -136,7 +136,12 @@ pid_exists(Procs, Pid) -> orddict:is_key(Pid, Procs).
 
 -spec take_process(cauder_types:process_dict(), pos_integer()) -> {cauder_types:process(), cauder_types:process_dict()}.
 
-take_process(Procs, Pid) -> {_P, _Ps} = orddict:take(Pid, Procs).
+take_process(Procs, Pid) -> {_P, _Ps} = orddict:take(Pid, Procs). % XXX May throw badmatch
+
+
+-spec find_process(cauder_types:process_dict(), pos_integer()) -> cauder_types:process().
+
+find_process(Procs, Pid) -> {ok, Proc} = orddict:find(Pid, Procs), Proc. % XXX May throw badmatch
 
 
 %%--------------------------------------------------------------------
