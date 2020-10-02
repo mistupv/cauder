@@ -5,7 +5,7 @@
 -include("cauder_wx.hrl").
 
 %% API
--export([create/1, update/1]).
+-export([create/1, update/1, focus_roll_log/1]).
 
 
 -spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
@@ -144,3 +144,7 @@ update_roll_log(#sys{roll = RollLog}) ->
   wxListBox:clear(RollLogArea),
   lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog),
   wxListBox:thaw(RollLogArea).
+
+
+focus_roll_log(false) -> ok;
+focus_roll_log(true)  -> wxNotebook:setSelection(utils_gui:find(?SYSTEM_INFO_NOTEBOOK, wxNotebook), ?PAGEPOS_ROLL).

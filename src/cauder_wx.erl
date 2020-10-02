@@ -312,7 +312,7 @@ handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
       Steps = wxSpinCtrl:getValue(Spinner),
       {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
       utils_gui:sttext_roll(StepsDone, Steps),
-      focus_roll_log(FocusLog),
+      cauder_wx_system:focus_roll_log(FocusLog),
       refresh(true)
   end,
   {noreply, State};
@@ -329,7 +329,7 @@ handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
     {Pid, _} ->
       {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
       utils_gui:sttext_roll_spawn(Success, PidStr),
-      focus_roll_log(FocusLog),
+      cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
   {noreply, State};
@@ -346,7 +346,7 @@ handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_send(Uid),
       utils_gui:sttext_roll_send(Success, UidStr),
-      focus_roll_log(FocusLog),
+      cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
   {noreply, State};
@@ -363,7 +363,7 @@ handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_rec(Uid),
       utils_gui:sttext_roll_rec(Success, UidStr),
-      focus_roll_log(FocusLog),
+      cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
   {noreply, State};
@@ -380,7 +380,7 @@ handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
       Name = list_to_atom(NameStr),
       {Success, FocusLog} = cauder:eval_roll_var(Name),
       utils_gui:sttext_roll_var(Success, NameStr),
-      focus_roll_log(FocusLog),
+      cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
   {noreply, State};
@@ -608,10 +608,6 @@ refresh(RefreshState) ->
 %%      utils_gui:update_status_text(?ERROR_NUM_ARGS),
 %%      error
 %%  end.
-
-
-focus_roll_log(false) -> ok;
-focus_roll_log(true)  -> wxNotebook:setSelection(utils_gui:find(?SYSTEM_INFO_NOTEBOOK, wxNotebook), ?PAGEPOS_ROLL).
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
