@@ -193,12 +193,12 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
   utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
-      utils_gui:sttext_noproc(),
+      cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
       Sem = button_to_semantics(Button),
       Rule = cauder:eval_reduce(Sem, Pid),
-      utils_gui:sttext_reduce(Sem, Rule),
+      cauder_wx_statusbar:step(Sem, Rule),
       refresh(true)
   end,
   {noreply, State};
@@ -207,16 +207,16 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
   utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
-      utils_gui:sttext_noproc(),
+      cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
       Sem = button_to_semantics(Button),
       case cauder:eval_step(Sem, Pid) of
         nomatch ->
-          utils_gui:sttext_nomatch(),
+          cauder_wx_statusbar:no_match(),
           refresh(false);
         Steps ->
-          utils_gui:sttext_step(Sem, Steps),
+          cauder_wx_statusbar:step_over(Sem, Steps),
           refresh(true)
       end
   end,
@@ -230,7 +230,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
   Spinner = utils_gui:find(?STEPS_SPIN, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
   StepsDone = cauder:eval_mult(Sem, Steps),
-  utils_gui:sttext_mult(Sem, StepsDone, Steps),
+  cauder_wx_statusbar:multi(Sem, StepsDone, Steps),
   refresh(true),
   {noreply, State};
 
@@ -240,61 +240,58 @@ handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
-      utils_gui:sttext_noproc(),
+      cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
       Spinner = utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       StepsDone = cauder:eval_replay(Pid, Steps),
-      utils_gui:sttext_replay(StepsDone, Steps),
+      cauder_wx_statusbar:replay(StepsDone, Steps),
       refresh(true)
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  PidCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
-  PidStr = wxTextCtrl:getValue(PidCtrl),
-  case string:to_integer(PidStr) of
+  TextCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_replay_spawn(false, none),
+      cauder_wx_statusbar:replay_spawn(false, none),
       refresh(false);
     {Pid, _} ->
       Success = cauder:eval_replay_spawn(Pid),
-      utils_gui:sttext_replay_spawn(Success, PidStr),
+      cauder_wx_statusbar:replay_spawn(Success, Pid),
       refresh(Success)
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
+  TextCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_replay_send(false, none),
+      cauder_wx_statusbar:replay_send(false, none),
       refresh(false);
     {Uid, _} ->
       Success = cauder:eval_replay_send(Uid),
-      utils_gui:sttext_replay_send(Success, UidStr),
+      cauder_wx_statusbar:replay_send(Success, Uid),
       refresh(Success)
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
+  TextCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_replay_rec(false, none),
+      cauder_wx_statusbar:replay_rec(false, none),
       refresh(false);
     {Uid, _} ->
       Success = cauder:eval_replay_rec(Uid),
-      utils_gui:sttext_replay_rec(Success, UidStr),
+      cauder_wx_statusbar:replay_rec(Success, Uid),
       refresh(Success)
   end,
   {noreply, State};
@@ -305,13 +302,13 @@ handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
-      utils_gui:sttext_noproc(),
+      cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
       Spinner = utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
-      utils_gui:sttext_roll(StepsDone, Steps),
+      cauder_wx_statusbar:roll(StepsDone, Steps),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh(true)
   end,
@@ -319,16 +316,15 @@ handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
 
 handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  PidCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
-  PidStr = wxTextCtrl:getValue(PidCtrl),
-  case string:to_integer(PidStr) of
+  TextCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_roll_spawn(false, none),
+      cauder_wx_statusbar:roll_spawn(false, none),
       refresh(false);
     {Pid, _} ->
       {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
-      utils_gui:sttext_roll_spawn(Success, PidStr),
+      cauder_wx_statusbar:roll_spawn(Success, Pid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
@@ -336,16 +332,15 @@ handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
 
 handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
+  TextCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_roll_send(false, none),
+      cauder_wx_statusbar:roll_send(false, none),
       refresh(false);
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_send(Uid),
-      utils_gui:sttext_roll_send(Success, UidStr),
+      cauder_wx_statusbar:roll_send(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
@@ -353,16 +348,15 @@ handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
 
 handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  UidCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
-  UidStr = wxTextCtrl:getValue(UidCtrl),
-  case string:to_integer(UidStr) of
+  TextCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
+  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      utils_gui:sttext_roll_rec(false, none),
+      cauder_wx_statusbar:roll_rec(false, none),
       refresh(false);
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_rec(Uid),
-      utils_gui:sttext_roll_rec(Success, UidStr),
+      cauder_wx_statusbar:roll_rec(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
@@ -370,16 +364,14 @@ handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
 
 handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
   utils_gui:disable_all_buttons(),
-  NameCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
-  NameStr = wxTextCtrl:getValue(NameCtrl),
-  case NameStr of
-    "" ->
-      utils_gui:sttext_roll_var(false, none),
+  TextCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
+  case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
+    '' ->
+      cauder_wx_statusbar:roll_var(false, none),
       refresh(false);
-    _ ->
-      Name = list_to_atom(NameStr),
+    Name ->
       {Success, FocusLog} = cauder:eval_roll_var(Name),
-      utils_gui:sttext_roll_var(Success, NameStr),
+      cauder_wx_statusbar:roll_var(Success, Name),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh(Success)
   end,
@@ -480,7 +472,7 @@ loadFile(File, #wx_state{menubar = Menu}) ->
   utils_gui:disable_all_buttons(),
   utils_gui:clear_texts(),
 
-  utils_gui:update_status_text("Loaded file " ++ File).
+  cauder_wx_statusbar:update("Loaded file " ++ File).
 
 
 -spec loadReplayData(file:filename()) -> ok.
@@ -539,7 +531,7 @@ start(M, F, As, Pid, Log) ->
 
   % Update status bar message
   StatusString = "Started system with " ++ atom_to_list(F) ++ "/" ++ integer_to_list(length(As)) ++ " fun application!",
-  utils_gui:update_status_text(StatusString).
+  cauder_wx_statusbar:update(StatusString).
 
 
 refresh_buttons(Opts) ->
@@ -612,9 +604,9 @@ refresh(RefreshState) ->
 
 -spec button_to_semantics(ButtonId) -> Semantics when
   ButtonId :: ?STEP_FORWARD_BUTTON | ?STEP_BACKWARD_BUTTON |
-              ?STEP_OVER_FORWARD_BUTTON | ?STEP_OVER_BACKWARD_BUTTON |
-              ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
-              ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
+  ?STEP_OVER_FORWARD_BUTTON | ?STEP_OVER_BACKWARD_BUTTON |
+  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
+  ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
   Semantics :: ?FWD_SEM | ?BWD_SEM.
 
 button_to_semantics(?STEP_FORWARD_BUTTON)       -> ?FWD_SEM;

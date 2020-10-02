@@ -12,17 +12,6 @@
 %% Misc.
 -export([clear_texts/0, sort_opts/1, pp_marked_text/2]).
 
-%% ----- Status text update functions ----- %%
--export([update_status_text/1]).
-%% Manual evaluation functions
--export([sttext_noproc/0, sttext_nomatch/0, sttext_reduce/2, sttext_step/2, sttext_step/3]).
-%% Automatic evaluation functions
--export([sttext_mult/3]).
-%% Replay evaluation functions
--export([sttext_replay/2, sttext_replay_send/2, sttext_replay_spawn/2, sttext_replay_rec/2]).
-%% Rollback evaluation functions
--export([sttext_roll/2, sttext_roll_send/2, sttext_roll_spawn/2, sttext_roll_rec/2, sttext_roll_var/2]).
--export([sttext_comp/0]).
 
 %% ETS functions
 %%-export([stop_refs/0]).
@@ -47,14 +36,6 @@ is_app_running() ->
 find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 
 
--spec rule_to_string(Rule) -> string() when
-  Rule :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
-
-rule_to_string(?RULE_SEQ)     -> "Seq";
-rule_to_string(?RULE_SELF)    -> "Self";
-rule_to_string(?RULE_SPAWN)   -> "Spawn";
-rule_to_string(?RULE_SEND)    -> "Send";
-rule_to_string(?RULE_RECEIVE) -> "Receive".
 
 
 %% ==================== Control utils evaluation ==================== %%
@@ -146,95 +127,6 @@ clear_texts() ->
 %%    true -> cauder:stop_refs();
 %%    false -> ok
 %%  end.
-
-
-semantics_to_string(?FWD_SEM) -> "forward";
-semantics_to_string(?BWD_SEM) -> "backward".
-
-
-sttext_noproc() -> update_status_text("Cannot perform any action because no process is selected.").
-
-sttext_nomatch() -> update_status_text("Cannot perform any forward action because there is no matching message to be received.").
-
-
-%% ==================== Manual actions ==================== %%
-
-
-sttext_reduce(Sem, Rule) ->
-  Status = io_lib:format("Performed a single ~s reduction step using rule: ~s.",
-                         [semantics_to_string(Sem), rule_to_string(Rule)]),
-  update_status_text(Status).
-
-sttext_step(Sem, Steps) ->
-  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped over to the next expression.",
-                         [Steps, semantics_to_string(Sem)]),
-  update_status_text(Status).
-
-sttext_step(Sem, Steps, {M, F, A}) ->
-  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped into the function '~s:~s/~b'.",
-                         [Steps, semantics_to_string(Sem), M, F, A]),
-  update_status_text(Status).
-
-
-%% ==================== Automatic actions ==================== %%
-
-
-sttext_mult(Sem, Done, Total) ->
-  Dir = semantics_to_string(Sem),
-  DoneStr = integer_to_list(Done),
-  TotalStr = integer_to_list(Total),
-  update_status_text("Performed " ++ DoneStr ++ " " ++ Dir ++ " steps, from a total of " ++ TotalStr ++ ".").
-
-
-%% ==================== Rollback actions ==================== %%
-
-
-sttext_replay(StepsDone, Steps) ->
-  StepsDoneStr = integer_to_list(StepsDone),
-  StepsStr = integer_to_list(Steps),
-  FullStr = StepsDoneStr ++ " of " ++ StepsStr ++ " steps replayed",
-  update_status_text(FullStr).
-
-sttext_replay_send(false, _) -> update_status_text("Could not replay the sending of that message");
-sttext_replay_send(true, Id) -> update_status_text("Replayed sending of message with id " ++ Id).
-
-sttext_replay_spawn(false, _) -> update_status_text("Could not replay the spawning of that process");
-sttext_replay_spawn(true, Id) -> update_status_text("Replayed spawning of process with Pid " ++ Id).
-
-sttext_replay_rec(false, _) -> update_status_text("Could not replay the receiving of that message");
-sttext_replay_rec(true, Id) -> update_status_text("Replayed receiving of message with id " ++ Id).
-
-
-%% ==================== Rollback actions ==================== %%
-
-
-sttext_roll(StepsDone, Steps) ->
-  StepsDoneStr = integer_to_list(StepsDone),
-  StepsStr = integer_to_list(Steps),
-  FullStr = StepsDoneStr ++ " of " ++ StepsStr ++ " steps rolled back",
-  update_status_text(FullStr).
-
-sttext_roll_send(false, _) -> update_status_text("Could not roll back the sending of that message");
-sttext_roll_send(true, Id) -> update_status_text("Rolled back sending of message with id " ++ Id).
-
-sttext_roll_spawn(false, _) -> update_status_text("Could not roll back the spawning of that process");
-sttext_roll_spawn(true, Id) -> update_status_text("Rolled back spawning of process with Pid " ++ Id).
-
-sttext_roll_rec(false, _) -> update_status_text("Could not roll back the receiving of that message");
-sttext_roll_rec(true, Id) -> update_status_text("Rolled back receiving of message with id " ++ Id).
-
-sttext_roll_var(false, _) -> update_status_text("Could not roll back the binding of that variable");
-sttext_roll_var(true, Id) -> update_status_text("Rolled back binding of variable " ++ Id).
-
-
-
-sttext_comp() ->
-  FullStr = "Compiler options have changed, open file again to take effect",
-  update_status_text(FullStr).
-
-update_status_text(String) ->
-  Frame = find(?FRAME, wxFrame), % TODO
-  wxFrame:setStatusText(Frame, String).
 
 
 sort_opts(Opts) -> lists:sort(fun(P1, P2) -> P1#opt.pid < P2#opt.pid end, Opts).
