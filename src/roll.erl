@@ -12,10 +12,10 @@
 -spec can_roll(cauder_types:system(), pos_integer()) -> boolean().
 
 can_roll(#sys{procs = Procs}, Pid) ->
-  case utils:pid_exists(Procs, Pid) of
+  case orddict:is_key(Pid, Procs) of
     false -> false;
     true ->
-      {Proc, _} = utils:take_process(Procs, Pid),
+      {Proc, _} = orddict:take(Pid, Procs),
       case Proc#proc.hist of
         [] -> false;
         _ -> true
@@ -27,7 +27,7 @@ can_roll(#sys{procs = Procs}, Pid) ->
 
 roll_step(Sys0, Pid) ->
   Procs = Sys0#sys.procs,
-  {Proc, _} = utils:take_process(Procs, Pid),
+  {Proc, _} = orddict:take(Pid, Procs),
   %io:format("eval_roll - hist: ~p\n",[Proc#proc.hist]),
   [CurHist | _] = Proc#proc.hist,
   case CurHist of
@@ -133,7 +133,7 @@ roll_var(Sys, Name) ->
 -spec roll_until_spawn(cauder_types:system(), cauder_types:proc_id(), cauder_types:proc_id()) -> cauder_types:system().
 
 roll_until_spawn(Sys0, Pid, SpawnPid) ->
-  {Proc, _} = utils:take_process(Sys0#sys.procs, Pid),
+  {Proc, _} = orddict:take(Pid, Sys0#sys.procs),
   [Hist | _] = Proc#proc.hist,
   Sys1 = roll_step(Sys0, Pid),
   case Hist of
@@ -145,7 +145,7 @@ roll_until_spawn(Sys0, Pid, SpawnPid) ->
 -spec roll_until_send(cauder_types:system(), cauder_types:proc_id(), cauder_types:msg_id()) -> cauder_types:system().
 
 roll_until_send(Sys0, Pid, UID) ->
-  {Proc, _} = utils:take_process(Sys0#sys.procs, Pid),
+  {Proc, _} = orddict:take(Pid, Sys0#sys.procs),
   [Hist | _] = Proc#proc.hist,
   Sys1 = roll_step(Sys0, Pid),
   case Hist of
@@ -157,7 +157,7 @@ roll_until_send(Sys0, Pid, UID) ->
 -spec roll_until_rec(cauder_types:system(), cauder_types:proc_id(), cauder_types:msg_id()) -> cauder_types:system().
 
 roll_until_rec(Sys0, Pid, UID) ->
-  {Proc, _} = utils:take_process(Sys0#sys.procs, Pid),
+  {Proc, _} = orddict:take(Pid, Sys0#sys.procs),
   [Hist | _] = Proc#proc.hist,
   case Hist of
     {rec, _Bs, _Es, _Stk, #msg{uid = UID}} ->
@@ -172,7 +172,7 @@ roll_until_rec(Sys0, Pid, UID) ->
 
 roll_after_rec(Sys0, Pid, UID) ->
   Sys1 = roll_step(Sys0, Pid),
-  {Proc, _} = utils:take_process(Sys1#sys.procs, Pid),
+  {Proc, _} = orddict:take(Pid, Sys1#sys.procs),
   [Hist | _] = Proc#proc.hist,
   case Hist of
     {rec, _Bs, _E, _Stk, #msg{uid = UID}} ->
@@ -184,7 +184,7 @@ roll_after_rec(Sys0, Pid, UID) ->
 -spec roll_until_var(cauder_types:system(), cauder_types:proc_id(), atom()) -> cauder_types:system().
 
 roll_until_var(Sys0, Pid, Name) ->
-  {#proc{env = Bs}, _} = utils:take_process(Sys0#sys.procs, Pid),
+  {#proc{env = Bs}, _} = orddict:take(Pid, Sys0#sys.procs),
   Sys1 = roll_step(Sys0, Pid),
   case utils:has_var(Bs, Name) of
     false -> Sys1;

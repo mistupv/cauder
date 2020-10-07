@@ -9,8 +9,8 @@
 
 %% API
 -export([start/0]).
-
--export([load_file/1, init_system/5, entry_points/1, system/0, status/0]).
+-export([load_file/1, init_system/5, stop_system/0, entry_points/1]).
+-export([system/0, status/0, path/0]). % TODO Remove, this are temporary functions until UI and logic are fully decoupled
 %% Manual evaluation functions
 -export([eval_opts/1, eval_reduce/2, eval_step/2]).
 %% Automatic evaluation functions
@@ -44,7 +44,7 @@ start() ->
 load_file(File) ->
   Status = get(status),
   put(status, Status#status{loaded = true}),
-  put(path, filename:absname(File)),
+  put(path, filename:absname(filename:dirname(File))),
   cauder_load:file(File).
 
 
@@ -76,6 +76,18 @@ init_system(Mod, Fun, Args, Pid, Log) ->
   ok.
 
 
+stop_system() ->
+  Status = get(status),
+  put(status, Status#status{running = false}),
+  erase(system),
+  erase(last_pid),
+  erase(last_uid),
+  erase(last_var),
+  erase(line),
+
+  ok.
+
+
 -spec entry_points(Module :: atom()) -> list({Module :: atom(), Function :: atom(), Arity :: arity()}).
 
 entry_points(Module) ->
@@ -85,39 +97,52 @@ entry_points(Module) ->
   lists:map(fun({{M, F, A, _}, _}) -> {M, F, A} end, SortedDefs).
 
 
--spec system() -> cauder_types:system().
+-spec system() -> cauder_types:system() | undefined.
 
-system() -> get(system). % TODO Remove
-status() -> get(status). % TODO Remove
+system() -> get(system). % TODO Remove, this is a temporary function until UI and logic are fully decoupled
+
+
+-spec status() -> #status{}.
+
+status() -> get(status). % TODO Remove, this is a temporary function until UI and logic are fully decoupled
+
+
+-spec path() -> file:filename().
+
+path() -> get(path). % TODO Remove, this is a temporary function until UI and logic are fully decoupled
 
 
 %% -------------------------------------------------------------------
-%% @doc Loads the replay data for all the processes in the current replay
-%% data, except for the one with the MainPid, which has already been loaded.
+%% @doc If replay data has been loaded, then it loads the log for all
+%% the processes in the current replay data, except for the one with
+%% the MainPid, which has already been loaded.
 
 -spec load_ghosts(MainPid :: cauder_types:proc_id()) -> cauder_types:process_dict().
 
 load_ghosts(MainPid) ->
-  #replay{log_path = Path} = get(replay_data),
-  {ok, Filenames} = file:list_dir(Path),
-  Ghosts =
-    lists:filtermap(
-      fun(Filename) ->
-        case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
-          {match, [StrPid]} ->
-            case list_to_integer(StrPid) of
-              MainPid -> false;
-              Pid ->
-                Proc = #proc{
-                  pid = Pid,
-                  log = utils:get_log_data(Path, Pid)
-                },
-                {true, {Pid, Proc}}
-            end;
-          nomatch -> false
-        end
-      end, Filenames),
-  orddict:from_list(Ghosts).
+  case get(replay_data) of
+    undefined -> orddict:new();
+    #replay{log_path = Path} ->
+      {ok, Filenames} = file:list_dir(Path),
+      Ghosts =
+        lists:filtermap(
+          fun(Filename) ->
+            case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
+              {match, [StrPid]} ->
+                case list_to_integer(StrPid) of
+                  MainPid -> false;
+                  Pid ->
+                    Proc = #proc{
+                      pid = Pid,
+                      log = utils:get_log_data(Path, Pid)
+                    },
+                    {true, {Pid, Proc}}
+                end;
+              nomatch -> false
+            end
+          end, Filenames),
+      orddict:from_list(Ghosts)
+  end.
 
 
 %% ===================================================================
@@ -158,7 +183,7 @@ eval_reduce(Sem, Pid) ->
 
 eval_step(Sem, Pid) ->
   Sys0 = get(system),
-  {#proc{exprs = Es}, _} = utils:take_process(Sys0#sys.procs, Pid),
+  {#proc{exprs = Es}, _} = orddict:take(Pid, Sys0#sys.procs),
   case catch eval_step_1(Sem, Sys0, Pid, Es, 0) of
     {Sys1, Steps} ->
       put(system, Sys1),
@@ -173,7 +198,7 @@ eval_step_1(Sem, Sys0, Pid, Es0, Steps) ->
     catch
       error:{badmatch, nomatch} -> throw(nomatch)
     end,
-  {#proc{exprs = Es1}, _} = utils:take_process(Sys1#sys.procs, Pid),
+  {#proc{exprs = Es1}, _} = orddict:take(Pid, Sys1#sys.procs),
   case Sem of
     ?FWD_SEM when Es1 =:= tl(Es0) -> throw({Sys1, Steps});
     ?BWD_SEM when tl(tl(Es1)) =:= Es0 -> throw({Sys0, Steps});
@@ -399,7 +424,7 @@ eval_roll_var(Name) ->
 edit_binding(Pid, {Key, NewValue}) ->
   Sys0 = get(system),
   PDict0 = Sys0#sys.procs,
-  P0 = utils:find_process(PDict0, Pid),
+  {ok, P0} = orddict:find(Pid, PDict0),
   Bs0 = P0#proc.env,
 
   Bs1 = orddict:store(Key, NewValue, Bs0),

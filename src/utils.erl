@@ -5,18 +5,17 @@
 
 -module(utils).
 -export([fundef_lookup/3, fundef_rename/1,
-         temp_variable/1, is_temp_variable_name/1, fresh_uid/0, pid_exists/2,
-         take_process/2, select_msg/2,
+         temp_variable/1, is_temp_variable_name/1, fresh_uid/0, select_msg/2,
          find_proc_with_send/2,
          find_proc_with_spawn/2, find_proc_with_rec/2,
          find_proc_with_var/2,
          merge_bindings/2,
          stringToMFA/1, stringToExprs/1,
          filter_options/2,
-         has_fwd/1, has_bwd/1, has_norm/1, has_var/2,
+         has_var/2,
          is_queue_minus_msg/3, topmost_rec/1, last_msg_rest/1,
          gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1,
-         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2, current_line/1, find_process/2]).
+         load_replay_data/1, get_log_data/2, parse_call/1, fresh_pid/0, check_log/1, find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2, check_msg/2, current_line/1]).
 
 -include("cauder.hrl").
 
@@ -111,30 +110,6 @@ is_temp_variable_name(Name) ->
     "k_" ++ _ -> true
     ;_ -> false
   end.
-
-
-
-
--spec pid_exists(cauder_types:process_dict(), pos_integer()) -> boolean().
-
-pid_exists(Procs, Pid) -> orddict:is_key(Pid, Procs).
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns a tuple where the first element is the process whose
-%% Pid matches the given one, and the second element is a dictionary
-%% without the previous process.
-%% @end
-%%--------------------------------------------------------------------
-
--spec take_process(cauder_types:process_dict(), pos_integer()) -> {cauder_types:process(), cauder_types:process_dict()}.
-
-take_process(Procs, Pid) -> {_P, _Ps} = orddict:take(Pid, Procs). % XXX May throw badmatch
-
-
--spec find_process(cauder_types:process_dict(), pos_integer()) -> cauder_types:process().
-
-find_process(Procs, Pid) -> {ok, Proc} = orddict:find(Pid, Procs), Proc. % XXX May throw badmatch
 
 
 %%--------------------------------------------------------------------
@@ -291,31 +266,6 @@ stringToExprs(Str) ->
 filter_options([Opt | Opts], Id) when Opt#opt.pid =:= Id -> [Opt | filter_options(Opts, Id)];
 filter_options([_ | Opts], Id)                           -> filter_options(Opts, Id);
 filter_options([], _)                                    -> [].
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns true if a list of Options has a forward option,
-%% and false otherwise
-
-has_fwd([])                         -> false;
-has_fwd([#opt{sem = ?FWD_SEM} | _]) -> true;
-has_fwd([_ | Opts])                 -> has_fwd(Opts).
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns true if a list of Options has a backward option,
-%% and false otherwise
-
-has_bwd([])                         -> false;
-has_bwd([#opt{sem = ?BWD_SEM} | _]) -> true;
-has_bwd([_ | Opts])                 -> has_bwd(Opts).
-
-
-%%--------------------------------------------------------------------
-%% @doc Returns true if a list of Options has a normalizing option,
-%% and false otherwise
-
-has_norm(Opts) -> has_fwd(Opts). % TODO Remove?
 
 
 %%--------------------------------------------------------------------

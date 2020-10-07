@@ -5,7 +5,7 @@
 -include("cauder_wx.hrl").
 
 %% API
--export([create/1]).
+-export([create/1, enable/2]).
 
 
 -record(menu_item, {
@@ -27,7 +27,6 @@ create(Frame) ->
   FileMenu = create_menu(
     [
       #menu_item{id = ?MENU_File_Open, text = "&Open...\tCtrl+O"},
-      #menu_item{id = ?MENU_File_LoadTrace, text = "Load &Trace...\tCtrl+T", enabled = false},
       separator,
       #menu_item{id = ?MENU_File_Exit, text = "E&xit"}
     ]
@@ -63,6 +62,13 @@ create(Frame) ->
     ]
   ),
 
+  RunMenu = create_menu(
+    [
+      #menu_item{id = ?MENU_Run_Start, text = "St&art...", enabled = false},
+      #menu_item{id = ?MENU_Run_Stop, text = "St&op", enabled = false}
+    ]
+  ),
+
   HelpMenu = create_menu(
     [
       #menu_item{id = ?MENU_Help_ViewHelp, text = "View &Help"},
@@ -74,6 +80,7 @@ create(Frame) ->
   wxMenuBar:append(MenuBar, FileMenu, "&File"),
   wxMenuBar:append(MenuBar, EditMenu, "&Edit"),
   wxMenuBar:append(MenuBar, ViewMenu, "&View"),
+  wxMenuBar:append(MenuBar, RunMenu, "&Run"),
   wxMenuBar:append(MenuBar, HelpMenu, "&Help"),
 
   wxFrame:setMenuBar(Frame, MenuBar),
@@ -106,3 +113,11 @@ create_item(#menu_item{id = Id, text = Text, help = Help, kind = radio, enabled 
 
 create_item(separator) ->
   wxMenuItem:new([{kind, ?wxITEM_SEPARATOR}]).
+
+
+-spec enable(ItemId :: integer(), Enable :: boolean()) -> 'ok'.
+
+enable(ItemId, Enable) ->
+  Frame = utils_gui:find(?FRAME, wxFrame),
+  MenuBar = wxFrame:getMenuBar(Frame),
+  wxMenuBar:enable(MenuBar, ItemId, Enable).

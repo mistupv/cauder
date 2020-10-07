@@ -33,7 +33,7 @@ create(Frame) ->
 
   % Notebook
 
-  Notebook = wxNotebook:new(Win, ?ACTION_NOTEBOOK),
+  Notebook = wxNotebook:new(Win, ?wxID_ANY),
   wxStaticBoxSizer:add(Sizer, Notebook, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   wxNotebook:addPage(Notebook, create_manual(Notebook), "Manual"),
@@ -45,39 +45,100 @@ create(Frame) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Updates the elements of the process selector
+%% @doc Updates the process selector and the action panels
 
-update(#sys{procs = []}) ->
+-spec update(System :: cauder_types:system() | 'undefined') -> ok.
+
+update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
+  % Disable and clear process selector
   Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
-  wxChoice:freeze(Choice),
   wxChoice:disable(Choice),
   wxChoice:clear(Choice),
-  wxChoice:thaw(Choice);
-update(#sys{procs = ProcDict}) ->
+
+  % Disable all actions
+  wxPanel:disable(utils_gui:find(?ACTION_Manual, wxPanel)),
+  wxPanel:disable(utils_gui:find(?ACTION_Automatic, wxPanel)),
+  wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel)),
+  wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel)),
+
+  ok;
+
+update(#sys{procs = ProcDict} = System) ->
   Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
-  wxChoice:freeze(Choice),
-  wxChoice:enable(Choice),
-  PrevSel = wxChoice:getStringSelection(Choice),
-  wxChoice:clear(Choice),
   {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
-  lists:foreach(
-    fun(Proc) ->
-      Label = pretty_print:process(Proc),
-      wxChoice:append(Choice, Label, Proc#proc.pid)
-    end,
-    Procs
-  ),
-  wxChoice:setStringSelection(Choice, PrevSel),
-  case wxChoice:getSelection(Choice) of
-    ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
-    _ -> ok
+
+  % Enable and populate process selector
+  case get({?MODULE, system}) of
+    System -> ok;
+    _ ->
+      wxChoice:freeze(Choice),
+      wxChoice:enable(Choice),
+      PrevSel = wxChoice:getStringSelection(Choice),
+      wxChoice:clear(Choice),
+      lists:foreach(
+        fun(Proc) ->
+          Label = pretty_print:process(Proc),
+          wxChoice:append(Choice, Label, Proc#proc.pid)
+        end,
+        Procs
+      ),
+      wxChoice:setStringSelection(Choice, PrevSel),
+      case wxChoice:getSelection(Choice) of
+        ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
+        _ -> ok
+      end,
+      wxChoice:thaw(Choice),
+
+      put({?MODULE, system}, System)
   end,
-  wxChoice:thaw(Choice),
+
+  Options = cauder:eval_opts(System),
+  #proc{log = Log, hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
+
+  % Enable/disable manual actions
+  wxPanel:enable(utils_gui:find(?ACTION_Manual, wxPanel)),
+
+  case cauder_wx_actions:selected_pid() of
+    none ->
+      wxButton:disable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton)),
+      wxButton:disable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton)),
+      wxButton:disable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton)),
+      wxButton:disable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton)),
+      wxButton:disable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton)),
+      wxButton:disable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton));
+    Pid ->
+      ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options),
+      ProcHasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
+      ProcHasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
+
+      wxButton:enable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}]),
+      wxButton:enable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}]),
+      wxButton:enable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}])
+  end,
+
+  % Enable/disable automatic actions
+  wxPanel:enable(utils_gui:find(?ACTION_Automatic, wxPanel)),
+
+  HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
+  HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+
+  wxSpinCtrl:enable(utils_gui:find(?STEPS_SPIN, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
+  wxButton:enable(utils_gui:find(?MULTIPLE_FORWARD_BUTTON, wxSpinCtrl), [{enable, HasFwd}]),
+  wxButton:enable(utils_gui:find(?MULTIPLE_BACKWARD_BUTTON, wxSpinCtrl), [{enable, HasBwd}]),
+
+  % Enable/disable replay/rollback actions
+  % TODO Only disable replay/rollback steps while any other process has a log/history, and only disable all replay/rollback actions if no process has a log/history
+  wxPanel:enable(utils_gui:find(?ACTION_Replay, wxPanel), [{enable, length(Log) > 0}]),
+  wxPanel:enable(utils_gui:find(?ACTION_Rollback, wxPanel), [{enable, length(Hist) > 0}]),
+
   ok.
 
 
 create_manual(Parent) ->
-  Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent, [{winid, ?ACTION_Manual}]),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
   wxWindow:setSizer(Win, Border),
@@ -142,7 +203,7 @@ create_manual(Parent) ->
 
 
 create_automatic(Parent) ->
-  Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent, [{winid, ?ACTION_Automatic}]),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
   wxWindow:setSizer(Win, Border),
@@ -190,7 +251,7 @@ create_automatic(Parent) ->
 
 
 create_replay(Parent) ->
-  Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent, [{winid, ?ACTION_Replay}]),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
   wxWindow:setSizer(Win, Border),
@@ -295,7 +356,7 @@ create_replay(Parent) ->
 
 
 create_rollback(Parent) ->
-  Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent, [{winid, ?ACTION_Rollback}]),
 
   Border = wxBoxSizer:new(?wxVERTICAL),
   wxWindow:setSizer(Win, Border),

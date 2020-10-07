@@ -29,7 +29,7 @@ create(Parent) ->
   Win.
 
 
--spec update(Process :: cauder_types:process()) -> ok.
+-spec update(Process :: cauder_types:process() | 'undefined') -> ok.
 
 update(Process) ->
   update_bindings(Process),
@@ -40,6 +40,8 @@ update(Process) ->
 
 %% ===== Bindings ===== %%
 
+
+-spec create_bindings(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_bindings(Parent) ->
   Win = wxPanel:new(Parent),
@@ -69,33 +71,44 @@ create_bindings(Parent) ->
   Win.
 
 
-update_bindings(#proc{env = Bs, exprs = Es}) ->
+-spec update_bindings(Process :: cauder_types:process() | 'undefined') -> ok.
+
+update_bindings(Process) ->
   BindArea = utils_gui:find(?BINDINGS_LIST, wxListCtrl),
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
-  Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs),
-  Bs1 = Bs0, % TODO
-%%    case wxMenu:isChecked(MenuView, ?MENU_View_FullEnvironment) of
-%%      true -> Bs0;
-%%      false ->
-%%        Es1 = cauder_syntax:to_abstract_expr(Es),
-%%        Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-%%        lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
-%%    end,
-  lists:foldl(
-    fun({Id, {Key, Val}}, Row) ->
-      wxListCtrl:insertItem(BindArea, Row, ""),
-      wxListCtrl:setItemFont(BindArea, Row, wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL)),
-      wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Key)),
-      wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
-      wxListCtrl:setItemData(BindArea, Row, Id),
-      Row + 1
-    end, 0, Bs1),
+  case Process of
+    undefined -> ok;
+    #proc{env = Bs, exprs = Es} ->
+      MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
+      Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+
+      Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs), % [{Idx, Binding}]
+      Bs1 =
+        case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullEnvironment) of
+          true -> Bs0;
+          false ->
+            Es1 = cauder_syntax:to_abstract_expr(Es),
+            Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+            lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
+        end,
+      lists:foldl(
+        fun({Idx, {Key, Val}}, Row) ->
+          wxListCtrl:insertItem(BindArea, Row, ""),
+          wxListCtrl:setItemFont(BindArea, Row, Font),
+          wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Key)),
+          wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
+          wxListCtrl:setItemData(BindArea, Row, Idx),
+          Row + 1
+        end, 0, Bs1)
+  end,
   wxListCtrl:thaw(BindArea).
 
 
 %% ===== Stack ===== %%
 
+
+-spec create_stack(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_stack(Parent) ->
   Win = wxPanel:new(Parent),
@@ -112,17 +125,25 @@ create_stack(Parent) ->
   Win.
 
 
-update_stack(#proc{stack = Stk}) ->
+-spec update_stack(Process :: cauder_types:process() | 'undefined') -> ok.
+
+update_stack(Process) ->
   StackArea = utils_gui:find(?STACK_LIST, wxListBox),
   wxListBox:freeze(StackArea),
   wxListBox:clear(StackArea),
-  Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
-  lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries),
+  case Process of
+    undefined -> ok;
+    #proc{stack = Stk} ->
+      Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
+      lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
+  end,
   wxListBox:thaw(StackArea).
 
 
 %% ===== Log ===== %%
 
+
+-spec create_log(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_log(Parent) ->
   Win = wxPanel:new(Parent),
@@ -139,17 +160,25 @@ create_log(Parent) ->
   Win.
 
 
-update_log(#proc{log = Log}) ->
+-spec update_log(Process :: cauder_types:process() | 'undefined') -> ok.
+
+update_log(Process) ->
   LogArea = utils_gui:find(?LOG_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(LogArea),
   wxTextCtrl:clear(LogArea),
-  Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
-  utils_gui:pp_marked_text(LogArea, Entries),
+  case Process of
+    undefined -> ok;
+    #proc{log = Log} ->
+      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
+      utils_gui:pp_marked_text(LogArea, Entries)
+  end,
   wxTextCtrl:thaw(LogArea).
 
 
 %% ===== History ===== %%
 
+
+-spec create_history(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_history(Parent) ->
   Win = wxPanel:new(Parent),
@@ -166,15 +195,30 @@ create_history(Parent) ->
   Win.
 
 
-update_history(#proc{hist = Hist0}) ->
+-spec update_history(Process :: cauder_types:process() | 'undefined') -> ok.
+
+update_history(Process) ->
   HistoryArea = utils_gui:find(?HISTORY_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(HistoryArea),
   wxTextCtrl:clear(HistoryArea),
-  Hist1 = Hist0, % FIXME
-%%    case wxMenu:isChecked(MenuView, ?MENU_View_FullHistory) of
-%%      true -> Hist0;
-%%      false -> lists:filter(fun pretty_print:is_conc_item/1, Hist0)
-%%    end,
-  Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
-  utils_gui:pp_marked_text(HistoryArea, Entries),
+  case Process of
+    undefined -> ok;
+    #proc{hist = Hist} ->
+      MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
+      Hist1 =
+        case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
+          true -> Hist;
+          false -> lists:filter(fun is_conc_item/1, Hist)
+        end,
+      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
+      utils_gui:pp_marked_text(HistoryArea, Entries)
+  end,
   wxTextCtrl:thaw(HistoryArea).
+
+
+-spec is_conc_item(cauder_types:history_entry()) -> boolean().
+
+is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
+is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
+is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true;
+is_conc_item(_)                             -> false.

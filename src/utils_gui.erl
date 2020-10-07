@@ -3,11 +3,11 @@
 -export([find/2]).
 
 %% Control related functions
--export([enable_control/1, enable_controls/1, enable_control_if/2, enable_controls_if/2, enable_replay/0, enable_roll/0,
-         disable_control/1, disable_controls/1, disable_all_buttons/0, disable_all_inputs/0]).
+-export([enable_control/1, enable_controls/1, enable_control_if/2, enable_controls_if/2,
+         disable_control/1, disable_controls/1]).
 
 %% Misc.
--export([clear_texts/0, sort_opts/1, pp_marked_text/2]).
+-export([sort_opts/1, pp_marked_text/2]).
 
 
 %% ETS functions
@@ -22,8 +22,6 @@
 -spec find(Id :: integer(), Type :: atom()) -> wx:wx_object().
 
 find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
-
-
 
 
 %% ==================== Control utils evaluation ==================== %%
@@ -53,16 +51,6 @@ enable_controls(Ids) -> wx:foreach(fun enable_control/1, Ids).
 disable_controls(Ids) -> wx:foreach(fun disable_control/1, Ids).
 
 
--spec disable_all_inputs() -> ok.
-
-disable_all_inputs() -> disable_controls(?ALL_INPUTS).
-
-
--spec disable_all_buttons() -> ok.
-
-disable_all_buttons() -> disable_controls(?ALL_BUTTONS).
-
-
 -spec enable_control_if(ControlId :: integer(), Condition :: boolean()) -> ok.
 
 enable_control_if(Id, true)  -> enable_control(Id);
@@ -73,41 +61,6 @@ enable_control_if(Id, false) -> disable_control(Id).
 
 enable_controls_if(Ids, true)  -> enable_controls(Ids);
 enable_controls_if(Ids, false) -> disable_controls(Ids).
-
-
--spec enable_replay() -> ok.
-
-enable_replay() ->
-  enable_controls(?REPLAY_INPUTS),
-  enable_controls(?REPLAY_BUTTONS),
-  ok.
-
-
--spec enable_roll() -> ok.
-
-enable_roll() ->
-  enable_controls(?ROLL_INPUTS),
-  enable_controls(?ROLL_BUTTONS),
-  ok.
-
-%%set_choices(Choices) ->
-%%  FunChoice = ref_lookup(?FUN_CHOICE),
-%%  wxChoice:clear(FunChoice),
-%%  [wxChoice:append(FunChoice, Choice) || Choice <- Choices],
-%%  wxChoice:setSelection(FunChoice, 0).
-
-clear_texts() ->
-  Batch =
-    fun() ->
-      wxListBox:clear(find(?TRACE_LIST, wxListBox)),
-      wxListBox:clear(find(?ROLL_LOG_LIST, wxListBox)),
-      wxListCtrl:deleteAllItems(find(?BINDINGS_LIST, wxListCtrl)),
-      wxListBox:clear(find(?STACK_LIST, wxListBox)),
-      wxTextCtrl:clear(find(?LOG_TEXT, wxTextCtrl)),
-      wxTextCtrl:clear(find(?HISTORY_TEXT, wxTextCtrl))
-    end,
-
-  wx:batch(Batch).
 
 
 %%stop_refs() ->

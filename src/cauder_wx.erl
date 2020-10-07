@@ -18,7 +18,7 @@
   content :: wxWindow:wxWindow(),
   statusbar :: wxStatusBar:wxStatusBar(),
 
-  last_path :: file:filename() | undefined
+  module :: atom() | undefined
 }).
 
 -type state() :: #wx_state{}.
@@ -63,9 +63,6 @@ init([]) ->
   Content = cauder_wx_areas:create(Frame),
   StatusBar = cauder_wx_statusbar:create(Frame),
 
-  utils_gui:disable_all_inputs(),
-  utils_gui:disable_all_buttons(),
-
   wxMenuBar:check(Menubar, ?MENU_View_Mailbox, true),
   wxMenuBar:check(Menubar, ?MENU_View_Log, true),
   wxMenuBar:check(Menubar, ?MENU_View_History, true),
@@ -89,6 +86,8 @@ init([]) ->
   wxFrame:show(Frame),
   wxFrame:raise(Frame),
 
+  refresh(true),
+
   {Frame, #wx_state{
     frame     = Frame,
     menubar   = Menubar,
@@ -111,25 +110,28 @@ handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
     case wxDialog:showModal(Dialog) of
       ?wxID_OK ->
         Path = wxFileDialog:getPath(Dialog),
-        loadFile(Path, State),
-        State#wx_state{last_path = Path};
+        Module = open_file(Path),
+        State#wx_state{module = Module};
       _Other -> State
     end,
   wxDialog:destroy(Dialog),
+
   {noreply, State1};
 
-handle_event(?MENU_EVENT(?MENU_File_LoadTrace), #wx_state{frame = Frame, last_path = DefaultPath} = State) ->
-  Title = "Select a log folder",
-  Dialog = wxDirDialog:new(Frame, [{title, Title},
-                                   {defaultPath, DefaultPath},
-                                   {style, ?wxDD_DIR_MUST_EXIST}]),
-  case wxDialog:showModal(Dialog) of
-    ?wxID_OK ->
-      Path = wxDirDialog:getPath(Dialog),
-      loadReplayData(Path);
-    _Other -> ok
+handle_event(?MENU_EVENT(?MENU_Run_Start), #wx_state{frame = Frame, module = Module} = State) ->
+  EntryPoints = cauder:entry_points(Module),
+  case cauder_wx_dialog:start_session(Frame, EntryPoints) of
+    {manual, {Mod, Fun, Args}} -> start_manual_session(Mod, Fun, Args);
+    {replay, TracePath} -> start_replay_session(TracePath);
+    false -> ok
   end,
-  wxDialog:destroy(Dialog),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_Run_Stop), #wx_state{frame = Frame} = State) ->
+  case cauder_wx_dialog:stop_session(Frame) of
+    true -> stop_session();
+    false -> ok
+  end,
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
@@ -194,7 +196,6 @@ handle_event(#wx{id = ?PROC_CHOICE, event = #wxCommand{type = command_choice_sel
 %% -------------------- Manual Actions -------------------- %%
 
 handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -208,7 +209,6 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -229,7 +229,6 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
 %% -------------------- Automatic Actions -------------------- %%
 
 handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
-  utils_gui:disable_all_buttons(),
   Sem = button_to_semantics(Button),
   Spinner = utils_gui:find(?STEPS_SPIN, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
@@ -241,7 +240,6 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
 %% -------------------- Replay Actions -------------------- %%
 
 handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -256,7 +254,6 @@ handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -271,7 +268,6 @@ handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -286,7 +282,6 @@ handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -303,7 +298,6 @@ handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
 %% -------------------- Rollback Actions -------------------- %%
 
 handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -319,7 +313,6 @@ handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -335,7 +328,6 @@ handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -351,7 +343,6 @@ handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
@@ -367,7 +358,6 @@ handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
-  utils_gui:disable_all_buttons(),
   TextCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
@@ -386,7 +376,7 @@ handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
 handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
   Sys = cauder:system(),
   Pid = cauder_wx_actions:selected_pid(),
-  #proc{env = Bs} = utils:find_process(Sys#sys.procs, Pid),
+  {ok, #proc{env = Bs}} = orddict:find(Pid, Sys#sys.procs),
   Nth = wxListCtrl:getItemData(BindingList, Index),
   {Key, Value} = lists:nth(Nth, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
@@ -461,8 +451,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 
 
-%% Loads the specified '.erl' source file
-loadFile(File, #wx_state{menubar = Menu}) ->
+%%--------------------------------------------------------------------
+%% @doc Loads the specified '.erl' source file
+
+-spec open_file(File :: file:filename()) -> Module :: atom().
+
+open_file(File) ->
   %utils_gui:stop_refs(), % TODO
 
   {ok, Module} = cauder:load_file(File),
@@ -471,25 +465,36 @@ loadFile(File, #wx_state{menubar = Menu}) ->
   CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
-  wxMenuBar:enable(Menu, ?MENU_File_LoadTrace, true),
+  cauder_wx_menu:enable(?MENU_Run_Start, true),
 
-  _MFAs = cauder:entry_points(Module),
-%%  utils_gui:set_choices(MFAs),
-  utils_gui:disable_all_buttons(),
-  utils_gui:clear_texts(),
+  cauder_wx_statusbar:update("Loaded file " ++ File),
 
-  cauder_wx_statusbar:update("Loaded file " ++ File).
+  Module.
 
 
--spec loadReplayData(file:filename()) -> ok.
+%%--------------------------------------------------------------------
+%% @doc Starts a new manual debugging session with the given function application.
 
-loadReplayData(Path) ->
+-spec start_manual_session(Module, Function, Args) -> ok when
+  Module :: atom(),
+  Function :: atom(),
+  Args :: [erl_parse:abstract_expr()].
+
+start_manual_session(M, F, As) -> start_session(M, F, As, 1, []).
+
+
+%%--------------------------------------------------------------------
+%% @doc Starts a new replay debugging session using the trace in the given directory.
+
+-spec start_replay_session(file:filename()) -> ok.
+
+start_replay_session(Path) ->
 %%  try
   utils:load_replay_data(Path),
   #replay{log_path = Path, call = {Mod, Fun, Args}, main_pid = Pid} = get(replay_data),
   Log = utils:get_log_data(Path, Pid),
   io:format("Log: ~p\n", [Log]),
-  start(Mod, Fun, Args, Pid, Log).
+  start_session(Mod, Fun, Args, Pid, Log).
 %%  catch
 %%    _:_ ->
 %%      Frame = ref_lookup(?FRAME),
@@ -498,99 +503,61 @@ loadReplayData(Path) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Starts a new system.
-%%
-%% @param Fun Entry point of the system.
-%% @param Args Arguments of the entry point.
-%% @end
-%%--------------------------------------------------------------------
+%% @doc Starts a new debugging session.
 
--spec start(Module, Function, Args) -> ok when
-  Module :: atom(),
-  Function :: atom(),
-  Args :: [erl_parse:abstract_expr()].
-
-start(M, F, As) -> start(M, F, As, 1, []).
-
-
-%%--------------------------------------------------------------------
-%% @doc Starts a new system.
-%%
-%% @param Fun Entry point function of the system.
-%% @param Args Arguments of the entry point.
-%% @param Pid Initial pid for the new system.
-%% @param Log Initial system log.
-%% @end
-%%--------------------------------------------------------------------
-
--spec start(Module, Function, Args, Pid, Log) -> ok when
+-spec start_session(Module, Function, Args, Pid, Log) -> ok when
   Module :: atom(),
   Function :: atom(),
   Args :: [erl_parse:abstract_expr()],
   Pid :: cauder_types:proc_id(),
   Log :: cauder_types:log().
 
-start(M, F, As, Pid, Log) ->
+start_session(M, F, As, Pid, Log) ->
   cauder:init_system(M, F, As, Pid, Log),
+
   refresh(true),
+
+  cauder_wx_menu:enable(?MENU_Run_Start, false),
+  cauder_wx_menu:enable(?MENU_Run_Stop, true),
 
   % Update status bar message
   StatusString = "Started system with " ++ atom_to_list(F) ++ "/" ++ integer_to_list(length(As)) ++ " fun application!",
   cauder_wx_statusbar:update(StatusString).
 
 
-refresh_buttons(Opts) ->
-  ?LOG("full options: " ++ ?TO_STRING(utils_gui:sort_opts(Opts))),
+stop_session() ->
+  cauder:stop_system(),
 
-  FwdButtons = [?STEP_FORWARD_BUTTON, ?STEP_OVER_FORWARD_BUTTON, ?STEP_INTO_FORWARD_BUTTON],
-  BwdButtons = [?STEP_BACKWARD_BUTTON, ?STEP_OVER_BACKWARD_BUTTON, ?STEP_INTO_BACKWARD_BUTTON],
+  refresh(true),
 
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      utils_gui:disable_controls(FwdButtons ++ BwdButtons);
-    Pid ->
-      utils_gui:enable_controls_if(FwdButtons, lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= ?FWD_SEM end, Opts)),
-      utils_gui:enable_controls_if(BwdButtons, lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= ?BWD_SEM end, Opts))
-  end,
+  cauder_wx_menu:enable(?MENU_Run_Start, true),
+  cauder_wx_menu:enable(?MENU_Run_Stop, false).
 
-  HasFwd = utils:has_fwd(Opts),
-  HasBwd = utils:has_bwd(Opts),
 
-  utils_gui:enable_control_if(?STEPS_SPIN, HasFwd orelse HasBwd),
-  utils_gui:enable_control_if(?MULTIPLE_FORWARD_BUTTON, HasFwd),
-  utils_gui:enable_control_if(?MULTIPLE_BACKWARD_BUTTON, HasBwd).
 
 
 -spec refresh(boolean()) -> ok.
 
 refresh(RefreshState) ->
-  #status{running = IsRunning} = cauder:status(), % TODO Remove
-  case IsRunning of
+  % TODO Remove argument
+  System = cauder:system(),
+  case RefreshState of
     false -> ok;
     true ->
-      System = cauder:system(),
-      Options = cauder:eval_opts(System),
+      % First update actions so a process is selected
+      cauder_wx_actions:update(System),
+      cauder_wx_system:update(System),
 
-      case RefreshState of
-        false -> ok;
-        true ->
-          % First update actions so a process is selected
-          cauder_wx_actions:update(System),
-          cauder_wx_system:update(System),
+      Process =
+        case cauder_wx_actions:selected_pid() of
+          none -> undefined;
+          Pid ->
+            {ok, Proc} = orddict:find(Pid, System#sys.procs),
+            Proc
+        end,
 
-          case cauder_wx_actions:selected_pid() of
-            none -> ok;
-            Pid ->
-              Process = utils:find_process(System#sys.procs, Pid),
-              cauder_wx_code:update(Process),
-              cauder_wx_process:update(Process)
-          end
-      end,
-
-      refresh_buttons(Options),
-
-      utils_gui:enable_replay(), % TODO Enable only if it is possible to replay
-      utils_gui:enable_roll() % TODO Enable only if it is possible to rollback
+      cauder_wx_code:update(Process),
+      cauder_wx_process:update(Process)
   end.
 
 %%start() ->
@@ -623,6 +590,3 @@ button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
 button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
 button_to_semantics(?MULTIPLE_FORWARD_BUTTON)   -> ?FWD_SEM;
 button_to_semantics(?MULTIPLE_BACKWARD_BUTTON)  -> ?BWD_SEM.
-
-
-

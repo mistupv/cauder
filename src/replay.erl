@@ -12,10 +12,10 @@
 -spec can_replay(cauder_types:system(), pos_integer()) -> boolean().
 
 can_replay(#sys{procs = Procs}, Pid) ->
-  case utils:pid_exists(Procs, Pid) of
+  case orddict:is_key(Pid, Procs) of
     false -> false;
     true ->
-      {#proc{log = Log}, _} = utils:take_process(Procs, Pid),
+      {#proc{log = Log}, _} = orddict:take(Pid, Procs),
       case utils:check_log(Log) of
         none -> false;
         _ -> true
@@ -30,7 +30,7 @@ replay_step(System, Pid) ->
   FiltOpts = [Opt || Opt <- Opts, Opt#opt.pid == Pid],
   case FiltOpts of
     [] ->
-      {#proc{log = Log}, _} = utils:take_process(System#sys.procs, Pid),
+      {#proc{log = Log}, _} = orddict:take(Pid, System#sys.procs),
       case utils:check_log(Log) of
         {spawn, SpawnPid} -> replay_spawn(System, SpawnPid);
         {send, UID} -> replay_send(System, UID);
@@ -68,7 +68,7 @@ can_replay_rec(#sys{procs = PDict, ghosts = GDict}, UID) ->
 
 replay_spawn(Sys, Pid) ->
   #sys{procs = PDict, ghosts = GDict} = Sys,
-  case utils:pid_exists(PDict, Pid) of
+  case orddict:is_key(Pid, PDict) of
     true -> Sys;
     false ->
       [ParentPid] = utils:find_spawn_parent(PDict, Pid) ++ utils:find_spawn_parent(GDict, Pid),

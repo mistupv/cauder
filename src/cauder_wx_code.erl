@@ -68,6 +68,8 @@ create(Parent) ->
 
   % -----
 
+  % TODO Add tabs to allow for multiple open files
+
   CodeCtrl = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
   wxStaticBoxSizer:add(Sizer, CodeCtrl, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
@@ -120,6 +122,9 @@ create(Parent) ->
   Win.
 
 
+-spec update(Process :: cauder_types:process() | 'undefined') -> ok.
+
+update(undefined) -> ok; % TODO
 update(#proc{exprs = [E | _]}) ->
   Line = element(2, E),
   Prev = get(line),

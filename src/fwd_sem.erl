@@ -21,7 +21,7 @@
 
 eval_step(Sys, Pid) ->
   #sys{mail = Ms, procs = PDict, ghosts = GDict0, trace = Trace} = Sys,
-  {P0, PDict0} = utils:take_process(PDict, Pid),
+  {P0, PDict0} = orddict:take(Pid, PDict),
   #proc{pid = Pid, log = Log, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
   case Label of
@@ -49,7 +49,7 @@ eval_step(Sys, Pid) ->
       % TODO Without Log
       %SpawnPid = utils:fresh_pid(),
       {spawn, SpawnPid} = hd(Log),
-      {G, GDict1} = utils:take_process(GDict0, SpawnPid),
+      {G, GDict1} = orddict:take(SpawnPid, GDict0),
 
       P1 = P0#proc{
         log   = tl(Log),

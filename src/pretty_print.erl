@@ -5,7 +5,7 @@
 -module(pretty_print).
 
 -export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
--export([pid/1, to_string/1, is_conc_item/1]).
+-export([pid/1, to_string/1]).
 
 
 -include("cauder.hrl").
@@ -28,14 +28,6 @@ log_entry({'receive', UID})  -> "rec(" ++ blue(to_string(UID)) ++ ")".
 
 
 %% ===== History ===== %%
-
-
--spec is_conc_item(cauder_types:history_entry()) -> boolean().
-
-is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
-is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true;
-is_conc_item(_)                             -> false.
 
 
 -spec history_entry(cauder_types:history_entry()) -> string().
@@ -70,11 +62,11 @@ expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_
 -spec trace_entry(cauder_types:trace()) -> [string()].
 
 trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = UID}) ->
-  [pid(From), " sends ", to_string(Val), " to ", pid(To), " (", to_string(UID), ")"];
+  io_lib:format("~p send ~p to ~p (~p)", [pid(From), Val, pid(To), UID]);
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
-  [pid(From), " spawns ", pid(To)];
+  io_lib:format("~p spawns ~p", [pid(From), pid(To)]);
 trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = UID}) ->
-  [pid(From), " receives ", to_string(Val), " (", to_string(UID), ")"].
+  io_lib:format("~p receives ~p (~p)", [pid(From), Val, UID]).
 
 
 %% ===== Utils ===== %%
