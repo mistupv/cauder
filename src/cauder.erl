@@ -9,7 +9,7 @@
 
 %% API
 -export([start/0]).
--export([load_file/1, init_system/5, stop_system/0, entry_points/1]).
+-export([load_file/1, init_system/4, stop_system/0, entry_points/1]).
 -export([system/0, status/0, path/0]). % TODO Remove, this are temporary functions until UI and logic are fully decoupled
 %% Manual evaluation functions
 -export([eval_opts/1, eval_reduce/2, eval_step/2]).
@@ -48,23 +48,21 @@ load_file(File) ->
   cauder_load:file(File).
 
 
--spec init_system(Module, Function, Args, Pid, Log) -> 'ok' when
+-spec init_system(Module, Function, Args, Pid) -> 'ok' when
   Module :: atom(),
   Function :: atom(),
   Args :: [cauder_types:abstract_expr()],
-  Pid :: cauder_types:proc_id(),
-  Log :: cauder_types:log().
+  Pid :: cauder_types:proc_id().
 
-init_system(Mod, Fun, Args, Pid, Log) ->
+init_system(Mod, Fun, Args, Pid) ->
   Proc = #proc{
     pid   = Pid,
-    log   = Log,
-    exprs = [{remote_call, 0, Mod, Fun, Args}],
+    exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
     spf   = {Mod, Fun, length(Args)}
   },
   System = #sys{
-    procs  = orddict:from_list([{Pid, Proc}]),
-    ghosts = load_ghosts(Pid)
+    procs = orddict:from_list([{Pid, Proc}]),
+    logs  = load_logs()
   },
 
   Status = get(status),
@@ -114,34 +112,29 @@ path() -> get(path). % TODO Remove, this is a temporary function until UI and lo
 
 %% -------------------------------------------------------------------
 %% @doc If replay data has been loaded, then it loads the log for all
-%% the processes in the current replay data, except for the one with
-%% the MainPid, which has already been loaded.
+%% the available processes.
 
--spec load_ghosts(MainPid :: cauder_types:proc_id()) -> cauder_types:process_dict().
+-spec load_logs() -> cauder_types:log_dict().
 
-load_ghosts(MainPid) ->
+load_logs() ->
   case get(replay_data) of
     undefined -> orddict:new();
     #replay{log_path = Path} ->
       {ok, Filenames} = file:list_dir(Path),
-      Ghosts =
+      orddict:from_list(
         lists:filtermap(
           fun(Filename) ->
             case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
               {match, [StrPid]} ->
-                case list_to_integer(StrPid) of
-                  MainPid -> false;
-                  Pid ->
-                    Proc = #proc{
-                      pid = Pid,
-                      log = utils:get_log_data(Path, Pid)
-                    },
-                    {true, {Pid, Proc}}
-                end;
+                Pid = list_to_integer(StrPid),
+                Log = utils:get_log_data(Path, Pid),
+                {true, {Pid, Log}};
               nomatch -> false
             end
-          end, Filenames),
-      orddict:from_list(Ghosts)
+          end,
+          Filenames
+        )
+      )
   end.
 
 

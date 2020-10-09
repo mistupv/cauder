@@ -18,9 +18,10 @@
 -spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
 eval_step(Sys, Pid) ->
-  #sys{mail = Ms, procs = PDict, ghosts = GDict0, trace = Trace} = Sys,
-  {P0, PDict0} = orddict:take(Pid, PDict),
-  #proc{pid = Pid, log = Log, hist = [CurHist | RestHist]} = P0,
+  #sys{mail = Ms, logs = Logs, trace = Trace} = Sys,
+  {P0, PDict0} = orddict:take(Pid, Sys#sys.procs),
+  #proc{pid = Pid, hist = [CurHist | RestHist]} = P0,
+  {ok, Log} = orddict:find(Pid, Logs),
   case CurHist of
     {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self ->
       P = P0#proc{
@@ -34,9 +35,7 @@ eval_step(Sys, Pid) ->
         procs = orddict:store(Pid, P, PDict0)
       };
     {spawn, Bs, Es, Stk, Gid} ->
-      {G, PDict1} = orddict:take(Gid, PDict0),
       P = P0#proc{
-        log   = [{spawn, Gid} | Log],
         hist  = RestHist,
         stack = Stk,
         env   = Bs,
@@ -48,15 +47,14 @@ eval_step(Sys, Pid) ->
         to   = Gid
       },
       Sys#sys{
-        mail   = Ms,
-        procs  = orddict:store(Pid, P, PDict1),
-        ghosts = orddict:store(Gid, G, GDict0),
-        trace  = lists:delete(T, Trace)
+        mail  = Ms,
+        procs = orddict:store(Pid, P, orddict:erase(Gid, PDict0)),
+        logs  = orddict:store(Pid, [{spawn, Gid} | Log], Logs),
+        trace = lists:delete(T, Trace)
       };
-    {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = UID}} ->
-      {_Msg, OldMsgs} = utils:select_msg(Ms, UID),
+    {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
+      {_Msg, OldMsgs} = utils:select_msg(Ms, Uid),
       P = P0#proc{
-        log   = [{send, UID} | Log],
         hist  = RestHist,
         stack = Stk,
         env   = Bs,
@@ -67,16 +65,16 @@ eval_step(Sys, Pid) ->
         from = Pid,
         to   = Dest,
         val  = Val,
-        time = UID
+        time = Uid
       },
       Sys#sys{
         mail  = OldMsgs,
         procs = orddict:store(Pid, P, PDict0),
+        logs  = orddict:store(Pid, [{send, Uid} | Log], Logs),
         trace = lists:delete(T, Trace)
       };
-    {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, uid = UID}} ->
+    {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, uid = Uid}} ->
       P = P0#proc{
-        log   = [{'receive', UID} | Log],
         hist  = RestHist,
         stack = Stk,
         env   = Bs,
@@ -86,11 +84,12 @@ eval_step(Sys, Pid) ->
         type = ?RULE_RECEIVE,
         from = Pid,
         val  = Val,
-        time = UID
+        time = Uid
       },
       Sys#sys{
         mail  = [M | Ms],
         procs = orddict:store(Pid, P, PDict0),
+        logs  = orddict:store(Pid, [{'receive', Uid} | Log], Logs),
         trace = lists:delete(T, Trace)
       }
   end.

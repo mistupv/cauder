@@ -480,7 +480,7 @@ open_file(File) ->
   Function :: atom(),
   Args :: [erl_parse:abstract_expr()].
 
-start_manual_session(M, F, As) -> start_session(M, F, As, 1, []).
+start_manual_session(M, F, As) -> start_session(M, F, As, 1).
 
 
 %%--------------------------------------------------------------------
@@ -492,9 +492,7 @@ start_replay_session(Path) ->
 %%  try
   utils:load_replay_data(Path),
   #replay{log_path = Path, call = {Mod, Fun, Args}, main_pid = Pid} = get(replay_data),
-  Log = utils:get_log_data(Path, Pid),
-  io:format("Log: ~p\n", [Log]),
-  start_session(Mod, Fun, Args, Pid, Log).
+  start_session(Mod, Fun, Args, Pid).
 %%  catch
 %%    _:_ ->
 %%      Frame = ref_lookup(?FRAME),
@@ -505,15 +503,14 @@ start_replay_session(Path) ->
 %%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session(Module, Function, Args, Pid, Log) -> ok when
+-spec start_session(Module, Function, Args, Pid) -> ok when
   Module :: atom(),
   Function :: atom(),
   Args :: [erl_parse:abstract_expr()],
-  Pid :: cauder_types:proc_id(),
-  Log :: cauder_types:log().
+  Pid :: cauder_types:proc_id().
 
-start_session(M, F, As, Pid, Log) ->
-  cauder:init_system(M, F, As, Pid, Log),
+start_session(M, F, As, Pid) ->
+  cauder:init_system(M, F, As, Pid),
 
   refresh(true),
 
@@ -548,16 +545,10 @@ refresh(RefreshState) ->
       cauder_wx_actions:update(System),
       cauder_wx_system:update(System),
 
-      Process =
-        case cauder_wx_actions:selected_pid() of
-          none -> undefined;
-          Pid ->
-            {ok, Proc} = orddict:find(Pid, System#sys.procs),
-            Proc
-        end,
+      Pid = cauder_wx_actions:selected_pid(),
 
-      cauder_wx_code:update(Process),
-      cauder_wx_process:update(Process)
+      cauder_wx_code:update(System, Pid),
+      cauder_wx_process:update(System, Pid)
   end.
 
 %%start() ->

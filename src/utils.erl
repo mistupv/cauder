@@ -118,17 +118,17 @@ is_temp_variable_name(Name) ->
 %% @end
 %%--------------------------------------------------------------------
 
--spec select_msg([cauder_types:message()], non_neg_integer()) -> {cauder_types:message(), [cauder_types:message()]}.
+-spec select_msg([cauder_types:message()], cauder_types:msg_id()) -> {cauder_types:message(), [cauder_types:message()]}.
 
-select_msg(Mail, UID) ->
-  {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.uid == UID end, Mail),
+select_msg(Mail, Uid) ->
+  {[Message], RestMessages} = lists:partition(fun(M) -> M#msg.uid == Uid end, Mail),
   {Message, RestMessages}.
 
 
--spec check_msg([cauder_types:message()], pos_integer()) -> cauder_types:message() | none.
+-spec check_msg([cauder_types:message()], cauder_types:msg_id()) -> cauder_types:message() | none.
 
-check_msg(Msgs, UID) ->
-  MsgsT = [M || M <- Msgs, M#msg.uid == UID],
+check_msg(Msgs, Uid) ->
+  MsgsT = [M || M <- Msgs, M#msg.uid == Uid],
   case MsgsT of
     [] -> none;
     [Msg] -> Msg
@@ -141,29 +141,30 @@ check_log([])         -> none;
 check_log([Item | _]) -> Item.
 
 
--spec find_item(cauder_types:process_dict(), cauder_types:log_entry()) -> [pos_integer()].
+-spec find_item(cauder_types:log_dict(), cauder_types:log_entry()) -> {value, cauder_types:proc_id()} | false.
 
-find_item(PDict, Item) ->
-  lists:filtermap(
-    fun({_, #proc{pid = Pid, log = Log}}) ->
-      case lists:member(Item, Log) of
-        true -> {true, Pid};
-        false -> false
-      end
-    end, PDict).
+find_item(Logs, Item) ->
+  LogEntry = lists:search(
+    fun({_, Log}) -> lists:member(Item, Log) end,
+    orddict:to_list(Logs)
+  ),
+  case LogEntry of
+    {value, {Pid, _}} -> {value, Pid};
+    false -> false
+  end.
 
 
--spec find_spawn_parent(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
+-spec find_spawn_parent(cauder_types:log_dict(), cauder_types:proc_id()) -> {value, cauder_types:proc_id()} | false.
 
-find_spawn_parent(PDict, Pid) -> find_item(PDict, {spawn, Pid}).
+find_spawn_parent(Logs, Pid) -> find_item(Logs, {spawn, Pid}).
 
--spec find_msg_sender(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
+-spec find_msg_sender(cauder_types:log_dict(), cauder_types:msg_id()) -> {value, cauder_types:proc_id()} | false.
 
-find_msg_sender(PDict, UID) -> find_item(PDict, {send, UID}).
+find_msg_sender(Logs, Uid) -> find_item(Logs, {send, Uid}).
 
--spec find_msg_receiver(cauder_types:process_dict(), pos_integer()) -> [pos_integer()].
+-spec find_msg_receiver(cauder_types:log_dict(), cauder_types:msg_id()) -> {value, cauder_types:proc_id()} | false.
 
-find_msg_receiver(PDict, UID) -> find_item(PDict, {'receive', UID}).
+find_msg_receiver(Logs, Uid) -> find_item(Logs, {'receive', Uid}).
 
 
 %% =====================================================================

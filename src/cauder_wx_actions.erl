@@ -63,7 +63,7 @@ update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
 
   ok;
 
-update(#sys{procs = ProcDict} = System) ->
+update(#sys{procs = ProcDict, logs = Logs} = System) ->
   Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
   {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
 
@@ -93,12 +93,12 @@ update(#sys{procs = ProcDict} = System) ->
   end,
 
   Options = cauder:eval_opts(System),
-  #proc{log = Log, hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
+  Pid = selected_pid(),
 
   % Enable/disable manual actions
   wxPanel:enable(utils_gui:find(?ACTION_Manual, wxPanel)),
 
-  case cauder_wx_actions:selected_pid() of
+  case Pid of
     none ->
       wxButton:disable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton)),
       wxButton:disable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton)),
@@ -106,17 +106,17 @@ update(#sys{procs = ProcDict} = System) ->
       wxButton:disable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton)),
       wxButton:disable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton)),
       wxButton:disable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton));
-    Pid ->
+    _ ->
       ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options),
-      ProcHasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
-      ProcHasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
+      CanGoFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
+      CanGoBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
 
-      wxButton:enable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}]),
-      wxButton:enable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}]),
-      wxButton:enable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton), [{enable, ProcHasFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton), [{enable, ProcHasBwd}])
+      wxButton:enable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}]),
+      wxButton:enable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}]),
+      wxButton:enable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}])
   end,
 
   % Enable/disable automatic actions
@@ -129,10 +129,44 @@ update(#sys{procs = ProcDict} = System) ->
   wxButton:enable(utils_gui:find(?MULTIPLE_FORWARD_BUTTON, wxSpinCtrl), [{enable, HasFwd}]),
   wxButton:enable(utils_gui:find(?MULTIPLE_BACKWARD_BUTTON, wxSpinCtrl), [{enable, HasBwd}]),
 
-  % Enable/disable replay/rollback actions
-  % TODO Only disable replay/rollback steps while any other process has a log/history, and only disable all replay/rollback actions if no process has a log/history
-  wxPanel:enable(utils_gui:find(?ACTION_Replay, wxPanel), [{enable, length(Log) > 0}]),
-  wxPanel:enable(utils_gui:find(?ACTION_Rollback, wxPanel), [{enable, length(Hist) > 0}]),
+  % Enable/disable replay actions
+  case Pid =:= none orelse lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
+    true ->
+      wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel));
+    false ->
+      wxPanel:enable(utils_gui:find(?ACTION_Replay, wxPanel)),
+
+      CanReplaySteps =
+        case orddict:find(Pid, Logs) of
+          {ok, Log} -> length(Log) > 0;
+          error -> false
+        end,
+
+      wxSpinCtrl:enable(utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl), [{enable, CanReplaySteps}]),
+      wxButton:enable(utils_gui:find(?REPLAY_STEPS_BUTTON, wxButton), [{enable, CanReplaySteps}])
+  end,
+
+  % Enable/disable rollback actions
+  CanRollBack = lists:any(
+    fun(#proc{hist = Hist}) ->
+      lists:any(
+        fun(Entry) ->
+          Key = element(1, Entry),
+          Key =/= tau andalso Key =/= self
+        end, Hist)
+    end, Procs),
+  case Pid =:= none orelse not CanRollBack of
+    true ->
+      wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel));
+    false ->
+      wxPanel:enable(utils_gui:find(?ACTION_Rollback, wxPanel)),
+
+      #proc{hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
+      CanRollbackSteps = length(Hist) > 0,
+
+      wxSpinCtrl:enable(utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl), [{enable, CanRollbackSteps}]),
+      wxButton:enable(utils_gui:find(?ROLL_STEPS_BUTTON, wxButton), [{enable, CanRollbackSteps}])
+  end,
 
   ok.
 
@@ -227,7 +261,7 @@ create_automatic(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsSpin = wxSpinCtrl:new(Win, [{id, ?STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}]),
+  StepsSpin = wxSpinCtrl:new(Win, [{id, ?STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}]),
   wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALIGN_CENTER}]),
 
   % -----
@@ -278,7 +312,7 @@ create_replay(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?REPLAY_STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}, InputSize]),
+  StepsText = wxSpinCtrl:new(Win, [{id, ?REPLAY_STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
@@ -383,7 +417,7 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?ROLL_STEPS_SPIN}, {min, 1}, {max, 100}, {initial, 1}, InputSize]),
+  StepsText = wxSpinCtrl:new(Win, [{id, ?ROLL_STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),

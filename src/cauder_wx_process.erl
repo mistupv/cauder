@@ -5,7 +5,7 @@
 -include("cauder_wx.hrl").
 
 %% API
--export([create/1, update/1]).
+-export([create/1, update/2]).
 
 
 -spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
@@ -29,13 +29,15 @@ create(Parent) ->
   Win.
 
 
--spec update(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update(Process) ->
-  update_bindings(Process),
-  update_stack(Process),
-  update_log(Process),
-  update_history(Process).
+update(System, Pid) ->
+  update_bindings(System, Pid),
+  update_stack(System, Pid),
+  update_log(System, Pid),
+  update_history(System, Pid).
 
 
 %% ===== Bindings ===== %%
@@ -71,36 +73,43 @@ create_bindings(Parent) ->
   Win.
 
 
--spec update_bindings(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update_bindings(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update_bindings(Process) ->
+update_bindings(System, Pid) ->
   BindArea = utils_gui:find(?BINDINGS_LIST, wxListCtrl),
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
-  case Process of
+  case System of
     undefined -> ok;
-    #proc{env = Bs, exprs = Es} ->
-      MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
-      Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+    #sys{procs = PDict} ->
+      case Pid of
+        none -> ok;
+        _ ->
+          {ok, #proc{env = Bs, exprs = Es}} = orddict:find(Pid, PDict),
+          MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
+          Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
 
-      Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs), % [{Idx, Binding}]
-      Bs1 =
-        case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullEnvironment) of
-          true -> Bs0;
-          false ->
-            Es1 = cauder_syntax:to_abstract_expr(Es),
-            Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-            lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
-        end,
-      lists:foldl(
-        fun({Idx, {Key, Val}}, Row) ->
-          wxListCtrl:insertItem(BindArea, Row, ""),
-          wxListCtrl:setItemFont(BindArea, Row, Font),
-          wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Key)),
-          wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
-          wxListCtrl:setItemData(BindArea, Row, Idx),
-          Row + 1
-        end, 0, Bs1)
+          Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs), % [{Idx, Binding}]
+          Bs1 =
+            case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullEnvironment) of
+              true -> Bs0;
+              false ->
+                Es1 = cauder_syntax:to_abstract_expr(Es),
+                Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+                lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
+            end,
+          lists:foldl(
+            fun({Idx, {Key, Val}}, Row) ->
+              wxListCtrl:insertItem(BindArea, Row, ""),
+              wxListCtrl:setItemFont(BindArea, Row, Font),
+              wxListCtrl:setItem(BindArea, Row, 0, atom_to_list(Key)),
+              wxListCtrl:setItem(BindArea, Row, 1, io_lib:format("~p", [Val])),
+              wxListCtrl:setItemData(BindArea, Row, Idx),
+              Row + 1
+            end, 0, Bs1)
+      end
   end,
   wxListCtrl:thaw(BindArea).
 
@@ -125,17 +134,24 @@ create_stack(Parent) ->
   Win.
 
 
--spec update_stack(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update_stack(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update_stack(Process) ->
+update_stack(System, Pid) ->
   StackArea = utils_gui:find(?STACK_LIST, wxListBox),
   wxListBox:freeze(StackArea),
   wxListBox:clear(StackArea),
-  case Process of
+  case System of
     undefined -> ok;
-    #proc{stack = Stk} ->
-      Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
-      lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
+    #sys{procs = PDict} ->
+      case Pid of
+        none -> ok;
+        _ ->
+          {ok, #proc{stack = Stk}} = orddict:find(Pid, PDict),
+          Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
+          lists:foreach(fun(Entry) -> wxListBox:append(StackArea, Entry) end, Entries)
+      end
   end,
   wxListBox:thaw(StackArea).
 
@@ -160,17 +176,27 @@ create_log(Parent) ->
   Win.
 
 
--spec update_log(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update_log(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update_log(Process) ->
+update_log(System, Pid) ->
   LogArea = utils_gui:find(?LOG_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(LogArea),
   wxTextCtrl:clear(LogArea),
-  case Process of
+  case System of
     undefined -> ok;
-    #proc{log = Log} ->
-      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
-      utils_gui:pp_marked_text(LogArea, Entries)
+    #sys{logs = Logs} ->
+      case Pid of
+        none -> ok;
+        _ ->
+          case orddict:find(Pid, Logs) of
+            error -> ok;
+            {ok, Log} ->
+              Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
+              utils_gui:pp_marked_text(LogArea, Entries)
+          end
+      end
   end,
   wxTextCtrl:thaw(LogArea).
 
@@ -195,23 +221,30 @@ create_history(Parent) ->
   Win.
 
 
--spec update_history(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update_history(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update_history(Process) ->
+update_history(System, Pid) ->
   HistoryArea = utils_gui:find(?HISTORY_TEXT, wxTextCtrl),
   wxTextCtrl:freeze(HistoryArea),
   wxTextCtrl:clear(HistoryArea),
-  case Process of
+  case System of
     undefined -> ok;
-    #proc{hist = Hist} ->
-      MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
-      Hist1 =
-        case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
-          true -> Hist;
-          false -> lists:filter(fun is_conc_item/1, Hist)
-        end,
-      Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
-      utils_gui:pp_marked_text(HistoryArea, Entries)
+    #sys{procs = PDict} ->
+      case Pid of
+        none -> ok;
+        _ ->
+          {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
+          MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
+          Hist1 =
+            case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
+              true -> Hist;
+              false -> lists:filter(fun is_conc_item/1, Hist)
+            end,
+          Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
+          utils_gui:pp_marked_text(HistoryArea, Entries)
+      end
   end,
   wxTextCtrl:thaw(HistoryArea).
 

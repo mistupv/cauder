@@ -8,6 +8,7 @@
 -export([clauses/1, expr_list/1]).
 -export([replace_variable/3]).
 -export([to_abstract_expr/1]).
+-export([remote_call/3]).
 
 -spec clauses([erl_parse:abstract_clause()]) -> [cauder_types:af_clause()].
 
@@ -494,3 +495,16 @@ to_abstract_expr({Op, Line, L, R}) when Op =:= 'andalso'; Op =:= 'orelse' ->
 -spec set_line(erl_syntax:syntaxTree(), pos_integer()) -> erl_syntax:syntaxTree().
 
 set_line(Node, Line) -> erl_syntax:set_pos(Node, erl_anno:new(Line)).
+
+
+
+-spec remote_call(atom(), atom(), list(cauder_types:af_literal())) -> cauder_types:af_remote_call().
+
+remote_call(M, F, Vs) ->
+  A = length(Vs),
+  {_, Cs} = utils:fundef_lookup(M, F, A),
+  Line = cauder_eval:clause_line([], Cs, Vs),
+  {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, Vs)}.
+
+
+

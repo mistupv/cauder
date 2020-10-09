@@ -3,13 +3,13 @@
 
 -define(ID_GAMMA, 0).
 
-%%-ifdef(debug).
+-ifdef(debug).
 -define(LOG(X), io:format("{~p,~p}: ~p~n", [?MODULE, ?LINE, X])).
 -define(TO_STRING(X), lists:flatten(io_lib:format("~p",[X]))).
-%%-else.
-%%-define(LOG(X), ok).
-%%-define(TO_STRING(X), "").
-%%-endif.
+-else.
+-define(LOG(X), ok).
+-define(TO_STRING(X), "").
+-endif.
 
 -define(FWD_SEM, fwd_sem).
 -define(BWD_SEM, bwd_sem).
@@ -59,7 +59,8 @@
   mail = [] :: [cauder_types:message()],
   % Pool of processes
   procs = [] :: cauder_types:process_dict(),
-  ghosts = [] :: cauder_types:process_dict(),
+  % System log
+  logs = [] :: cauder_types:log_dict(),
   trace = [] :: [cauder_types:trace()],
   roll = []
 }).
@@ -68,8 +69,6 @@
 -record(proc, {
   % Process identifier
   pid :: cauder_types:proc_id(),
-  % Log
-  log = [] :: cauder_types:log(),
   % History
   hist = [] :: cauder_types:history(),
   % Call stack
@@ -99,7 +98,7 @@
   % forward or backward
   sem :: cauder_types:semantics(),
   % seq, spawn, ...
-  rule :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE
+  rule :: cauder_types:rule()
 }).
 
 % Trace

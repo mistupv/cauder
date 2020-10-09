@@ -76,6 +76,8 @@
 
 %% ===== Action Panel ===== %%
 
+-define(MAX_STEPS, 10000).
+
 %% ----- Manual Panel ----- %%
 
 -define(ACTION_Manual, 2100).

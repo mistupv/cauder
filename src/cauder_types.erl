@@ -2,32 +2,40 @@
 
 -include("cauder.hrl").
 
--export_type([system/0, process/0, process_dict/0, message/0, trace/0, option/0]).
--export_type([msg_id/0, proc_id/0, log/0, log_entry/0, history/0, history_entry/0, stack/0, stack_entry/0, environment/0, binding/0]).
--export_type([semantics/0, rule/0, print_option/0]).
+-export_type([
+  system/0,
+  msg_id/0, message/0,
+  log_dict/0, log/0, log_entry/0,
+  process_dict/0, proc_id/0, process/0,
+  history/0, history_entry/0,
+  stack/0, stack_entry/0,
+  environment/0, binding/0,
+  option/0, semantics/0, rule/0,
+  trace/0,
+  result/0, label/0,
+  print_option/0
+]).
 
 % Abstract format types
--export_type([abstract_expr/0, af_literal/0, af_boolean/0, af_variable/0, af_clause_seq/0, af_clause/0, af_guard_seq/0, af_guard/0, af_guard_test/0, af_pattern/0]).
-
--export_type([result/0, label/0]).
+-export_type([abstract_expr/0, af_literal/0, af_boolean/0, af_variable/0, af_remote_call/0, af_clause_seq/0, af_clause/0, af_guard_seq/0, af_guard/0, af_guard_test/0, af_pattern/0]).
 
 
 %% Record types
 
 -type system() :: #sys{}.
--type process() :: #proc{}.
--type process_dict() :: orddict:orddict(proc_id(), process()).
--type message() :: #msg{}.
--type option() :: #opt{}.
--type trace() :: #trace{}.
 
 -type msg_id() :: pos_integer().
--type proc_id() :: pos_integer().
+-type message() :: #msg{}.
 
+-type log_dict() :: orddict:orddict(proc_id(), log()).
 -type log() :: [log_entry()].
 -type log_entry() :: {spawn, proc_id()}
                    | {send, msg_id()}
                    | {'receive', msg_id()}.
+
+-type process_dict() :: orddict:orddict(proc_id(), process()).
+-type proc_id() :: pos_integer().
+-type process() :: #proc{}.
 
 -type history() :: [history_entry()].
 -type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
@@ -43,10 +51,21 @@
 -type environment() :: orddict:orddict(atom(), term()).
 -type binding() :: {atom(), term()}.
 
-
+-type option() :: #opt{}.
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
-
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
+
+-type trace() :: #trace{}.
+
+-type result() :: #result{}.
+
+-type label() :: tau
+               | {spawn, af_variable(), fun()}
+               | {spawn, af_variable(), atom(), atom(), [term()]}
+               | {self, af_variable()}
+               | {send, proc_id(), term()}
+               | {rec, af_variable(), af_clause_seq()}.
+
 
 -type print_option() :: ?PRINT_MAIL
                       | ?PRINT_LOG
@@ -177,20 +196,3 @@
 -type unary_op() :: '+' | '-' | 'bnot' | 'not'.
 
 %% End of custom abstract format
-
-
--type result() :: #result{}.
-
--type label() :: label_tau()
-               | label_spawn_1()
-               | label_spawn_3()
-               | label_self()
-               | label_send()
-               | label_rec().
-
--type label_tau() :: tau.
--type label_spawn_1() :: {spawn, af_variable(), fun()}.
--type label_spawn_3() :: {spawn, af_variable(), atom(), atom(), [term()]}.
--type label_self() :: {self, af_variable()}.
--type label_send() :: {send, proc_id(), term()}.
--type label_rec() :: {rec, af_variable(), af_clause_seq()}.

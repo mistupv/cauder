@@ -5,7 +5,7 @@
 -include("cauder_wx.hrl").
 
 %% API
--export([create/1, update/1]).
+-export([create/1, update/2]).
 -export([load_code/2, unload_code/1, mark_line/3, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
 
 -define(KEYWORDS, ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
@@ -122,10 +122,14 @@ create(Parent) ->
   Win.
 
 
--spec update(Process :: cauder_types:process() | 'undefined') -> ok.
+-spec update(System, Pid) -> ok when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
 
-update(undefined) -> ok; % TODO
-update(#proc{exprs = [E | _]}) ->
+update(undefined, _) -> ok; % TODO
+update(#sys{}, none) -> ok; % TODO
+update(#sys{procs = PDict}, Pid) ->
+  {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
   Line = element(2, E),
   Prev = get(line),
   CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
