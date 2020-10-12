@@ -1,26 +1,53 @@
 # CauDEr
 
-A causal-consistent debugger for Erlang
+A Causal-Consistent Reversible Debugger for Erlang
 
-## Dependencies
+![CauDEr screenshot](screenshot.png)
 
-This project uses [wx](http://erlang.org/doc/apps/wx/chapter.html), the Erlang binding of wxWidgets.  
-Thus, you must have [built Erlang/OTP with wxWidgets](http://erlang.org/doc/installation_guide/INSTALL.html#Advanced-configuration-and-build-of-ErlangOTP_Building_Building-with-wxErlang).
+## Requirements
 
-## Compilation
+- Erlang/OTP >= 23.1
 
-First, compile the project:
+## Building
+
+You can compile CauDEr by running the command: `make`
+
+## Running
+
+CauDEr has two components the debugger itself and a GUI.
+These two can be run independently of each other.
+
+### Erlang shell
+
+You can use the Erlang shell to start the debugger and GUI servers.
+
 ```
-make
+Eshell V11.1  (abort with ^G)
+1> cauder:start(). % Starting the debugger
+{ok,<0.80.0>}
+2> cauder_wx:start(). % Starting the GUI
+{ok,<0.82.0>,{wx_ref,35,wxFrame,<0.82.0>}}
 ```
-Then, execute the script *cauder.sh* to start CauDEr
+
+However, starting the GUI server will also start the debugger if it is not running yet.
+In that case you can get PID of the debugger by calling `whereis(cauder).`
+
 ```
-./cauder.sh
+Eshell V11.1  (abort with ^G)
+1> cauder_wx:start(). % Starting the GUI and the debugger
+{ok,<0.81.0>,{wx_ref,35,wxFrame,<0.81.0>}}
+2> whereis(cauder). % Getting the debugger PID
+<0.80.0>
 ```
-An astonishing graphical interface will appear in your screen.
 
-![GUI screenshot](https://github.com/mistupv/cauder/blob/screens/cauder.png?raw=true)
+### Shell script
 
-## How to use
+Alternatively, you can execute the script `cauder.sh`, that was generated during compilation, to start CauDEr
 
-Check the [Wiki](https://github.com/mistupv/cauder/wiki) for information on how to use CauDEr.
+## Usage
+
+For more information about how to use CauDEr you can check the [Wiki](https://github.com/mistupv/cauder-v2/wiki) (Under construction!)
+
+## License
+
+See [LICENSE](LICENSE) file.
