@@ -101,16 +101,48 @@ start_session(Parent, MFAs) ->
 
   %% ----- Buttons ----- %%
 
+  ReturnPid = self(),
+
   Buttons = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Buttons, [{flag, ?wxALIGN_RIGHT bor ?wxALL}, {border, ?SPACER_LARGE}]),
 
   StartButton = wxButton:new(Dialog, ?wxID_OK, [{label, "Start"}]),
   wxBoxSizer:add(Buttons, StartButton),
 
+  wxButton:connect(
+    StartButton,
+    command_button_clicked,
+    [{callback,
+      fun(_, _) ->
+        case wxRadioButton:getValue(ManualRadio) of
+          true ->
+            {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
+            case utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)) of
+              error ->
+                Message = "Invalid arguments!",
+                AlertDialog = wxMessageDialog:new(Dialog, Message, [{caption, "Error: Invalid arguments"}, {style, ?wxICON_ERROR}]),
+                wxMessageDialog:showModal(AlertDialog);
+              Args ->
+                case length(Args) of
+                  A1 ->
+                    ReturnPid ! {manual, {M1, F1, Args}};
+                  Count ->
+                    Message = io_lib:format("Wrong number of argumments!\nExpected ~b but got ~b.", [A1, Count]),
+                    AlertDialog = wxMessageDialog:new(Dialog, Message, [{caption, "Warming: Argument count"}, {style, ?wxICON_WARNING}]),
+                    wxMessageDialog:showModal(AlertDialog)
+                end
+            end;
+          false ->
+            ReturnPid ! {replay, wxDirPickerCtrl:getPath(TracePicker)}
+        end
+      end}]),
+
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
   CancelButton = wxButton:new(Dialog, ?wxID_CANCEL, [{label, "Cancel"}]),
   wxBoxSizer:add(Buttons, CancelButton),
+
+  wxButton:connect(CancelButton, command_button_clicked, [{callback, fun(_, _) -> ReturnPid ! false end}]),
 
   %% -----
 
@@ -122,18 +154,11 @@ start_session(Parent, MFAs) ->
   %% -----
 
   wxDialog:fit(Dialog),
-  case wxDialog:showModal(Dialog) of
-    ?wxID_OK ->
-      case wxRadioButton:getValue(ManualRadio) of
-        true ->
-          {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
-          Args = utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)),
-          A1 = length(Args),
-          {manual, {M1, F1, Args}};
-        false ->
-          {replay, wxDirPickerCtrl:getPath(TracePicker)}
-      end;
-    _ -> false
+  wxDialog:show(Dialog),
+  receive
+    Return ->
+      wxDialog:destroy(Dialog),
+      Return
   end.
 
 
