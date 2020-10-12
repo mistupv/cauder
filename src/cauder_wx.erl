@@ -88,7 +88,7 @@ init([]) ->
 
   wxMenuBar:check(Menubar, ?MENU_View_StatusBar, true),
 
-  CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:update_buttons(CodeCtrl, Menubar),
 
   wxEvtHandler:connect(Frame, close_window),
@@ -154,21 +154,21 @@ handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
 %% -------------------- View Menu -------------------- %%
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:zoom_in(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:zoom_out(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:zoom_reset(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
@@ -194,21 +194,21 @@ handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
 
 %% -------------------- Code Area -------------------- %%
 
-handle_event(#wx{id = ?CODE_TEXT, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+handle_event(#wx{id = ?CODE_Code, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 %% -------------------- Process Selector -------------------- %%
 
-handle_event(#wx{id = ?PROC_CHOICE, event = #wxCommand{type = command_choice_selected}}, State) ->
+handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
   refresh(true),
   {noreply, State};
 
 %% -------------------- Manual Actions -------------------- %%
 
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
+handle_event(?BUTTON_EVENT(Button), State) when ?Is_Step_Button(Button) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -221,7 +221,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
+handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
@@ -241,9 +241,9 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
 
 %% -------------------- Automatic Actions -------------------- %%
 
-handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
+handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
-  Spinner = utils_gui:find(?STEPS_SPIN, wxSpinCtrl),
+  Spinner = utils_gui:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
   StepsDone = cauder:eval_mult(Sem, Steps),
   cauder_wx_statusbar:multi(Sem, StepsDone, Steps),
@@ -252,13 +252,13 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_MULT_BUTTON(Button) ->
 
 %% -------------------- Replay Actions -------------------- %%
 
-handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
-      Spinner = utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl),
+      Spinner = utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       StepsDone = cauder:eval_replay(Pid, Steps),
       cauder_wx_statusbar:replay(StepsDone, Steps),
@@ -266,8 +266,8 @@ handle_event(?BUTTON_EVENT(?REPLAY_STEPS_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?REPLAY_SPAWN_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Replay_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -280,8 +280,8 @@ handle_event(?BUTTON_EVENT(?REPLAY_SPAWN_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?REPLAY_SEND_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Replay_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -294,8 +294,8 @@ handle_event(?BUTTON_EVENT(?REPLAY_SEND_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?REPLAY_REC_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Replay_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -310,13 +310,13 @@ handle_event(?BUTTON_EVENT(?REPLAY_REC_BUTTON), State) ->
 
 %% -------------------- Rollback Actions -------------------- %%
 
-handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
       refresh(false);
     Pid ->
-      Spinner = utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl),
+      Spinner = utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
       cauder_wx_statusbar:roll(StepsDone, Steps),
@@ -325,8 +325,8 @@ handle_event(?BUTTON_EVENT(?ROLL_STEPS_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?ROLL_SPAWN_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Rollback_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -340,8 +340,8 @@ handle_event(?BUTTON_EVENT(?ROLL_SPAWN_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?ROLL_SEND_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Rollback_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -355,8 +355,8 @@ handle_event(?BUTTON_EVENT(?ROLL_SEND_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?ROLL_REC_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Rollback_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -370,8 +370,8 @@ handle_event(?BUTTON_EVENT(?ROLL_REC_BUTTON), State) ->
   end,
   {noreply, State};
 
-handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
-  TextCtrl = utils_gui:find(?ROLL_VAR_TEXT, wxTextCtrl),
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
+  TextCtrl = utils_gui:find(?ACTION_Rollback_Variable, wxTextCtrl),
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
       cauder_wx_statusbar:roll_var(false, none),
@@ -386,7 +386,7 @@ handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
 
 %% -------------------- Bindings handler -------------------- %%
 
-handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
+handle_event(#wx{id = ?PROCESS_Bindings, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
   Sys = cauder:get_system(),
   Pid = cauder_wx_actions:selected_pid(),
   {ok, #proc{env = Bs}} = orddict:find(Pid, Sys#sys.procs),
@@ -402,7 +402,7 @@ handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_a
 
 %% -------------------- Text handler -------------------- %%
 
-handle_event(#wx{id = ?STEPS_SPIN, event = #wxCommand{type = command_text_updated}}, State) ->
+handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command_text_updated}}, State) ->
   refresh(false),
   {noreply, State};
 
@@ -470,7 +470,7 @@ open_file(File) ->
   {ok, Module} = cauder:load_file(File),
 
   {ok, Src, _} = erl_prim_loader:get_file(File),
-  CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
@@ -559,17 +559,17 @@ refresh(RefreshState) ->
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
-  ButtonId :: ?STEP_FORWARD_BUTTON | ?STEP_BACKWARD_BUTTON |
-  ?STEP_OVER_FORWARD_BUTTON | ?STEP_OVER_BACKWARD_BUTTON |
+  ButtonId :: ?ACTION_Manual_Step_Forward_Button | ?ACTION_Manual_Step_Backward_Button |
+  ?ACTION_Manual_StepOver_Forward_Button | ?ACTION_Manual_StepOver_Backward_Button |
 %%  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
-  ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
+  ?ACTION_Automatic_Forward_Button | ?ACTION_Automatic_Backward_Button,
   Semantics :: ?FWD_SEM | ?BWD_SEM.
 
-button_to_semantics(?STEP_FORWARD_BUTTON)       -> ?FWD_SEM;
-button_to_semantics(?STEP_BACKWARD_BUTTON)      -> ?BWD_SEM;
-button_to_semantics(?STEP_OVER_FORWARD_BUTTON)  -> ?FWD_SEM;
-button_to_semantics(?STEP_OVER_BACKWARD_BUTTON) -> ?BWD_SEM;
+button_to_semantics(?ACTION_Manual_Step_Forward_Button)      -> ?FWD_SEM;
+button_to_semantics(?ACTION_Manual_Step_Backward_Button)     -> ?BWD_SEM;
+button_to_semantics(?ACTION_Manual_StepOver_Forward_Button)  -> ?FWD_SEM;
+button_to_semantics(?ACTION_Manual_StepOver_Backward_Button) -> ?BWD_SEM;
 %%button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
 %%button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
-button_to_semantics(?MULTIPLE_FORWARD_BUTTON)   -> ?FWD_SEM;
-button_to_semantics(?MULTIPLE_BACKWARD_BUTTON)  -> ?BWD_SEM.
+button_to_semantics(?ACTION_Automatic_Forward_Button)        -> ?FWD_SEM;
+button_to_semantics(?ACTION_Automatic_Backward_Button)       -> ?BWD_SEM.

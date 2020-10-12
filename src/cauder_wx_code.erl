@@ -70,7 +70,7 @@ create(Parent) ->
 
   % TODO Add tabs to allow for multiple open files
 
-  CodeCtrl = wxStyledTextCtrl:new(Win, [{id, ?CODE_TEXT}]),
+  CodeCtrl = wxStyledTextCtrl:new(Win, [{id, ?CODE_Code}]),
   wxStaticBoxSizer:add(Sizer, CodeCtrl, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   FontCode = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -111,7 +111,7 @@ create(Parent) ->
 
   % -----
 
-  ExprCtrl = wxTextCtrl:new(Win, ?EXPR_TEXT, [{style, ?wxTE_READONLY}]),
+  ExprCtrl = wxTextCtrl:new(Win, ?CODE_Expression, [{style, ?wxTE_READONLY}]),
   wxStaticBoxSizer:add(Sizer, ExprCtrl, [{proportion, 0}, {flag, ?wxEXPAND}]),
 
   FontExpr = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -132,10 +132,10 @@ update(#sys{procs = PDict}, Pid) ->
   {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
   Line = element(2, E),
   Prev = get(line),
-  CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
+  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
   mark_line(CodeCtrl, Prev, Line),
   put(line, Line),
-  ExprCtrl = utils_gui:find(?EXPR_TEXT, wxTextCtrl),
+  ExprCtrl = utils_gui:find(?CODE_Expression, wxTextCtrl),
   Expr = pretty_print:expression(E),
   wxTextCtrl:setValue(ExprCtrl, Expr).
 

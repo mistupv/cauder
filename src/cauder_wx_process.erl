@@ -51,7 +51,7 @@ create_bindings(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Bindings"}]),
   wxPanel:setSizer(Win, Sizer),
 
-  BindArea = wxListCtrl:new(Win, [{winid, ?BINDINGS_LIST}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  BindArea = wxListCtrl:new(Win, [{winid, ?PROCESS_Bindings}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
   wxBoxSizer:add(Sizer, BindArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Item = wxListItem:new(),
@@ -78,7 +78,7 @@ create_bindings(Parent) ->
   Pid :: cauder_types:proc_id() | 'none'.
 
 update_bindings(System, Pid) ->
-  BindArea = utils_gui:find(?BINDINGS_LIST, wxListCtrl),
+  BindArea = utils_gui:find(?PROCESS_Bindings, wxListCtrl),
   wxListCtrl:freeze(BindArea),
   wxListCtrl:deleteAllItems(BindArea),
   case System of
@@ -125,7 +125,7 @@ create_stack(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Stack"}]),
   wxPanel:setSizer(Win, Sizer),
 
-  StackArea = wxListBox:new(Win, ?STACK_LIST),
+  StackArea = wxListBox:new(Win, ?PROCESS_Stack),
   wxStaticBoxSizer:add(Sizer, StackArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -139,7 +139,7 @@ create_stack(Parent) ->
   Pid :: cauder_types:proc_id() | 'none'.
 
 update_stack(System, Pid) ->
-  StackArea = utils_gui:find(?STACK_LIST, wxListBox),
+  StackArea = utils_gui:find(?PROCESS_Stack, wxListBox),
   wxListBox:freeze(StackArea),
   wxListBox:clear(StackArea),
   case System of
@@ -167,7 +167,7 @@ create_log(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Log"}]),
   wxPanel:setSizer(Win, Sizer),
 
-  LogArea = wxTextCtrl:new(Win, ?LOG_TEXT, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
+  LogArea = wxTextCtrl:new(Win, ?PROCESS_Log, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
   wxStaticBoxSizer:add(Sizer, LogArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -181,7 +181,7 @@ create_log(Parent) ->
   Pid :: cauder_types:proc_id() | 'none'.
 
 update_log(System, Pid) ->
-  LogArea = utils_gui:find(?LOG_TEXT, wxTextCtrl),
+  LogArea = utils_gui:find(?PROCESS_Log, wxTextCtrl),
   wxTextCtrl:freeze(LogArea),
   wxTextCtrl:clear(LogArea),
   case System of
@@ -212,7 +212,7 @@ create_history(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "History"}]),
   wxPanel:setSizer(Win, Sizer),
 
-  HistoryArea = wxTextCtrl:new(Win, ?HISTORY_TEXT, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
+  HistoryArea = wxTextCtrl:new(Win, ?PROCESS_History, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
   wxStaticBoxSizer:add(Sizer, HistoryArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -226,7 +226,7 @@ create_history(Parent) ->
   Pid :: cauder_types:proc_id() | 'none'.
 
 update_history(System, Pid) ->
-  HistoryArea = utils_gui:find(?HISTORY_TEXT, wxTextCtrl),
+  HistoryArea = utils_gui:find(?PROCESS_History, wxTextCtrl),
   wxTextCtrl:freeze(HistoryArea),
   wxTextCtrl:clear(HistoryArea),
   case System of

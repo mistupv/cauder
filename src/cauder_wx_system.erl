@@ -22,7 +22,7 @@ create(Parent) ->
 
   wxSizer:addSpacer(Sizer, 5),
 
-  Notebook = wxNotebook:new(Win, ?SYSTEM_INFO_NOTEBOOK),
+  Notebook = wxNotebook:new(Win, ?SYSTEM_Notebook),
   wxNotebook:addPage(Notebook, create_trace(Notebook), "Trace"),
   wxNotebook:addPage(Notebook, create_roll_log(Notebook), "Roll Log"),
   wxSizer:add(Sizer, Notebook, Expand),
@@ -49,7 +49,7 @@ create_mail(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Mail"}]),
   wxPanel:setSizer(Win, Sizer),
 
-  MailArea = wxListCtrl:new(Win, [{winid, ?MAIL_LIST}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
   wxBoxSizer:add(Sizer, MailArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Item = wxListItem:new(),
@@ -81,7 +81,7 @@ create_mail(Parent) ->
 -spec update_mail(System :: cauder_types:system() | 'undefined') -> ok.
 
 update_mail(System) ->
-  MailArea = utils_gui:find(?MAIL_LIST, wxListCtrl),
+  MailArea = utils_gui:find(?SYSTEM_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   case System of
@@ -112,7 +112,7 @@ create_trace(Parent) ->
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
 
-  TraceArea = wxListBox:new(Win, ?TRACE_LIST),
+  TraceArea = wxListBox:new(Win, ?SYSTEM_Trace),
   wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -124,7 +124,7 @@ create_trace(Parent) ->
 -spec update_trace(System :: cauder_types:system() | 'undefined') -> ok.
 
 update_trace(System) ->
-  TraceArea = utils_gui:find(?TRACE_LIST, wxListBox),
+  TraceArea = utils_gui:find(?SYSTEM_Trace, wxListBox),
   wxListBox:freeze(TraceArea),
   wxListBox:clear(TraceArea),
   case System of
@@ -147,7 +147,7 @@ create_roll_log(Parent) ->
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
 
-  RollLogArea = wxListBox:new(Win, ?ROLL_LOG_LIST),
+  RollLogArea = wxListBox:new(Win, ?SYSTEM_RollLog),
   wxBoxSizer:add(Sizer, RollLogArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -159,7 +159,7 @@ create_roll_log(Parent) ->
 -spec update_roll_log(System :: cauder_types:system() | 'undefined') -> ok.
 
 update_roll_log(System) ->
-  RollLogArea = utils_gui:find(?ROLL_LOG_LIST, wxListBox),
+  RollLogArea = utils_gui:find(?SYSTEM_RollLog, wxListBox),
   wxListBox:freeze(RollLogArea),
   wxListBox:clear(RollLogArea),
   case System of
@@ -173,4 +173,4 @@ update_roll_log(System) ->
 -spec focus_roll_log(boolean()) -> 'ok'.
 
 focus_roll_log(false) -> ok;
-focus_roll_log(true)  -> wxNotebook:setSelection(utils_gui:find(?SYSTEM_INFO_NOTEBOOK, wxNotebook), ?PAGEPOS_ROLL), ok.
+focus_roll_log(true)  -> wxNotebook:setSelection(utils_gui:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog), ok.

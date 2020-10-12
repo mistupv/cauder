@@ -71,147 +71,100 @@
 
 %% ===== Code Panel ===== %%
 
--define(CODE_TEXT, 2001).
--define(EXPR_TEXT, 2002).
+-define(CODE_Code, 2001).
+-define(CODE_Expression, 2002).
 
 %% ===== Action Panel ===== %%
 
 -define(MAX_STEPS, 10000).
 
+-define(ACTION_Process, 2100).
+
 %% ----- Manual Panel ----- %%
 
--define(ACTION_Manual, 2100).
+-define(ACTION_Manual, 2110).
 
--define(PROC_CHOICE, 2101).
+-define(ACTION_Manual_Step, 2111).
+-define(ACTION_Manual_Step_Forward_Button, 2112).
+-define(ACTION_Manual_Step_Backward_Button, 2113).
 
--define(STEP_FORWARD_BUTTON, 2102).
--define(STEP_BACKWARD_BUTTON, 2103).
+-define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Step_Forward_Button) orelse (Button =:= ?ACTION_Manual_Step_Backward_Button)).
 
--define(IS_STEP_BUTTON(Button), (Button =:= ?STEP_FORWARD_BUTTON) orelse (Button =:= ?STEP_BACKWARD_BUTTON)).
+-define(ACTION_Manual_StepOver, 2114).
+-define(ACTION_Manual_StepOver_Forward_Button, 2115).
+-define(ACTION_Manual_StepOver_Backward_Button, 2116).
 
--define(STEP_OVER_FORWARD_BUTTON, 2104).
--define(STEP_OVER_BACKWARD_BUTTON, 2105).
+-define(Is_StepOver_Button(Button), (Button =:= ?ACTION_Manual_StepOver_Forward_Button) orelse (Button =:= ?ACTION_Manual_StepOver_Backward_Button)).
 
--define(IS_STEP_OVER_BUTTON(Button), (Button =:= ?STEP_OVER_FORWARD_BUTTON) orelse (Button =:= ?STEP_OVER_BACKWARD_BUTTON)).
+-define(ACTION_Manual_StepInto, 2117).
+-define(ACTION_Manual_StepInto_Forward_Button, 2118).
+-define(ACTION_Manual_StepInto_Backward_Button, 2119).
 
--define(STEP_INTO_FORWARD_BUTTON, 2106).
--define(STEP_INTO_BACKWARD_BUTTON, 2107).
-
--define(IS_STEP_INTO_BUTTON(Button), (Button =:= ?STEP_INTO_FORWARD_BUTTON) orelse (Button =:= ?STEP_INTO_BACKWARD_BUTTON)).
+-define(Is_StepInto_Button(Button), (Button =:= ?ACTION_Manual_StepInto_Forward_Button) orelse (Button =:= ?ACTION_Manual_StepInto_Backward_Button)).
 
 %% ----- Automatic Panel ----- %%
 
--define(ACTION_Automatic, 2110).
+-define(ACTION_Automatic, 2120).
 
--define(STEPS_SPIN, 2111).
+-define(ACTION_Automatic_Steps, 2121).
+-define(ACTION_Automatic_Forward_Button, 2122).
+-define(ACTION_Automatic_Backward_Button, 2123).
 
--define(MULTIPLE_FORWARD_BUTTON, 2112).
--define(MULTIPLE_BACKWARD_BUTTON, 2113).
-
--define(IS_MULT_BUTTON(Button), (Button =:= ?MULTIPLE_FORWARD_BUTTON) orelse (Button =:= ?MULTIPLE_BACKWARD_BUTTON)).
+-define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button) orelse (Button =:= ?ACTION_Automatic_Backward_Button)).
 
 %% ----- Replay Panel ----- %%
 
--define(ACTION_Replay, 2120).
+-define(ACTION_Replay, 2130).
 
--define(REPLAY_STEPS_SPIN, 2121).
--define(REPLAY_SPAWN_TEXT, 2122).
--define(REPLAY_SEND_TEXT, 2123).
--define(REPLAY_REC_TEXT, 2124).
+-define(ACTION_Replay_Steps, 2131).
+-define(ACTION_Replay_Spawn, 2132).
+-define(ACTION_Replay_Send, 2133).
+-define(ACTION_Replay_Receive, 2134).
 
-%%-define(REPLAY_INPUTS, [
-%%  ?REPLAY_STEPS_SPIN,
-%%  ?REPLAY_SPAWN_TEXT,
-%%  ?REPLAY_SEND_TEXT,
-%%  ?REPLAY_REC_TEXT
-%%]).
-
--define(REPLAY_STEPS_BUTTON, 2125).
--define(REPLAY_SPAWN_BUTTON, 2126).
--define(REPLAY_SEND_BUTTON, 2127).
--define(REPLAY_REC_BUTTON, 2128).
-
-%%-define(REPLAY_BUTTONS, [
-%%  ?REPLAY_STEPS_BUTTON,
-%%  ?REPLAY_SPAWN_BUTTON,
-%%  ?REPLAY_SEND_BUTTON,
-%%  ?REPLAY_REC_BUTTON
-%%]).
+-define(ACTION_Replay_Steps_Button, 2135).
+-define(ACTION_Replay_Spawn_Button, 2136).
+-define(ACTION_Replay_Send_Button, 2137).
+-define(ACTION_Replay_Receive_Button, 2138).
 
 %% ----- Rollback Panel ----- %%
 
 -define(ACTION_Rollback, 2140).
 
--define(ROLL_STEPS_SPIN, 2141).
--define(ROLL_SPAWN_TEXT, 2142).
--define(ROLL_SEND_TEXT, 2143).
--define(ROLL_REC_TEXT, 2144).
--define(ROLL_VAR_TEXT, 2145).
+-define(ACTION_Rollback_Steps, 2141).
+-define(ACTION_Rollback_Spawn, 2142).
+-define(ACTION_Rollback_Send, 2143).
+-define(ACTION_Rollback_Receive, 2144).
+-define(ACTION_Rollback_Variable, 2145).
 
-%%-define(ROLL_INPUTS, [
-%%  ?ROLL_STEPS_SPIN,
-%%  ?ROLL_SPAWN_TEXT,
-%%  ?ROLL_SEND_TEXT,
-%%  ?ROLL_REC_TEXT,
-%%  ?ROLL_VAR_TEXT
-%%]).
-
--define(ROLL_STEPS_BUTTON, 2146).
--define(ROLL_SPAWN_BUTTON, 2147).
--define(ROLL_SEND_BUTTON, 2148).
--define(ROLL_REC_BUTTON, 2149).
--define(ROLL_VAR_BUTTON, 2150).
-
-%%-define(ROLL_BUTTONS, [
-%%  ?ROLL_STEPS_BUTTON,
-%%  ?ROLL_SPAWN_BUTTON,
-%%  ?ROLL_SEND_BUTTON,
-%%  ?ROLL_REC_BUTTON,
-%%  ?ROLL_VAR_BUTTON
-%%]).
-
-
-%% ===== %%
-
-
-%%-define(ALL_INPUTS, [
-%%  ?PROC_CHOICE,
-%%  ?STEPS_SPIN |
-%%  ?REPLAY_INPUTS ++ ?ROLL_INPUTS
-%%]).
-
-%%-define(ALL_BUTTONS, [
-%%  ?STEP_FORWARD_BUTTON, ?STEP_BACKWARD_BUTTON,
-%%  ?STEP_OVER_FORWARD_BUTTON, ?STEP_OVER_BACKWARD_BUTTON,
-%%  ?STEP_INTO_FORWARD_BUTTON, ?STEP_INTO_BACKWARD_BUTTON,
-%%  ?MULTIPLE_FORWARD_BUTTON, ?MULTIPLE_BACKWARD_BUTTON |
-%%  ?REPLAY_BUTTONS ++ ?ROLL_BUTTONS
-%%]).
-
+-define(ACTION_Rollback_Steps_Button, 2146).
+-define(ACTION_Rollback_Spawn_Button, 2147).
+-define(ACTION_Rollback_Send_Button, 2148).
+-define(ACTION_Rollback_Receive_Button, 2149).
+-define(ACTION_Rollback_Variable_Button, 2150).
 
 %% ===== System Info Panel ===== %%
 
--define(MAIL_LIST, 2199).
+-define(SYSTEM_Mail, 2200).
 
--define(SYSTEM_INFO_NOTEBOOK, 2200).
--define(PAGEPOS_TRACE, 0).
--define(PAGEPOS_ROLL, 1).
+-define(SYSTEM_Notebook, 2210).
+-define(SYSTEM_Notebook_Trace, 0).
+-define(SYSTEM_Notebook_RollLog, 1).
 
--define(TRACE_LIST, 2201).
--define(ROLL_LOG_LIST, 2202).
+-define(SYSTEM_Trace, 2211).
+-define(SYSTEM_RollLog, 2212).
 
 
 %% ===== Process Info Panel ===== %%
 
--define(BINDINGS_LIST, 2222).
--define(STACK_LIST, 2223).
--define(LOG_TEXT, 2224).
--define(HISTORY_TEXT, 2225).
+-define(PROCESS_Bindings, 2300).
+-define(PROCESS_Stack, 2301).
+-define(PROCESS_Log, 2302).
+-define(PROCESS_History, 2303).
 
 
 %% ========== Status bar ========== %%
 
--define(STATUS_BAR, 2300).
+-define(STATUS_BAR, 2400).
 
 
 %% =====================================================================

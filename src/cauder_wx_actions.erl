@@ -22,7 +22,7 @@ create(Frame) ->
   Process = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Process"}]),
   wxStaticBoxSizer:add(Sizer, Process, [{flag, ?wxEXPAND}]),
 
-  ProcessChoice = wxChoice:new(Win, ?PROC_CHOICE, []),
+  ProcessChoice = wxChoice:new(Win, ?ACTION_Process, []),
   wxStaticBoxSizer:add(Process, ProcessChoice, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   wxEvtHandler:connect(ProcessChoice, command_choice_selected),
@@ -51,7 +51,7 @@ create(Frame) ->
 
 update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   % Disable and clear process selector
-  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  Choice = utils_gui:find(?ACTION_Process, wxChoice),
   wxChoice:disable(Choice),
   wxChoice:clear(Choice),
 
@@ -64,7 +64,7 @@ update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   ok;
 
 update(#sys{procs = ProcDict, logs = Logs} = System) ->
-  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  Choice = utils_gui:find(?ACTION_Process, wxChoice),
   {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
 
   % Enable and populate process selector
@@ -100,23 +100,23 @@ update(#sys{procs = ProcDict, logs = Logs} = System) ->
 
   case Pid of
     none ->
-      wxButton:disable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton)),
-      wxButton:disable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton)),
-      wxButton:disable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton)),
-      wxButton:disable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton)),
-      wxButton:disable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton)),
-      wxButton:disable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton));
+      wxButton:disable(utils_gui:find(?ACTION_Manual_Step_Forward_Button, wxButton)),
+      wxButton:disable(utils_gui:find(?ACTION_Manual_Step_Backward_Button, wxButton)),
+      wxButton:disable(utils_gui:find(?ACTION_Manual_StepOver_Forward_Button, wxButton)),
+      wxButton:disable(utils_gui:find(?ACTION_Manual_StepOver_Backward_Button, wxButton)),
+      wxButton:disable(utils_gui:find(?ACTION_Manual_StepInto_Forward_Button, wxButton)),
+      wxButton:disable(utils_gui:find(?ACTION_Manual_StepInto_Backward_Button, wxButton));
     _ ->
       ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options),
       CanGoFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
       CanGoBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
 
-      wxButton:enable(utils_gui:find(?STEP_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}]),
-      wxButton:enable(utils_gui:find(?STEP_OVER_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_OVER_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}]),
-      wxButton:enable(utils_gui:find(?STEP_INTO_FORWARD_BUTTON, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?STEP_INTO_BACKWARD_BUTTON, wxButton), [{enable, CanGoBwd}])
+      wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanGoBwd}]),
+      wxButton:enable(utils_gui:find(?ACTION_Manual_StepOver_Forward_Button, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?ACTION_Manual_StepOver_Backward_Button, wxButton), [{enable, CanGoBwd}]),
+      wxButton:enable(utils_gui:find(?ACTION_Manual_StepInto_Forward_Button, wxButton), [{enable, CanGoFwd}]),
+      wxButton:enable(utils_gui:find(?ACTION_Manual_StepInto_Backward_Button, wxButton), [{enable, CanGoBwd}])
   end,
 
   % Enable/disable automatic actions
@@ -125,9 +125,9 @@ update(#sys{procs = ProcDict, logs = Logs} = System) ->
   HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
   HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
 
-  wxSpinCtrl:enable(utils_gui:find(?STEPS_SPIN, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
-  wxButton:enable(utils_gui:find(?MULTIPLE_FORWARD_BUTTON, wxSpinCtrl), [{enable, HasFwd}]),
-  wxButton:enable(utils_gui:find(?MULTIPLE_BACKWARD_BUTTON, wxSpinCtrl), [{enable, HasBwd}]),
+  wxSpinCtrl:enable(utils_gui:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
+  wxButton:enable(utils_gui:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
+  wxButton:enable(utils_gui:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
 
   % Enable/disable replay actions
   case Pid =:= none orelse lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
@@ -142,8 +142,8 @@ update(#sys{procs = ProcDict, logs = Logs} = System) ->
           error -> false
         end,
 
-      wxSpinCtrl:enable(utils_gui:find(?REPLAY_STEPS_SPIN, wxSpinCtrl), [{enable, CanReplaySteps}]),
-      wxButton:enable(utils_gui:find(?REPLAY_STEPS_BUTTON, wxButton), [{enable, CanReplaySteps}])
+      wxSpinCtrl:enable(utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
+      wxButton:enable(utils_gui:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
   end,
 
   % Enable/disable rollback actions
@@ -164,8 +164,8 @@ update(#sys{procs = ProcDict, logs = Logs} = System) ->
       #proc{hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
       CanRollbackSteps = length(Hist) > 0,
 
-      wxSpinCtrl:enable(utils_gui:find(?ROLL_STEPS_SPIN, wxSpinCtrl), [{enable, CanRollbackSteps}]),
-      wxButton:enable(utils_gui:find(?ROLL_STEPS_BUTTON, wxButton), [{enable, CanRollbackSteps}])
+      wxSpinCtrl:enable(utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
+      wxButton:enable(utils_gui:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
   end,
 
   ok.
@@ -193,12 +193,12 @@ create_manual(Parent) ->
   Step = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step"}]),
   wxBoxSizer:add(Buttons, Step, [{flag, ?wxEXPAND}]),
 
-  StepBwd = wxButton:new(Win, ?STEP_BACKWARD_BUTTON, [{label, "Backward"}]),
+  StepBwd = wxButton:new(Win, ?ACTION_Manual_Step_Backward_Button, [{label, "Backward"}]),
   wxBoxSizer:add(Step, StepBwd),
 
   wxBoxSizer:addSpacer(Step, ?SPACER_SMALL),
 
-  StepFwd = wxButton:new(Win, ?STEP_FORWARD_BUTTON, [{label, "Forward"}]),
+  StepFwd = wxButton:new(Win, ?ACTION_Manual_Step_Forward_Button, [{label, "Forward"}]),
   wxBoxSizer:add(Step, StepFwd),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
@@ -208,12 +208,12 @@ create_manual(Parent) ->
   StepOver = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Over"}]),
   wxBoxSizer:add(Buttons, StepOver, [{flag, ?wxEXPAND}]),
 
-  StepOverBwd = wxButton:new(Win, ?STEP_OVER_BACKWARD_BUTTON, [{label, "Backward"}]),
+  StepOverBwd = wxButton:new(Win, ?ACTION_Manual_StepOver_Backward_Button, [{label, "Backward"}]),
   wxBoxSizer:add(StepOver, StepOverBwd),
 
   wxBoxSizer:addSpacer(StepOver, ?SPACER_SMALL),
 
-  StepOverFwd = wxButton:new(Win, ?STEP_OVER_FORWARD_BUTTON, [{label, "Forward"}]),
+  StepOverFwd = wxButton:new(Win, ?ACTION_Manual_StepOver_Forward_Button, [{label, "Forward"}]),
   wxBoxSizer:add(StepOver, StepOverFwd),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
@@ -223,12 +223,12 @@ create_manual(Parent) ->
   StepInto = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Into"}]),
   wxBoxSizer:add(Buttons, StepInto, [{flag, ?wxEXPAND}]),
 
-  StepIntoBwd = wxButton:new(Win, ?STEP_INTO_BACKWARD_BUTTON, [{label, "Backward"}]),
+  StepIntoBwd = wxButton:new(Win, ?ACTION_Manual_StepInto_Backward_Button, [{label, "Backward"}]),
   wxBoxSizer:add(StepInto, StepIntoBwd),
 
   wxBoxSizer:addSpacer(StepInto, ?SPACER_SMALL),
 
-  StepIntoFwd = wxButton:new(Win, ?STEP_INTO_FORWARD_BUTTON, [{label, "Forward"}]),
+  StepIntoFwd = wxButton:new(Win, ?ACTION_Manual_StepInto_Forward_Button, [{label, "Forward"}]),
   wxBoxSizer:add(StepInto, StepIntoFwd),
 
   Win.
@@ -258,7 +258,7 @@ create_automatic(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsSpin = wxSpinCtrl:new(Win, [{id, ?STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}]),
+  StepsSpin = wxSpinCtrl:new(Win, [{id, ?ACTION_Automatic_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}]),
   wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   % -----
@@ -270,12 +270,12 @@ create_automatic(Parent) ->
   Buttons = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Buttons, [{flag, ?wxEXPAND}]),
 
-  BwdButton = wxButton:new(Win, ?MULTIPLE_BACKWARD_BUTTON, [{label, "Backward"}]),
+  BwdButton = wxButton:new(Win, ?ACTION_Automatic_Backward_Button, [{label, "Backward"}]),
   wxBoxSizer:add(Buttons, BwdButton, CenterVertical),
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
-  FwdButton = wxButton:new(Win, ?MULTIPLE_FORWARD_BUTTON, [{label, "Forward"}]),
+  FwdButton = wxButton:new(Win, ?ACTION_Automatic_Forward_Button, [{label, "Forward"}]),
   wxBoxSizer:add(Buttons, FwdButton, CenterVertical),
 
   Win.
@@ -309,12 +309,12 @@ create_replay(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?REPLAY_STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
+  StepsText = wxSpinCtrl:new(Win, [{id, ?ACTION_Replay_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
-  StepsButton = wxButton:new(Win, ?REPLAY_STEPS_BUTTON, [{label, "Replay steps"}, ButtonSize]),
+  StepsButton = wxButton:new(Win, ?ACTION_Replay_Steps_Button, [{label, "Replay steps"}, ButtonSize]),
   wxBoxSizer:add(Steps, StepsButton, CenterVertical),
 
   % -----
@@ -331,12 +331,12 @@ create_replay(Parent) ->
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
-  SpawnText = wxTextCtrl:new(Win, ?REPLAY_SPAWN_TEXT, [InputSize]),
+  SpawnText = wxTextCtrl:new(Win, ?ACTION_Replay_Spawn, [InputSize]),
   wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
-  SpawnButton = wxButton:new(Win, ?REPLAY_SPAWN_BUTTON, [{label, "Replay spawn"}, ButtonSize]),
+  SpawnButton = wxButton:new(Win, ?ACTION_Replay_Spawn_Button, [{label, "Replay spawn"}, ButtonSize]),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
 
   % -----
@@ -353,12 +353,12 @@ create_replay(Parent) ->
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
-  SendText = wxTextCtrl:new(Win, ?REPLAY_SEND_TEXT, [InputSize]),
+  SendText = wxTextCtrl:new(Win, ?ACTION_Replay_Send, [InputSize]),
   wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
-  SendButton = wxButton:new(Win, ?REPLAY_SEND_BUTTON, [{label, "Replay send"}, ButtonSize]),
+  SendButton = wxButton:new(Win, ?ACTION_Replay_Send_Button, [{label, "Replay send"}, ButtonSize]),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
 
   % -----
@@ -375,12 +375,12 @@ create_replay(Parent) ->
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
-  ReceiveText = wxTextCtrl:new(Win, ?REPLAY_REC_TEXT, [InputSize]),
+  ReceiveText = wxTextCtrl:new(Win, ?ACTION_Replay_Receive, [InputSize]),
   wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
-  ReceiveButton = wxButton:new(Win, ?REPLAY_REC_BUTTON, [{label, "Replay receive"}, ButtonSize]),
+  ReceiveButton = wxButton:new(Win, ?ACTION_Replay_Receive_Button, [{label, "Replay receive"}, ButtonSize]),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
 
   Win.
@@ -414,12 +414,12 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?ROLL_STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
+  StepsText = wxSpinCtrl:new(Win, [{id, ?ACTION_Rollback_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
   wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
-  StepsButton = wxButton:new(Win, ?ROLL_STEPS_BUTTON, [{label, "Roll steps"}, ButtonSize]),
+  StepsButton = wxButton:new(Win, ?ACTION_Rollback_Steps_Button, [{label, "Roll steps"}, ButtonSize]),
   wxBoxSizer:add(Steps, StepsButton, CenterVertical),
 
   % -----
@@ -436,12 +436,12 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
-  SpawnText = wxTextCtrl:new(Win, ?ROLL_SPAWN_TEXT, [InputSize]),
+  SpawnText = wxTextCtrl:new(Win, ?ACTION_Rollback_Spawn, [InputSize]),
   wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
-  SpawnButton = wxButton:new(Win, ?ROLL_SPAWN_BUTTON, [{label, "Roll spawn"}, ButtonSize]),
+  SpawnButton = wxButton:new(Win, ?ACTION_Rollback_Spawn_Button, [{label, "Roll spawn"}, ButtonSize]),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
 
   % -----
@@ -458,12 +458,12 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
-  SendText = wxTextCtrl:new(Win, ?ROLL_SEND_TEXT, [InputSize]),
+  SendText = wxTextCtrl:new(Win, ?ACTION_Rollback_Send, [InputSize]),
   wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
-  SendButton = wxButton:new(Win, ?ROLL_SEND_BUTTON, [{label, "Roll send"}, ButtonSize]),
+  SendButton = wxButton:new(Win, ?ACTION_Rollback_Send_Button, [{label, "Roll send"}, ButtonSize]),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
 
   % -----
@@ -480,12 +480,12 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
-  ReceiveText = wxTextCtrl:new(Win, ?ROLL_REC_TEXT, [InputSize]),
+  ReceiveText = wxTextCtrl:new(Win, ?ACTION_Rollback_Receive, [InputSize]),
   wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
-  ReceiveButton = wxButton:new(Win, ?ROLL_REC_BUTTON, [{label, "Roll receive"}, ButtonSize]),
+  ReceiveButton = wxButton:new(Win, ?ACTION_Rollback_Receive_Button, [{label, "Roll receive"}, ButtonSize]),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
 
   % -----
@@ -502,12 +502,12 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Variable, ?SPACER_SMALL),
 
-  VariableText = wxTextCtrl:new(Win, ?ROLL_VAR_TEXT, [InputSize]),
+  VariableText = wxTextCtrl:new(Win, ?ACTION_Rollback_Variable, [InputSize]),
   wxBoxSizer:add(Variable, VariableText, CenterVertical),
 
   wxBoxSizer:addSpacer(Variable, ?SPACER_MEDIUM),
 
-  VariableButton = wxButton:new(Win, ?ROLL_VAR_BUTTON, [{label, "Roll variable"}, ButtonSize]),
+  VariableButton = wxButton:new(Win, ?ACTION_Rollback_Variable_Button, [{label, "Roll variable"}, ButtonSize]),
   wxBoxSizer:add(Variable, VariableButton, CenterVertical),
 
   Win.
@@ -519,7 +519,7 @@ create_rollback(Parent) ->
 -spec selected_pid() -> cauder_types:proc_id() | none.
 
 selected_pid() ->
-  Choice = utils_gui:find(?PROC_CHOICE, wxChoice),
+  Choice = utils_gui:find(?ACTION_Process, wxChoice),
   case wxChoice:getSelection(Choice) of
     ?wxNOT_FOUND -> none;
     Idx -> wxChoice:getClientData(Choice, Idx)
