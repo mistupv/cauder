@@ -183,17 +183,15 @@ create_manual(Parent) ->
   SizerV = wxBoxSizer:new(?wxVERTICAL),
   wxBoxSizer:add(SizerH, SizerV, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
-  ExpandCenterHorizontal = [{flag, ?wxEXPAND bor ?wxALIGN_CENTER_HORIZONTAL}],
-
   % ----- Buttons -----
 
   Buttons = wxBoxSizer:new(?wxVERTICAL),
-  wxBoxSizer:add(SizerV, Buttons, ExpandCenterHorizontal),
+  wxBoxSizer:add(SizerV, Buttons, [{flag, ?wxEXPAND}]),
 
   % Step
 
   Step = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step"}]),
-  wxBoxSizer:add(Buttons, Step, ExpandCenterHorizontal),
+  wxBoxSizer:add(Buttons, Step, [{flag, ?wxEXPAND}]),
 
   StepBwd = wxButton:new(Win, ?STEP_BACKWARD_BUTTON, [{label, "Backward"}]),
   wxBoxSizer:add(Step, StepBwd),
@@ -208,7 +206,7 @@ create_manual(Parent) ->
   % Step Over
 
   StepOver = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Over"}]),
-  wxBoxSizer:add(Buttons, StepOver, ExpandCenterHorizontal),
+  wxBoxSizer:add(Buttons, StepOver, [{flag, ?wxEXPAND}]),
 
   StepOverBwd = wxButton:new(Win, ?STEP_OVER_BACKWARD_BUTTON, [{label, "Backward"}]),
   wxBoxSizer:add(StepOver, StepOverBwd),
@@ -223,7 +221,7 @@ create_manual(Parent) ->
   % Step Into
 
   StepInto = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Into"}]),
-  wxBoxSizer:add(Buttons, StepInto, ExpandCenterHorizontal),
+  wxBoxSizer:add(Buttons, StepInto, [{flag, ?wxEXPAND}]),
 
   StepIntoBwd = wxButton:new(Win, ?STEP_INTO_BACKWARD_BUTTON, [{label, "Backward"}]),
   wxBoxSizer:add(StepInto, StepIntoBwd),
@@ -248,13 +246,12 @@ create_automatic(Parent) ->
   Content = wxBoxSizer:new(?wxVERTICAL),
   wxBoxSizer:add(SizerH, Content, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
-  ExpandCenterHorizontal = [{flag, ?wxEXPAND bor ?wxALIGN_CENTER_HORIZONTAL}],
   CenterVertical = [{flag, ?wxALIGN_CENTER}],
 
   % Steps
 
   Steps = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Steps, ExpandCenterHorizontal),
+  wxBoxSizer:add(Content, Steps, [{flag, ?wxEXPAND}]),
 
   StepsStaticText = wxStaticText:new(Win, ?wxID_ANY, "Steps:"),
   wxBoxSizer:add(Steps, StepsStaticText, CenterVertical),
@@ -262,7 +259,7 @@ create_automatic(Parent) ->
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
   StepsSpin = wxSpinCtrl:new(Win, [{id, ?STEPS_SPIN}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}]),
-  wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALIGN_CENTER}]),
+  wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   % -----
 
@@ -271,7 +268,7 @@ create_automatic(Parent) ->
   % Buttons
 
   Buttons = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Buttons, ExpandCenterHorizontal),
+  wxBoxSizer:add(Content, Buttons, [{flag, ?wxEXPAND}]),
 
   BwdButton = wxButton:new(Win, ?MULTIPLE_BACKWARD_BUTTON, [{label, "Backward"}]),
   wxBoxSizer:add(Buttons, BwdButton, CenterVertical),
