@@ -133,7 +133,7 @@ update(#sys{procs = PDict}, Pid) ->
   Line = element(2, E),
   Prev = get(line),
   CodeCtrl = utils_gui:find(?CODE_TEXT, wxStyledTextCtrl),
-  cauder_wx_code:mark_line(CodeCtrl, Prev, Line),
+  mark_line(CodeCtrl, Prev, Line),
   put(line, Line),
   ExprCtrl = utils_gui:find(?EXPR_TEXT, wxTextCtrl),
   Expr = pretty_print:expression(E),
