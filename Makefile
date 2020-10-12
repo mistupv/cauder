@@ -5,7 +5,7 @@ compile: clean
 	@$(MAKE) script
 
 script:
-	@echo "erl -noshell -pa ebin -s cauder start" > cauder.sh
+	@echo "erl -noshell -pa ebin -s cauder_wx start" > cauder.sh
 	@chmod +x cauder.sh
 
 docs: clean-docs

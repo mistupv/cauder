@@ -47,12 +47,6 @@
 -define(CAUDER_GREEN, {34,139,34}).
 
 
--record(status, {
-  loaded = false :: boolean(),
-  running = false :: boolean()
-}).
-
-
 % System
 -record(sys, {
   % Global mailbox
@@ -124,3 +118,10 @@
   stack :: cauder_types:stack(),
   label = tau :: cauder_types:label()
 }).
+
+
+
+-define(EVAL_MANUAL(Type, Args), {eval, {manual, Type, Args}}).
+-define(EVAL_AUTOMATIC(Args), {eval, {automatic, Args}}).
+-define(EVAL_REPLAY(Type, Args), {eval, {replay, Type, Args}}).
+-define(EVAL_ROLLBACK(Type, Args), {eval, {rollback, Type, Args}}).

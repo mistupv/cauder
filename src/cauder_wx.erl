@@ -3,10 +3,15 @@
 -behaviour(wx_object).
 
 %% API
--export([start/0, start_link/0, stop/0]).
+-export([start/0, start_link/0, stop/1]).
 
 %% wx_object callbacks
 -export([init/1, handle_event/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+
+-define(SERVER, ?MODULE).
+
+-define(MENU_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_menu_selected}}).
+-define(BUTTON_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_button_clicked}}).
 
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
@@ -23,22 +28,37 @@
 
 -type state() :: #wx_state{}.
 
--define(MENU_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_menu_selected}}).
--define(BUTTON_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_button_clicked}}).
-
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
--spec start() -> wxWindow:wxWindow() | {'error', any()}.
-start() -> wx_object:start(?MODULE, [], []).
+-spec start() -> {ok, Pid :: pid(), Window :: wxWindow:wxWindow()} | {error, Reason :: term()}.
+start() ->
+  case whereis(cauder) of
+    undefined -> cauder:start();
+    _ -> ok
+  end,
+  case wx_object:start({local, ?SERVER}, ?MODULE, [], []) of
+    {error, _} = E -> E;
+    WxObject -> {ok, wx_object:get_pid(WxObject), WxObject}
+  end.
 
--spec start_link() -> wxWindow:wxWindow() | {'error', any()}.
-start_link() -> wx_object:start_link(?MODULE, [], []).
 
--spec stop() -> 'ok'.
-stop() -> wx_object:stop(?MODULE).
+-spec start_link() -> {ok, Pid :: pid(), Window :: wxWindow:wxWindow()} | {error, Reason :: term()}.
+start_link() ->
+  case whereis(cauder) of
+    undefined -> cauder:start_link();
+    _ -> ok
+  end,
+  case wx_object:start_link({local, ?SERVER}, ?MODULE, [], []) of
+    {error, _} = E -> E;
+    WxObject -> {ok, wx_object:get_pid(WxObject), WxObject}
+  end.
+
+
+-spec stop(WxObject :: wxWindow:wxWindow()) -> 'ok'.
+stop(WxObject) -> wx_object:stop(WxObject).
 
 
 %%%===================================================================
@@ -48,13 +68,6 @@ stop() -> wx_object:stop(?MODULE).
 -spec init(Args :: list()) -> {wxFrame:wxFrame(), state()}.
 
 init([]) ->
-  %% ----------
-  %% TODO Move to 'cauder' process, once fully decoupled
-  Db = ets:new(?MODULE, [set, public, named_table]),
-  put(db, Db),
-  put(status, #status{}),
-  %% ----------
-
   wx:new(),
 
   Frame = wxFrame:new(wx:null(), ?FRAME, ?APPNAME, [{size, ?FRAME_SIZE_INIT}]),
@@ -119,7 +132,7 @@ handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
   {noreply, State1};
 
 handle_event(?MENU_EVENT(?MENU_Run_Start), #wx_state{frame = Frame, module = Module} = State) ->
-  EntryPoints = cauder:entry_points(Module),
+  EntryPoints = cauder:get_entry_points(Module),
   case cauder_wx_dialog:start_session(Frame, EntryPoints) of
     {manual, {Mod, Fun, Args}} -> start_manual_session(Mod, Fun, Args);
     {replay, TracePath} -> start_replay_session(TracePath);
@@ -202,7 +215,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_BUTTON(Button) ->
       refresh(false);
     Pid ->
       Sem = button_to_semantics(Button),
-      Rule = cauder:eval_reduce(Sem, Pid),
+      Rule = cauder:eval_step(Sem, Pid),
       cauder_wx_statusbar:step(Sem, Rule),
       refresh(true)
   end,
@@ -215,7 +228,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?IS_STEP_OVER_BUTTON(Button) ->
       refresh(false);
     Pid ->
       Sem = button_to_semantics(Button),
-      case cauder:eval_step(Sem, Pid) of
+      case cauder:eval_step_over(Sem, Pid) of
         nomatch ->
           cauder_wx_statusbar:no_match(),
           refresh(false);
@@ -374,14 +387,14 @@ handle_event(?BUTTON_EVENT(?ROLL_VAR_BUTTON), State) ->
 %% -------------------- Bindings handler -------------------- %%
 
 handle_event(#wx{id = ?BINDINGS_LIST, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
-  Sys = cauder:system(),
+  Sys = cauder:get_system(),
   Pid = cauder_wx_actions:selected_pid(),
   {ok, #proc{env = Bs}} = orddict:find(Pid, Sys#sys.procs),
   Nth = wxListCtrl:getItemData(BindingList, Index),
   {Key, Value} = lists:nth(Nth, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
     {Key, NewValue} ->
-      cauder:edit_binding(Pid, {Key, NewValue}),
+      cauder:set_binding(Pid, {Key, NewValue}),
       refresh(true);
     cancel -> ok
   end,
@@ -432,12 +445,10 @@ handle_info(Info, State) ->
 terminate(_Reason, #wx_state{frame = Frame}) ->
   wxFrame:destroy(Frame),
   wx:destroy(),
-
-  %% ----------
-  %% TODO Move to 'cauder' process, once fully decoupled
-  ets:delete(?MODULE),
-  %% ----------
-
+  case whereis(cauder) of
+    undefined -> ok;
+    _ -> cauder:stop()
+  end,
   ok.
 
 
@@ -450,15 +461,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
 %%--------------------------------------------------------------------
 %% @doc Loads the specified '.erl' source file
 
 -spec open_file(File :: file:filename()) -> Module :: atom().
 
 open_file(File) ->
-  %utils_gui:stop_refs(), % TODO
-
   {ok, Module} = cauder:load_file(File),
 
   {ok, Src, _} = erl_prim_loader:get_file(File),
@@ -475,42 +483,30 @@ open_file(File) ->
 %%--------------------------------------------------------------------
 %% @doc Starts a new manual debugging session with the given function application.
 
--spec start_manual_session(Module, Function, Args) -> ok when
-  Module :: atom(),
-  Function :: atom(),
-  Args :: [erl_parse:abstract_expr()].
+-spec start_manual_session(Module :: atom(), Function :: atom(), Arity :: list(erl_parse:abstract_expr())) -> 'ok'.
 
-start_manual_session(M, F, As) -> start_session(M, F, As, 1).
+start_manual_session(M, F, As) ->
+  ok = cauder:init_system(M, F, As),
+  start_session(M, F, length(As)).
 
 
 %%--------------------------------------------------------------------
 %% @doc Starts a new replay debugging session using the trace in the given directory.
 
--spec start_replay_session(file:filename()) -> ok.
+-spec start_replay_session(LogPath :: file:filename()) -> 'ok'.
 
 start_replay_session(Path) ->
-%%  try
-  utils:load_replay_data(Path),
-  #replay{log_path = Path, call = {Mod, Fun, Args}, main_pid = Pid} = get(replay_data),
-  start_session(Mod, Fun, Args, Pid).
-%%  catch
-%%    _:_ ->
-%%      Frame = ref_lookup(?FRAME),
-%%      wxFrame:setStatusText(Frame, "Error loading replay data")
-%%  end.
+  {M, F, A} = cauder:init_system(Path),
+  start_session(M, F, A).
 
 
 %%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session(Module, Function, Args, Pid) -> ok when
-  Module :: atom(),
-  Function :: atom(),
-  Args :: [erl_parse:abstract_expr()],
-  Pid :: cauder_types:proc_id().
+-spec start_session(Module :: atom(), Function :: atom(), Arity :: arity()) -> 'ok'.
 
-start_session(M, F, As, Pid) ->
-  cauder:init_system(M, F, As, Pid),
+start_session(M, F, A) ->
+  put(line, 0),
 
   refresh(true),
 
@@ -518,26 +514,36 @@ start_session(M, F, As, Pid) ->
   cauder_wx_menu:enable(?MENU_Run_Stop, true),
 
   % Update status bar message
-  StatusString = "Started system with " ++ atom_to_list(F) ++ "/" ++ integer_to_list(length(As)) ++ " fun application!",
-  cauder_wx_statusbar:update(StatusString).
+  cauder_wx_statusbar:update(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])).
 
+
+%%--------------------------------------------------------------------
+%% @doc Stops the current debugging session.
+
+-spec stop_session() -> 'ok'.
 
 stop_session() ->
-  cauder:stop_system(),
+  ok = cauder:stop_system(),
+
+  erase(line),
 
   refresh(true),
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
-  cauder_wx_menu:enable(?MENU_Run_Stop, false).
+  cauder_wx_menu:enable(?MENU_Run_Stop, false),
+
+  % Update status bar message
+  cauder_wx_statusbar:update("Stopped system!").
 
 
-
+%%--------------------------------------------------------------------
+%% @doc Refreshes the UI.
 
 -spec refresh(boolean()) -> ok.
 
 refresh(RefreshState) ->
   % TODO Remove argument
-  System = cauder:system(),
+  System = cauder:get_system(),
   case RefreshState of
     false -> ok;
     true ->
@@ -551,25 +557,11 @@ refresh(RefreshState) ->
       cauder_wx_process:update(System, Pid)
   end.
 
-%%start() ->
-%%  InputText = wxTextCtrl:getValue(ref_lookup(?ARGS_TEXT)),
-%%  SelectedFun = wxChoice:getStringSelection(ref_lookup(?FUN_CHOICE)),
-%%  {M, F, A} = utils:stringToMFA(SelectedFun),
-%%  As = utils:stringToArgs(InputText),
-%%  case A == length(As) of
-%%    true ->
-%%      start(M, F, As),
-%%      ?LOG("start fun " ++ SelectedFun ++ " with args " ++ InputText);
-%%    false ->
-%%      utils_gui:update_status_text(?ERROR_NUM_ARGS),
-%%      error
-%%  end.
-
 
 -spec button_to_semantics(ButtonId) -> Semantics when
   ButtonId :: ?STEP_FORWARD_BUTTON | ?STEP_BACKWARD_BUTTON |
   ?STEP_OVER_FORWARD_BUTTON | ?STEP_OVER_BACKWARD_BUTTON |
-  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
+%%  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
   ?MULTIPLE_FORWARD_BUTTON | ?MULTIPLE_BACKWARD_BUTTON,
   Semantics :: ?FWD_SEM | ?BWD_SEM.
 
@@ -577,7 +569,7 @@ button_to_semantics(?STEP_FORWARD_BUTTON)       -> ?FWD_SEM;
 button_to_semantics(?STEP_BACKWARD_BUTTON)      -> ?BWD_SEM;
 button_to_semantics(?STEP_OVER_FORWARD_BUTTON)  -> ?FWD_SEM;
 button_to_semantics(?STEP_OVER_BACKWARD_BUTTON) -> ?BWD_SEM;
-button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
-button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
+%%button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
+%%button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
 button_to_semantics(?MULTIPLE_FORWARD_BUTTON)   -> ?FWD_SEM;
 button_to_semantics(?MULTIPLE_BACKWARD_BUTTON)  -> ?BWD_SEM.

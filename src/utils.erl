@@ -364,7 +364,7 @@ must_focus_log(System) ->
 %% ==================== Load replay data ==================== %%
 
 
--spec load_replay_data(file:filename()) -> ok.
+-spec load_replay_data(file:filename()) -> #replay{}.
 
 load_replay_data(Path) ->
   ResultFile = filename:join(Path, "trace_result.log"),
@@ -372,9 +372,7 @@ load_replay_data(Path) ->
   Lines = get_all_lines(FileHandler),
   file:close(FileHandler),
   #{call := Call, main_pid := Pid} = parse_lines(Lines),
-  Data = #replay{log_path = Path, call = Call, main_pid = Pid},
-  put(replay_data, Data),
-  ok.
+   #replay{log_path = Path, call = Call, main_pid = Pid}.
 
 
 -spec get_all_lines(file:io_device()) -> [string()].
