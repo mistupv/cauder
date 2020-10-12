@@ -126,10 +126,10 @@ start_session(Parent, MFAs) ->
     ?wxID_OK ->
       case wxRadioButton:getValue(ManualRadio) of
         true ->
-          {Mod, Fun, Arity} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
-          Args = utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)),
-          Arity = length(Args),
-          {manual, {Mod, Fun, Args}};
+          {M, F, A} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
+          As = utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)),
+          A = length(As),
+          {manual, {M, F, As}};
         false ->
           {replay, wxDirPickerCtrl:getPath(TracePicker)}
       end;
