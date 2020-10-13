@@ -9,6 +9,9 @@
 -export([selected_pid/0]).
 
 
+%%--------------------------------------------------------------------
+%% @doc Created the "actions" panel populates it and then returns it.
+
 -spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create(Frame) ->
@@ -45,9 +48,9 @@ create(Frame) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Updates the process selector and the action panels
+%% @doc Updates the "actions" panel according to the given system.
 
--spec update(System :: cauder_types:system() | 'undefined') -> ok.
+-spec update(System :: cauder_types:system() | 'undefined') -> 'ok'.
 
 update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   % Disable and clear process selector
@@ -55,121 +58,50 @@ update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   wxChoice:disable(Choice),
   wxChoice:clear(Choice),
 
-  % Disable all actions
-  wxPanel:disable(utils_gui:find(?ACTION_Manual, wxPanel)),
-  wxPanel:disable(utils_gui:find(?ACTION_Automatic, wxPanel)),
-  wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel)),
-  wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel)),
+  % Update actions
+  update_manual(System),
+  update_automatic(System),
+  update_replay(System),
+  update_rollback(System),
 
   ok;
 
-update(#sys{procs = ProcDict, logs = Logs} = System) ->
+update(#sys{procs = ProcDict} = System) ->
   Choice = utils_gui:find(?ACTION_Process, wxChoice),
   {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
 
   % Enable and populate process selector
-  case get({?MODULE, system}) of
-    System -> ok;
-    _ ->
-      wxChoice:freeze(Choice),
-      wxChoice:enable(Choice),
-      PrevSel = wxChoice:getStringSelection(Choice),
-      wxChoice:clear(Choice),
-      lists:foreach(
-        fun(Proc) ->
-          Label = pretty_print:process(Proc),
-          wxChoice:append(Choice, Label, Proc#proc.pid)
-        end,
-        Procs
-      ),
-      wxChoice:setStringSelection(Choice, PrevSel),
-      case wxChoice:getSelection(Choice) of
-        ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
-        _ -> ok
-      end,
-      wxChoice:thaw(Choice),
-
-      put({?MODULE, system}, System)
+  wxChoice:freeze(Choice),
+  wxChoice:enable(Choice),
+  PrevSel = wxChoice:getStringSelection(Choice),
+  wxChoice:clear(Choice),
+  lists:foreach(
+    fun(Proc) ->
+      Label = pretty_print:process(Proc),
+      wxChoice:append(Choice, Label, Proc#proc.pid)
+    end,
+    Procs
+  ),
+  wxChoice:setStringSelection(Choice, PrevSel),
+  case wxChoice:getSelection(Choice) of
+    ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
+    _ -> ok
   end,
+  wxChoice:thaw(Choice),
 
-  Options = cauder:eval_opts(System),
-  Pid = selected_pid(),
-
-  % Enable/disable manual actions
-  wxPanel:enable(utils_gui:find(?ACTION_Manual, wxPanel)),
-
-  case Pid of
-    none ->
-      wxButton:disable(utils_gui:find(?ACTION_Manual_Step_Forward_Button, wxButton)),
-      wxButton:disable(utils_gui:find(?ACTION_Manual_Step_Backward_Button, wxButton)),
-      wxButton:disable(utils_gui:find(?ACTION_Manual_StepOver_Forward_Button, wxButton)),
-      wxButton:disable(utils_gui:find(?ACTION_Manual_StepOver_Backward_Button, wxButton)),
-      wxButton:disable(utils_gui:find(?ACTION_Manual_StepInto_Forward_Button, wxButton)),
-      wxButton:disable(utils_gui:find(?ACTION_Manual_StepInto_Backward_Button, wxButton));
-    _ ->
-      ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options),
-      CanGoFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
-      CanGoBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
-
-      wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanGoBwd}]),
-      wxButton:enable(utils_gui:find(?ACTION_Manual_StepOver_Forward_Button, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?ACTION_Manual_StepOver_Backward_Button, wxButton), [{enable, CanGoBwd}]),
-      wxButton:enable(utils_gui:find(?ACTION_Manual_StepInto_Forward_Button, wxButton), [{enable, CanGoFwd}]),
-      wxButton:enable(utils_gui:find(?ACTION_Manual_StepInto_Backward_Button, wxButton), [{enable, CanGoBwd}])
-  end,
-
-  % Enable/disable automatic actions
-  wxPanel:enable(utils_gui:find(?ACTION_Automatic, wxPanel)),
-
-  HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-  HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
-
-  wxSpinCtrl:enable(utils_gui:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
-  wxButton:enable(utils_gui:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
-  wxButton:enable(utils_gui:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
-
-  % Enable/disable replay actions
-  case Pid =:= none orelse lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
-    true ->
-      wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel));
-    false ->
-      wxPanel:enable(utils_gui:find(?ACTION_Replay, wxPanel)),
-
-      CanReplaySteps =
-        case orddict:find(Pid, Logs) of
-          {ok, Log} -> length(Log) > 0;
-          error -> false
-        end,
-
-      wxSpinCtrl:enable(utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
-      wxButton:enable(utils_gui:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
-  end,
-
-  % Enable/disable rollback actions
-  CanRollBack = lists:any(
-    fun(#proc{hist = Hist}) ->
-      lists:any(
-        fun(Entry) ->
-          Key = element(1, Entry),
-          Key =/= tau andalso Key =/= self
-        end, Hist)
-    end, Procs),
-  case Pid =:= none orelse not CanRollBack of
-    true ->
-      wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel));
-    false ->
-      wxPanel:enable(utils_gui:find(?ACTION_Rollback, wxPanel)),
-
-      #proc{hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
-      CanRollbackSteps = length(Hist) > 0,
-
-      wxSpinCtrl:enable(utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
-      wxButton:enable(utils_gui:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
-  end,
+  % Update actions
+  update_manual(System),
+  update_automatic(System),
+  update_replay(System),
+  update_rollback(System),
 
   ok.
 
+
+%% -------------------- Manual -------------------- %%
+
+
+-spec create_manual(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_manual(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?ACTION_Manual}]),
@@ -190,49 +122,102 @@ create_manual(Parent) ->
 
   % Step
 
-  Step = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step"}]),
-  wxBoxSizer:add(Buttons, Step, [{flag, ?wxEXPAND}]),
+  Step = wxPanel:new(Win, [{winid, ?ACTION_Manual_Step}]),
+  wxBoxSizer:add(Buttons, Step),
 
-  StepBwd = wxButton:new(Win, ?ACTION_Manual_Step_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(Step, StepBwd),
+  StepSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Step, [{label, "Step"}]),
+  wxPanel:setSizer(Step, StepSizer),
 
-  wxBoxSizer:addSpacer(Step, ?SPACER_SMALL),
+  StepBwd = wxButton:new(Step, ?ACTION_Manual_Step_Backward_Button, [{label, "Backward"}]),
+  wxBoxSizer:add(StepSizer, StepBwd),
 
-  StepFwd = wxButton:new(Win, ?ACTION_Manual_Step_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(Step, StepFwd),
+  wxBoxSizer:addSpacer(StepSizer, ?SPACER_SMALL),
+
+  StepFwd = wxButton:new(Step, ?ACTION_Manual_Step_Forward_Button, [{label, "Forward"}]),
+  wxBoxSizer:add(StepSizer, StepFwd),
+
+  % -----
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
   % Step Over
 
-  StepOver = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Over"}]),
-  wxBoxSizer:add(Buttons, StepOver, [{flag, ?wxEXPAND}]),
+  StepOver = wxPanel:new(Win, [{winid, ?ACTION_Manual_StepOver}]),
+  wxBoxSizer:add(Buttons, StepOver),
 
-  StepOverBwd = wxButton:new(Win, ?ACTION_Manual_StepOver_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(StepOver, StepOverBwd),
+  StepOverSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, StepOver, [{label, "Step Over"}]),
+  wxPanel:setSizer(StepOver, StepOverSizer),
 
-  wxBoxSizer:addSpacer(StepOver, ?SPACER_SMALL),
+  StepOverBwd = wxButton:new(StepOver, ?ACTION_Manual_StepOver_Backward_Button, [{label, "Backward"}]),
+  wxBoxSizer:add(StepOverSizer, StepOverBwd),
 
-  StepOverFwd = wxButton:new(Win, ?ACTION_Manual_StepOver_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(StepOver, StepOverFwd),
+  wxBoxSizer:addSpacer(StepOverSizer, ?SPACER_SMALL),
+
+  StepOverFwd = wxButton:new(StepOver, ?ACTION_Manual_StepOver_Forward_Button, [{label, "Forward"}]),
+  wxBoxSizer:add(StepOverSizer, StepOverFwd),
+
+  wxPanel:hide(StepOver), % Temporarily hidden
+
+  % -----
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
   % Step Into
 
-  StepInto = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Step Into"}]),
-  wxBoxSizer:add(Buttons, StepInto, [{flag, ?wxEXPAND}]),
+  StepInto = wxPanel:new(Win, [{winid, ?ACTION_Manual_StepInto}]),
+  wxBoxSizer:add(Buttons, StepInto),
 
-  StepIntoBwd = wxButton:new(Win, ?ACTION_Manual_StepInto_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(StepInto, StepIntoBwd),
+  StepIntoSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, StepInto, [{label, "Step Into"}]),
+  wxPanel:setSizer(StepInto, StepIntoSizer),
 
-  wxBoxSizer:addSpacer(StepInto, ?SPACER_SMALL),
+  StepIntoBwd = wxButton:new(StepInto, ?ACTION_Manual_StepInto_Backward_Button, [{label, "Backward"}]),
+  wxBoxSizer:add(StepIntoSizer, StepIntoBwd),
 
-  StepIntoFwd = wxButton:new(Win, ?ACTION_Manual_StepInto_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(StepInto, StepIntoFwd),
+  wxBoxSizer:addSpacer(StepIntoSizer, ?SPACER_SMALL),
+
+  StepIntoFwd = wxButton:new(StepInto, ?ACTION_Manual_StepInto_Forward_Button, [{label, "Forward"}]),
+  wxBoxSizer:add(StepIntoSizer, StepIntoFwd),
+
+  wxPanel:hide(StepInto), % Temporarily hidden
 
   Win.
 
+
+-spec update_manual(System :: cauder_types:system() | 'undefined') -> 'ok'.
+
+update_manual(System) when System =:= undefined orelse System#sys.procs =:= [] ->
+  wxPanel:disable(utils_gui:find(?ACTION_Manual, wxPanel)),
+  ok;
+
+update_manual(System) ->
+  wxPanel:enable(utils_gui:find(?ACTION_Manual, wxPanel)),
+
+  case selected_pid() of
+    none ->
+      wxPanel:disable(utils_gui:find(?ACTION_Manual_Step, wxPanel));
+    Pid ->
+      ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
+      CanStep = ProcOpts =/= [],
+
+      wxPanel:enable(utils_gui:find(?ACTION_Manual_Step, wxPanel), [{enable, CanStep}]),
+
+      case CanStep of
+        false -> ok;
+        true ->
+          CanStepFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
+          CanStepBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
+
+          wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
+          wxButton:enable(utils_gui:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}])
+      end
+  end,
+  ok.
+
+
+%% -------------------- Automatic -------------------- %%
+
+
+-spec create_automatic(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_automatic(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?ACTION_Automatic}]),
@@ -280,6 +265,29 @@ create_automatic(Parent) ->
 
   Win.
 
+
+-spec update_automatic(System :: cauder_types:system() | 'undefined') -> 'ok'.
+
+update_automatic(System) when System =:= undefined orelse System#sys.procs =:= [] ->
+  wxPanel:disable(utils_gui:find(?ACTION_Automatic, wxPanel)),
+  ok;
+update_automatic(System) ->
+  wxPanel:enable(utils_gui:find(?ACTION_Automatic, wxPanel)),
+
+  Options = cauder:eval_opts(System),
+  HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
+  HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+
+  wxSpinCtrl:enable(utils_gui:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
+  wxButton:enable(utils_gui:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
+  wxButton:enable(utils_gui:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
+  ok.
+
+
+%% -------------------- Replay -------------------- %%
+
+
+-spec create_replay(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_replay(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?ACTION_Replay}]),
@@ -385,6 +393,36 @@ create_replay(Parent) ->
 
   Win.
 
+
+-spec update_replay(System :: cauder_types:system() | 'undefined') -> 'ok'.
+
+update_replay(System) when System =:= undefined orelse System#sys.procs =:= [] ->
+  wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel)),
+  ok;
+update_replay(#sys{logs = Logs}) ->
+  Pid = selected_pid(),
+  case Pid =:= none orelse lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
+    true ->
+      wxPanel:disable(utils_gui:find(?ACTION_Replay, wxPanel));
+    false ->
+      wxPanel:enable(utils_gui:find(?ACTION_Replay, wxPanel)),
+
+      CanReplaySteps =
+        case orddict:find(Pid, Logs) of
+          {ok, Log} -> length(Log) > 0;
+          error -> false
+        end,
+
+      wxSpinCtrl:enable(utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
+      wxButton:enable(utils_gui:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
+  end,
+  ok.
+
+
+%% -------------------- Rollback -------------------- %%
+
+
+-spec create_rollback(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create_rollback(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?ACTION_Rollback}]),
@@ -513,8 +551,41 @@ create_rollback(Parent) ->
   Win.
 
 
-%% ===================================================================
+-spec update_rollback(System :: cauder_types:system() | 'undefined') -> 'ok'.
 
+update_rollback(System) when System =:= undefined orelse System#sys.procs =:= [] ->
+  wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel)),
+  ok;
+update_rollback(#sys{procs = ProcDict}) ->
+  {_, Procs} = lists:unzip(orddict:to_list(ProcDict)),
+  Pid = selected_pid(),
+
+  CanRollBack = lists:any(
+    fun(#proc{hist = Hist}) ->
+      lists:any(
+        fun(Entry) ->
+          Key = element(1, Entry),
+          Key =/= tau andalso Key =/= self
+        end, Hist)
+    end, Procs),
+  case Pid =:= none orelse not CanRollBack of
+    true ->
+      wxPanel:disable(utils_gui:find(?ACTION_Rollback, wxPanel));
+    false ->
+      wxPanel:enable(utils_gui:find(?ACTION_Rollback, wxPanel)),
+
+      Choice = utils_gui:find(?ACTION_Process, wxChoice),
+      #proc{hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
+      CanRollbackSteps = length(Hist) > 0,
+
+      wxSpinCtrl:enable(utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
+      wxButton:enable(utils_gui:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
+  end,
+  ok.
+
+
+%%--------------------------------------------------------------------
+%% @doc Returns the PID of the process currently selected in the "Process" dropdown.
 
 -spec selected_pid() -> cauder_types:proc_id() | none.
 
