@@ -62,11 +62,11 @@ expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_
 -spec trace_entry(cauder_types:trace()) -> [string()].
 
 trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = UID}) ->
-  io_lib:format("~p send ~p to ~p (~p)", [pid(From), Val, pid(To), UID]);
+  io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), UID]);
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
-  io_lib:format("~p spawns ~p", [pid(From), pid(To)]);
+  io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
 trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = UID}) ->
-  io_lib:format("~p receives ~p (~p)", [pid(From), Val, UID]).
+  io_lib:format("~s receives ~p (~p)", [pid(From), Val, UID]).
 
 
 %% ===== Utils ===== %%
