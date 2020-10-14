@@ -73,20 +73,23 @@ update(#sys{procs = ProcDict} = System) ->
   % Enable and populate process selector
   wxChoice:freeze(Choice),
   wxChoice:enable(Choice),
-  PrevSel = wxChoice:getStringSelection(Choice),
+  PrevPid = selected_pid(),
   wxChoice:clear(Choice),
-  lists:foreach(
-    fun(Proc) ->
-      Label = pretty_print:process(Proc),
-      wxChoice:append(Choice, Label, Proc#proc.pid)
-    end,
-    Procs
-  ),
-  wxChoice:setStringSelection(Choice, PrevSel),
-  case wxChoice:getSelection(Choice) of
-    ?wxNOT_FOUND -> wxChoice:setSelection(Choice, 0);
-    _ -> ok
-  end,
+  {_, NewIdx} =
+    lists:foldl(
+      fun(Proc, {Idx, Match}) ->
+        Label = pretty_print:process(Proc),
+        Pid = Proc#proc.pid,
+        wxChoice:append(Choice, Label, Pid),
+        case PrevPid =:= Pid of
+          true -> {Idx + 1, Idx};
+          false -> {Idx + 1, Match}
+        end
+      end,
+      {0, 0},
+      Procs
+    ),
+  wxChoice:setSelection(Choice, NewIdx),
   wxChoice:thaw(Choice),
 
   % Update actions

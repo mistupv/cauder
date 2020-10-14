@@ -14,7 +14,11 @@
 
 -spec process(cauder_types:process()) -> string().
 
-process(#proc{pid = Pid, spf = {M, F, A}}) -> lists:flatten(io_lib:format("PID: ~p - ~s:~s/~p", [Pid, M, F, A])).
+process(#proc{pid = Pid, spf = {M, F, A}} = Proc) ->
+  lists:flatten(state_icon(Proc) ++ io_lib:format("PID: ~p - ~s:~s/~p", [Pid, M, F, A])).
+
+state_icon(#proc{exprs = [{value, _, _}], stack = []}) -> "💀 ";
+state_icon(#proc{})                                    -> "".
 
 
 %% ===== Log ===== %%
