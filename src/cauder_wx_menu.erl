@@ -26,9 +26,9 @@ create(Frame) ->
 
   FileMenu = create_menu(
     [
-      #menu_item{id = ?MENU_File_Open, text = "&Open...\tCtrl+O"},
+      #menu_item{id = ?MENU_File_Open, text = "&Open...\tCtrl+O", help = ?HELP_File_Open},
       separator,
-      #menu_item{id = ?MENU_File_Exit, text = "E&xit"}
+      #menu_item{id = ?MENU_File_Exit, text = "E&xit", help = ?HELP_File_Exit}
     ]
   ),
 
@@ -58,14 +58,14 @@ create(Frame) ->
       #menu_item{id = ?MENU_View_RelevantEnvironment, text = "Relevant Environment", help = ?HELP_View_RelevantEnvironment, kind = radio},
       #menu_item{id = ?MENU_View_FullEnvironment, text = "Full Environment", help = ?HELP_View_FullEnvironment, kind = radio},
       separator,
-      #menu_item{id = ?MENU_View_StatusBar, text = "&Status Bar", kind = check}
+      #menu_item{id = ?MENU_View_StatusBar, text = "&Status Bar", help = ?HELP_View_StatusBar, kind = check}
     ]
   ),
 
   RunMenu = create_menu(
     [
-      #menu_item{id = ?MENU_Run_Start, text = "St&art...", enabled = false},
-      #menu_item{id = ?MENU_Run_Stop, text = "St&op", enabled = false}
+      #menu_item{id = ?MENU_Run_Start, text = "St&art...", help = ?HELP_Run_Start, enabled = false},
+      #menu_item{id = ?MENU_Run_Stop, text = "St&op", help = ?HELP_Run_Stop, enabled = false}
     ]
   ),
 

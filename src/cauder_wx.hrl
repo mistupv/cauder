@@ -12,25 +12,27 @@
 % DO NOT CHANGE. This is the actual default font size taking into account zoom levels
 -define(FONT_SIZE_ACTUAL_DEFAULT, ?FONT_SIZE_APPARENT_DEFAULT - (?ZOOM_DEFAULT)).
 
+-define(MAX_STEPS, 10000).
+
+%% -----
 
 -define(SPACER_SMALL, 5).
 -define(SPACER_MEDIUM, 7).
 -define(SPACER_LARGE, 10).
 
+%% -------------------- Component IDs -------------------- %%
 
-%% ========== Menu Bar ========== %%
-
-%% File Menu
+%% ---------- Menu Bar ---------- %%
 
 -define(MENU_File_Open, ?wxID_OPEN).
 -define(MENU_File_Exit, ?wxID_EXIT).
 
-%% Edit Menu
+%% -----
 
 -define(MENU_Edit_Undo, ?wxID_UNDO).
 -define(MENU_Edit_Redo, ?wxID_REDO).
 
-%% View Menu
+%% -----
 
 -define(MENU_View_ZoomIn, ?wxID_ZOOM_IN).
 -define(MENU_View_ZoomOut, ?wxID_ZOOM_OUT).
@@ -55,32 +57,28 @@
 
 -define(MENU_View_StatusBar, 1010).
 
-%% Run Menu
+%% -----
 
 -define(MENU_Run_Start, 1011).
 -define(MENU_Run_Stop, 1012).
 
-%% Help Menu
+%% -----
 
 -define(MENU_Help_ViewHelp, 1013).
 
 -define(MENU_Help_About, ?wxID_ABOUT).
 
 
-%% ========== Main Panel ========== %%
-
-%% ===== Code Panel ===== %%
+%% ---------- Main Panel ---------- %%
 
 -define(CODE_Code, 2001).
 -define(CODE_Expression, 2002).
 
-%% ===== Action Panel ===== %%
-
--define(MAX_STEPS, 10000).
+%% -----
 
 -define(ACTION_Process, 2100).
 
-%% ----- Manual Panel ----- %%
+%% -----
 
 -define(ACTION_Manual, 2110).
 
@@ -102,7 +100,7 @@
 
 -define(Is_StepInto_Button(Button), (Button =:= ?ACTION_Manual_StepInto_Forward_Button) orelse (Button =:= ?ACTION_Manual_StepInto_Backward_Button)).
 
-%% ----- Automatic Panel ----- %%
+%% -----
 
 -define(ACTION_Automatic, 2120).
 
@@ -112,7 +110,7 @@
 
 -define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button) orelse (Button =:= ?ACTION_Automatic_Backward_Button)).
 
-%% ----- Replay Panel ----- %%
+%% -----
 
 -define(ACTION_Replay, 2130).
 
@@ -126,7 +124,7 @@
 -define(ACTION_Replay_Send_Button, 2137).
 -define(ACTION_Replay_Receive_Button, 2138).
 
-%% ----- Rollback Panel ----- %%
+%% -----
 
 -define(ACTION_Rollback, 2140).
 
@@ -142,7 +140,7 @@
 -define(ACTION_Rollback_Receive_Button, 2149).
 -define(ACTION_Rollback_Variable_Button, 2150).
 
-%% ===== System Info Panel ===== %%
+%% ----- System Info Panel ----- %%
 
 -define(SYSTEM_Mail, 2200).
 
@@ -154,7 +152,7 @@
 -define(SYSTEM_RollLog, 2212).
 
 
-%% ===== Process Info Panel ===== %%
+%% ----- Process Info Panel ----- %%
 
 -define(PROCESS_Bindings, 2300).
 -define(PROCESS_Stack, 2301).
@@ -162,38 +160,50 @@
 -define(PROCESS_History, 2303).
 
 
-%% ========== Status bar ========== %%
+%% ---------- Status bar ---------- %%
 
 -define(STATUS_BAR, 2400).
 
 
-%% =====================================================================
+%% -------------------- Help strings -------------------- %%
 
+-define(HELP_File_Open, "Open an Erlang file").
+-define(HELP_File_Exit, "Quit this program").
 
--define(INFO_TEXT, "A Causal-consistent Debugger for Erlang. More info at: https://github.com/mistupv/cauder").
-
--define(ERROR_NUM_STEP, "The number of steps is not correct.").
--define(ERROR_NUM_ARGS, "The number of arguments is not correct.").
-
--define(HELP_OPEN_ITEM, "Open and compile an Erlang file").
--define(HELP_REPLAY_ITEM, "Replay an execution from a log file").
--define(HELP_QUIT_ITEM, "Quit this program").
 -define(HELP_View_Zoom100, "Reset text font size").
 -define(HELP_View_ZoomIn, "Increase text font size").
 -define(HELP_View_ZoomOut, "Decrease text font size").
+
 -define(HELP_View_Mailbox, "Show or hide process mailbox").
 -define(HELP_View_History, "Show or hide process history").
 -define(HELP_View_Log, "Show or hide process logs").
 -define(HELP_View_Stack, "Show or hide process stack").
 -define(HELP_View_Environment, "Show or hide process environment").
 -define(HELP_View_CurrentExpression, "Show or hide process expressions").
+
 -define(HELP_View_ConcurrentHistory, "Show only concurrent history").
 -define(HELP_View_FullHistory, "Show complete history").
+
 -define(HELP_View_RelevantEnvironment, "Show relevant bindings from environment").
 -define(HELP_View_FullEnvironment, "Show all bindings from environment").
--define(HELP_TOGGLE_COMP, "Allow compiler optimizations when loading files").
--define(HELP_RADIO_RAND, "Set scheduler to random choice among options").
--define(HELP_RADIO_PRIO, "Set scheduler to random choice among options (priority to process options)").
+
+-define(HELP_View_StatusBar, "Show or hide status bar").
+
+-define(HELP_Run_Start, "Start a new debugging session").
+-define(HELP_Run_Stop, "Stop the current debugging session").
 
 
--define(MESSAGE_Session_Stop, "You are about to stop the current debugging session.\nThe current system state will be lost.\nAre you sure you want to continue?").
+%% -------------------- Dialog strings -------------------- %%
+
+-define(DIALOG_StartSession_Title, "Start debugging session").
+
+-define(DIALOG_StartSession_ArgCount_Title, "Warming: Argument count").
+-define(DIALOG_StartSession_ArgCount_Message, "Wrong number of argumments!\nExpected ~b but got ~b.").
+
+-define(DIALOG_BadArgs_Title, "Error: Invalid arguments").
+-define(DIALOG_BadArgs_Message, "Invalid arguments!").
+
+-define(DIALOG_StopSession_Title, "Stop debugging session").
+-define(DIALOG_StopSession_Message, "You are about to stop the current debugging session.\nThe current system state will be lost.\nAre you sure you want to continue?").
+
+-define(DIALOG_About, "A Causal-Consistent Reversible Debugger for Erlang.").

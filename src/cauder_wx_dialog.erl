@@ -21,7 +21,7 @@
   TracePath :: file:filename().
 
 start_session(Parent, MFAs) ->
-  Dialog = wxDialog:new(Parent, ?wxID_ANY, "Start debugging session"),
+  Dialog = wxDialog:new(Parent, ?wxID_ANY, ?DIALOG_StartSession_Title),
 
   Content = wxBoxSizer:new(?wxVERTICAL),
   wxDialog:setSizer(Dialog, Content),
@@ -119,17 +119,17 @@ start_session(Parent, MFAs) ->
             {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
             case utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)) of
               error ->
-                Message = "Invalid arguments!",
-                AlertDialog = wxMessageDialog:new(Dialog, Message, [{caption, "Error: Invalid arguments"}, {style, ?wxICON_ERROR}]),
-                wxMessageDialog:showModal(AlertDialog);
+                Message = ?DIALOG_BadArgs_Message,
+                Options = [{caption, ?DIALOG_BadArgs_Title}, {style, ?wxICON_ERROR}],
+                wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options));
               Args ->
                 case length(Args) of
                   A1 ->
                     ReturnPid ! {manual, {M1, F1, Args}};
                   Count ->
-                    Message = io_lib:format("Wrong number of argumments!\nExpected ~b but got ~b.", [A1, Count]),
-                    AlertDialog = wxMessageDialog:new(Dialog, Message, [{caption, "Warming: Argument count"}, {style, ?wxICON_WARNING}]),
-                    wxMessageDialog:showModal(AlertDialog)
+                    Message = io_lib:format(?DIALOG_StartSession_ArgCount_Message, [A1, Count]),
+                    Options = [{caption, ?DIALOG_StartSession_ArgCount_Title}, {style, ?wxICON_WARNING}],
+                    wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
                 end
             end;
           false ->
@@ -190,8 +190,8 @@ radio_event_handler(RadioPanels) ->
 -spec stop_session(Parent :: wxWindow:wxWindow()) -> boolean().
 
 stop_session(Parent) ->
-  Options = [{style, ?wxICON_EXCLAMATION bor ?wxYES_NO bor ?wxNO_DEFAULT}, {caption, "Stop debugging session"}],
-  Dialog = wxMessageDialog:new(Parent, ?MESSAGE_Session_Stop, Options),
+  Options = [{style, ?wxICON_EXCLAMATION bor ?wxYES_NO bor ?wxNO_DEFAULT}, {caption, ?DIALOG_StopSession_Title}],
+  Dialog = wxMessageDialog:new(Parent, ?DIALOG_StopSession_Message, Options),
 
   case wxDialog:showModal(Dialog) of
     ?wxID_YES -> true;
@@ -281,6 +281,6 @@ edit_binding(Parent, {Key, Value}) ->
 
 about(Parent) ->
   Caption = "About " ++ ?APPNAME,
-  Dialog = wxMessageDialog:new(Parent, ?INFO_TEXT, [{style, ?wxOK}, {caption, Caption}]),
+  Dialog = wxMessageDialog:new(Parent, ?DIALOG_About, [{style, ?wxOK}, {caption, Caption}]),
   wxDialog:showModal(Dialog),
   wxWindow:destroy(Dialog).
