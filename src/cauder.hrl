@@ -31,16 +31,6 @@
 -define(NULL_RULE,  null_rule).
 -define(NULL_OPT,   null_opt).
 
--define(PRINT_MAIL,   print_mail).
--define(PRINT_LOG,    print_log).
--define(PRINT_HIST,   print_hist).
--define(PRINT_STACK,  print_stack).
--define(PRINT_ENV,    print_env).
--define(PRINT_EXP,    print_exp).
--define(FULL_HIST,    print_full_hist).
--define(FULL_ENV,     print_full_env).
--define(COMP_OPT,     comp_opt).
-
 -define(SCHED_RANDOM,      random).
 -define(SCHED_PRIO_RANDOM, prio_random).
 

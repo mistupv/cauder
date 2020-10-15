@@ -45,18 +45,20 @@ create(Frame) ->
       #menu_item{id = ?MENU_View_ZoomOut, text = "Zoom &Out\tCtrl+-", help = ?HELP_View_ZoomOut, enabled = false},
       #menu_item{id = ?MENU_View_Zoom100, text = "Zoo&m 100%", help = ?HELP_View_Zoom100},
       separator,
-      #menu_item{id = ?MENU_View_Mailbox, text = "Show &Mailbox", help = ?HELP_View_Mailbox, kind = check},
-      #menu_item{id = ?MENU_View_History, text = "Show &History", help = ?HELP_View_History, kind = check},
-      #menu_item{id = ?MENU_View_Log, text = "Show &Log", help = ?HELP_View_Log, kind = check},
+      #menu_item{id = ?MENU_View_CurrentExpression, text = "Show Current E&xpression", help = ?HELP_View_CurrentExpression, kind = check, enabled = false}, %% TODO Show/hide
+      separator,
+      #menu_item{id = ?MENU_View_Bindings, text = "Show &Environment", help = ?HELP_View_Bindings, kind = check},
       #menu_item{id = ?MENU_View_Stack, text = "Show S&tack", help = ?HELP_View_Stack, kind = check},
-      #menu_item{id = ?MENU_View_Environment, text = "Show &Environment", help = ?HELP_View_Environment, kind = check},
-      #menu_item{id = ?MENU_View_CurrentExpression, text = "Show Current E&xpression", help = ?HELP_View_CurrentExpression, kind = check},
+      #menu_item{id = ?MENU_View_Log, text = "Show &Log", help = ?HELP_View_Log, kind = check},
+      #menu_item{id = ?MENU_View_History, text = "Show &History", help = ?HELP_View_History, kind = check},
+      separator,
+      #menu_item{id = ?MENU_View_RelevantBindings, text = "Relevant Environment", help = ?HELP_View_RelevantBindings, kind = radio},
+      #menu_item{id = ?MENU_View_AllBindings, text = "Full Environment", help = ?HELP_View_AllBindings, kind = radio},
       separator,
       #menu_item{id = ?MENU_View_ConcurrentHistory, text = "Concurrent History", help = ?HELP_View_ConcurrentHistory, kind = radio},
       #menu_item{id = ?MENU_View_FullHistory, text = "Full History", help = ?HELP_View_FullHistory, kind = radio},
       separator,
-      #menu_item{id = ?MENU_View_RelevantEnvironment, text = "Relevant Environment", help = ?HELP_View_RelevantEnvironment, kind = radio},
-      #menu_item{id = ?MENU_View_FullEnvironment, text = "Full Environment", help = ?HELP_View_FullEnvironment, kind = radio},
+      #menu_item{id = ?MENU_View_Mailbox, text = "Show &Mailbox", help = ?HELP_View_Mailbox, kind = check, enabled = false}, %% TODO Show/hide
       separator,
       #menu_item{id = ?MENU_View_StatusBar, text = "&Status Bar", help = ?HELP_View_StatusBar, kind = check}
     ]

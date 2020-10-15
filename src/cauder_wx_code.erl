@@ -6,7 +6,7 @@
 
 %% API
 -export([create/1, update/2]).
--export([load_code/2, unload_code/1, mark_line/3, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
+-export([load_code/2, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
 
 -define(KEYWORDS, ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
                    "end", "fun", "if", "let", "of", "receive", "when", "bnot", "not",
@@ -58,6 +58,10 @@
 -define(LINE_BACKGROUND, 1).
 
 
+%%%===================================================================
+%%% API
+%%%===================================================================
+
 -spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
 
 create(Parent) ->
@@ -66,79 +70,154 @@ create(Parent) ->
   Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "Code"}]),
   wxWindow:setSizer(Win, Sizer),
 
-  % -----
-
-  % TODO Add tabs to allow for multiple open files
-
-  CodeCtrl = wxStyledTextCtrl:new(Win, [{id, ?CODE_Code}]),
-  wxStaticBoxSizer:add(Sizer, CodeCtrl, [{proportion, 1}, {flag, ?wxEXPAND}]),
-
-  FontCode = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
-
-  %% Styles
-  wxStyledTextCtrl:styleClearAll(CodeCtrl),
-  wxStyledTextCtrl:styleSetFont(CodeCtrl, ?wxSTC_STYLE_DEFAULT, FontCode),
-  wxStyledTextCtrl:styleSetFont(CodeCtrl, ?wxSTC_STYLE_LINENUMBER, FontCode),
-
-  lists:foreach(
-    fun({Style, Color}) ->
-      wxStyledTextCtrl:styleSetFont(CodeCtrl, Style, FontCode),
-      wxStyledTextCtrl:styleSetForeground(CodeCtrl, Style, Color)
-    end, ?STYLES),
-
-  wxStyledTextCtrl:setLexer(CodeCtrl, ?wxSTC_LEX_ERLANG),
-  wxStyledTextCtrl:setKeyWords(CodeCtrl, 0, keyWords()),
-  wxStyledTextCtrl:setMarginType(CodeCtrl, 0, ?wxSTC_MARGIN_NUMBER),
-  wxStyledTextCtrl:setSelectionMode(CodeCtrl, ?wxSTC_SEL_LINES),
-
-  %% Current Line
-  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
-  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
-  wxStyledTextCtrl:markerDefine(CodeCtrl, ?LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
-
-  %% Scrolling
-  Policy = ?wxSTC_CARET_SLOP bor ?wxSTC_CARET_JUMPS bor ?wxSTC_CARET_EVEN,
-  wxStyledTextCtrl:setYCaretPolicy(CodeCtrl, Policy, 3),
-  wxStyledTextCtrl:setVisiblePolicy(CodeCtrl, Policy, 3),
-
-  wxStyledTextCtrl:setReadOnly(CodeCtrl, true),
-  wxStyledTextCtrl:setZoom(CodeCtrl, ?ZOOM_DEFAULT),
-  wxStyledTextCtrl:connect(CodeCtrl, 'stc_zoom'),
-
-  % -----
-
+  wxStaticBoxSizer:add(Sizer, create_code(Win), [{proportion, 1}, {flag, ?wxEXPAND}]),
   wxStaticBoxSizer:addSpacer(Sizer, ?SPACER_MEDIUM),
-
-  % -----
-
-  ExprCtrl = wxTextCtrl:new(Win, ?CODE_Expression, [{style, ?wxTE_READONLY}]),
-  wxStaticBoxSizer:add(Sizer, ExprCtrl, [{proportion, 0}, {flag, ?wxEXPAND}]),
-
-  FontExpr = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  wxTextCtrl:setFont(ExprCtrl, FontExpr),
-
-  % -----
+  wxStaticBoxSizer:add(Sizer, create_expression(Win), [{proportion, 0}, {flag, ?wxEXPAND}]),
 
   Win.
 
 
--spec update(System, Pid) -> ok when
+-spec update(System, Pid) -> 'ok' when
   System :: cauder_types:system() | 'undefined',
   Pid :: cauder_types:proc_id() | 'none'.
 
-update(undefined, _) -> ok; % TODO
-update(#sys{}, none) -> ok; % TODO
-update(#sys{procs = PDict}, Pid) ->
-  {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
-  Line = element(2, E),
-  Prev = get(line),
-  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
-  mark_line(CodeCtrl, Prev, Line),
-  put(line, Line),
-  ExprCtrl = utils_gui:find(?CODE_Expression, wxTextCtrl),
-  Expr = pretty_print:expression(E),
-  wxTextCtrl:setValue(ExprCtrl, Expr).
+update(System, Pid) ->
+  update_code(System, Pid),
+  update_expression(System, Pid).
 
+
+%%--------------------------------------------------------------------
+
+
+-spec create_code(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+
+create_code(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
+
+  % TODO Add tabs to allow for multiple open files
+
+  CodeControl = wxStyledTextCtrl:new(Win, [{id, ?CODE_Code_Control}]),
+  wxBoxSizer:add(Sizer, CodeControl, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  Font = wxFont:new(?FONT_SIZE_ACTUAL_DEFAULT, ?wxFONTFAMILY_TELETYPE, ?wxNORMAL, ?wxNORMAL),
+
+  %% Styles
+  wxStyledTextCtrl:styleClearAll(CodeControl),
+  wxStyledTextCtrl:styleSetFont(CodeControl, ?wxSTC_STYLE_DEFAULT, Font),
+  wxStyledTextCtrl:styleSetFont(CodeControl, ?wxSTC_STYLE_LINENUMBER, Font),
+
+  lists:foreach(
+    fun({Style, Color}) ->
+      wxStyledTextCtrl:styleSetFont(CodeControl, Style, Font),
+      wxStyledTextCtrl:styleSetForeground(CodeControl, Style, Color)
+    end, ?STYLES),
+
+  wxStyledTextCtrl:setLexer(CodeControl, ?wxSTC_LEX_ERLANG),
+  wxStyledTextCtrl:setKeyWords(CodeControl, 0, keyWords()),
+  wxStyledTextCtrl:setMarginType(CodeControl, 0, ?wxSTC_MARGIN_NUMBER),
+  wxStyledTextCtrl:setSelectionMode(CodeControl, ?wxSTC_SEL_LINES),
+
+  %% Current Line
+  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
+
+  %% Scrolling
+  Policy = ?wxSTC_CARET_SLOP bor ?wxSTC_CARET_JUMPS bor ?wxSTC_CARET_EVEN,
+  wxStyledTextCtrl:setYCaretPolicy(CodeControl, Policy, 3),
+  wxStyledTextCtrl:setVisiblePolicy(CodeControl, Policy, 3),
+
+  wxStyledTextCtrl:setReadOnly(CodeControl, true),
+  wxStyledTextCtrl:setZoom(CodeControl, ?ZOOM_DEFAULT),
+  wxStyledTextCtrl:connect(CodeControl, 'stc_zoom'),
+
+  Win.
+
+
+-spec update_code(System, Pid) -> 'ok' when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
+
+update_code(System, Pid) ->
+  CodeControl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+
+  wxStyledTextCtrl:freeze(CodeControl),
+  case get(line) of
+    undefined -> ok;
+    PrevLine -> unmark_line(CodeControl, PrevLine)
+  end,
+
+  case System of
+    undefined ->
+      unload_code(CodeControl),
+      erase(line);
+    #sys{procs = PDict} ->
+      case Pid of
+        none ->
+          Line = 1,
+          goto_line(CodeControl, Line),
+          put(line, Line);
+        _ ->
+          {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
+          Line = element(2, E),
+          mark_line(CodeControl, Line),
+          goto_line(CodeControl, Line),
+          put(line, Line)
+      end
+  end,
+
+  wxStyledTextCtrl:thaw(CodeControl).
+
+
+%%--------------------------------------------------------------------
+
+
+-spec create_expression(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+
+create_expression(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
+
+  ExpressionControl = wxTextCtrl:new(Win, ?CODE_Expression_Control, [{style, ?wxTE_READONLY}]),
+  wxStaticBoxSizer:add(Sizer, ExpressionControl, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxTextCtrl:setFont(ExpressionControl, Font),
+
+  Win.
+
+
+-spec update_expression(System, Pid) -> 'ok' when
+  System :: cauder_types:system() | 'undefined',
+  Pid :: cauder_types:proc_id() | 'none'.
+
+update_expression(System, Pid) ->
+  ExpressionControl = utils_gui:find(?CODE_Expression_Control, wxTextCtrl),
+
+  wxTextCtrl:freeze(ExpressionControl),
+  wxTextCtrl:clear(ExpressionControl),
+
+  case System of
+    undefined -> ok;
+    #sys{procs = PDict} ->
+      case Pid of
+        none -> ok;
+        _ ->
+          {ok, #proc{exprs = [Expr | _]}} = orddict:find(Pid, PDict),
+          StrExpr = pretty_print:expression(Expr),
+          wxTextCtrl:setValue(ExpressionControl, StrExpr)
+      end
+  end,
+
+  wxTextCtrl:thaw(ExpressionControl).
+
+
+%%--------------------------------------------------------------------
 
 
 keyWords() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
@@ -166,22 +245,27 @@ unload_code(CodeCtrl) ->
   wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec mark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Prev :: non_neg_integer(), Line :: non_neg_integer()) -> 'ok'.
+-spec mark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
 
-mark_line(CodeCtrl, Prev, Line) ->
-  wxStyledTextCtrl:freeze(CodeCtrl),
-  wxStyledTextCtrl:markerDelete(CodeCtrl, Prev - 1, ?LINE_MARKER),
-  wxStyledTextCtrl:markerDelete(CodeCtrl, Prev - 1, ?LINE_BACKGROUND),
-  goto_line(CodeCtrl, Line),
+mark_line(CodeCtrl, Line) ->
   wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_MARKER),
   wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
-  wxStyledTextCtrl:thaw(CodeCtrl).
+  ok.
 
 
--spec goto_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: non_neg_integer()) -> 'ok' | ignore.
+-spec unmark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
 
-goto_line(_CodeCtrl, 0)   -> ignore;
-goto_line(CodeCtrl, Line) -> wxStyledTextCtrl:gotoLine(CodeCtrl, Line - 1).
+unmark_line(CodeCtrl, Line) ->
+  wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_MARKER),
+  wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
+  ok.
+
+
+-spec goto_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
+
+goto_line(CodeCtrl, Line) ->
+  wxStyledTextCtrl:gotoLine(CodeCtrl, Line - 1),
+  ok.
 
 
 -spec zoom_in(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.

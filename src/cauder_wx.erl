@@ -11,6 +11,7 @@
 -define(SERVER, ?MODULE).
 
 -define(MENU_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_menu_selected}}).
+-define(MENU_EVENT(Id, CmdValue), #wx{id = Id, event = #wxCommand{type = command_menu_selected, commandInt = CmdValue}}).
 -define(BUTTON_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_button_clicked}}).
 
 -include("cauder.hrl").
@@ -80,15 +81,15 @@ init([]) ->
   wxMenuBar:check(Menubar, ?MENU_View_Log, true),
   wxMenuBar:check(Menubar, ?MENU_View_History, true),
   wxMenuBar:check(Menubar, ?MENU_View_Stack, true),
-  wxMenuBar:check(Menubar, ?MENU_View_Environment, true),
+  wxMenuBar:check(Menubar, ?MENU_View_Bindings, true),
   wxMenuBar:check(Menubar, ?MENU_View_CurrentExpression, true),
 
   wxMenuBar:check(Menubar, ?MENU_View_ConcurrentHistory, true),
-  wxMenuBar:check(Menubar, ?MENU_View_RelevantEnvironment, true),
+  wxMenuBar:check(Menubar, ?MENU_View_RelevantBindings, true),
 
   wxMenuBar:check(Menubar, ?MENU_View_StatusBar, true),
 
-  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
+  CodeCtrl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_buttons(CodeCtrl, Menubar),
 
   wxEvtHandler:connect(Frame, close_window),
@@ -131,6 +132,75 @@ handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
 
   {noreply, State1};
 
+handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
+  %% TODO Add confirmation dialog?
+  {stop, normal, State};
+
+%% -------------------- View Menu -------------------- %%
+
+handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  cauder_wx_code:zoom_in(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  cauder_wx_code:zoom_out(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  cauder_wx_code:zoom_reset(CodeArea),
+  cauder_wx_code:update_margin(CodeArea),
+  cauder_wx_code:update_buttons(CodeArea, Menubar),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_Bindings), State) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_bindings(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_Stack), State) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_stack(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_Log), State) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_log(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_History), State) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_history(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(Item), State) when ?Is_Bindings_Mode(Item) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_bindings(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(Item), State) when ?Is_History_Mode(Item) ->
+  System = cauder:get_system(),
+  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_process:update_history(System, Pid),
+  {noreply, State};
+
+handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
+  cauder_wx_statusbar:set_visibility(Enabled =/= 0),
+  {noreply, State};
+
+%% -------------------- Run Menu -------------------- %%
+
 handle_event(?MENU_EVENT(?MENU_Run_Start), #wx_state{frame = Frame, module = Module} = State) ->
   EntryPoints = cauder:get_entry_points(Module),
   case cauder_wx_dialog:start_session(Frame, EntryPoints) of
@@ -147,41 +217,6 @@ handle_event(?MENU_EVENT(?MENU_Run_Stop), #wx_state{frame = Frame} = State) ->
   end,
   {noreply, State};
 
-handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
-  %% TODO Add confirmation dialog?
-  {stop, normal, State};
-
-%% -------------------- View Menu -------------------- %%
-
-handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
-  cauder_wx_code:zoom_in(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
-  cauder_wx_code:zoom_out(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
-  cauder_wx_code:zoom_reset(CodeArea),
-  cauder_wx_code:update_margin(CodeArea),
-  cauder_wx_code:update_buttons(CodeArea, Menubar),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(Mode), State) when ?IS_HISTORY_MODE(Mode) ->
-  refresh(true),
-  {noreply, State};
-
-handle_event(?MENU_EVENT(Mode), State) when ?IS_ENVIRONMENT_MODE(Mode) ->
-  refresh(true),
-  {noreply, State};
-
 %% -------------------- Help Menu -------------------- %%
 
 handle_event(?MENU_EVENT(?MENU_Help_ViewHelp), State) ->
@@ -194,8 +229,8 @@ handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
 
 %% -------------------- Code Area -------------------- %%
 
-handle_event(#wx{id = ?CODE_Code, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
+handle_event(#wx{id = ?CODE_Code_Control, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
+  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
@@ -386,7 +421,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
 
 %% -------------------- Bindings handler -------------------- %%
 
-handle_event(#wx{id = ?PROCESS_Bindings, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
+handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
   Sys = cauder:get_system(),
   Pid = cauder_wx_actions:selected_pid(),
   {ok, #proc{env = Bs}} = orddict:find(Pid, Sys#sys.procs),
@@ -470,7 +505,7 @@ open_file(File) ->
   {ok, Module} = cauder:load_file(File),
 
   {ok, Src, _} = erl_prim_loader:get_file(File),
-  CodeCtrl = utils_gui:find(?CODE_Code, wxStyledTextCtrl),
+  CodeCtrl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
@@ -524,8 +559,6 @@ start_session(M, F, A) ->
 
 stop_session() ->
   ok = cauder:stop_system(),
-
-  erase(line),
 
   refresh(true),
 

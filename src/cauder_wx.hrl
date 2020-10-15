@@ -38,22 +38,24 @@
 -define(MENU_View_ZoomOut, ?wxID_ZOOM_OUT).
 -define(MENU_View_Zoom100, ?wxID_ZOOM_100).
 
--define(MENU_View_Mailbox, 1000).
--define(MENU_View_Log, 1001).
--define(MENU_View_History, 1002).
--define(MENU_View_Stack, 1003).
--define(MENU_View_Environment, 1004).
--define(MENU_View_CurrentExpression, 1005).
+-define(MENU_View_CurrentExpression, 1000).
 
--define(IS_HISTORY_MODE(HistoryMode), HistoryMode =:= ?MENU_View_ConcurrentHistory orelse HistoryMode =:= ?MENU_View_FullHistory).
+-define(MENU_View_Bindings, 1001).
+-define(MENU_View_Stack, 1002).
+-define(MENU_View_Log, 1003).
+-define(MENU_View_History, 1004).
 
--define(MENU_View_ConcurrentHistory, 1006).
--define(MENU_View_FullHistory, 1007).
+-define(MENU_View_Mailbox, 1005).
 
--define(IS_ENVIRONMENT_MODE(EnvironmentMode), EnvironmentMode =:= ?MENU_View_RelevantEnvironment orelse EnvironmentMode =:= ?MENU_View_FullEnvironment).
+-define(Is_Bindings_Mode(Item), Item =:= ?MENU_View_RelevantBindings orelse Item =:= ?MENU_View_AllBindings).
 
--define(MENU_View_RelevantEnvironment, 1008).
--define(MENU_View_FullEnvironment, 1009).
+-define(MENU_View_RelevantBindings, 1006).
+-define(MENU_View_AllBindings, 1007).
+
+-define(Is_History_Mode(Item), Item =:= ?MENU_View_ConcurrentHistory orelse Item =:= ?MENU_View_FullHistory).
+
+-define(MENU_View_ConcurrentHistory, 1008).
+-define(MENU_View_FullHistory, 1009).
 
 -define(MENU_View_StatusBar, 1010).
 
@@ -71,8 +73,8 @@
 
 %% ---------- Main Panel ---------- %%
 
--define(CODE_Code, 2001).
--define(CODE_Expression, 2002).
+-define(CODE_Code_Control, 2001).
+-define(CODE_Expression_Control, 2002).
 
 %% -----
 
@@ -154,10 +156,19 @@
 
 %% ----- Process Info Panel ----- %%
 
--define(PROCESS_Bindings, 2300).
--define(PROCESS_Stack, 2301).
--define(PROCESS_Log, 2302).
--define(PROCESS_History, 2303).
+-define(PROCESS_Panel, 2300).
+
+-define(PROCESS_Bindings_Panel, 2301).
+-define(PROCESS_Bindings_Control, 2302).
+
+-define(PROCESS_Stack_Panel, 2303).
+-define(PROCESS_Stack_Control, 2304).
+
+-define(PROCESS_Log_Panel, 2305).
+-define(PROCESS_Log_Control, 2306).
+
+-define(PROCESS_History_Panel, 2307).
+-define(PROCESS_History_Control, 2308).
 
 
 %% ---------- Status bar ---------- %%
@@ -174,18 +185,20 @@
 -define(HELP_View_ZoomIn, "Increase text font size").
 -define(HELP_View_ZoomOut, "Decrease text font size").
 
--define(HELP_View_Mailbox, "Show or hide process mailbox").
--define(HELP_View_History, "Show or hide process history").
--define(HELP_View_Log, "Show or hide process logs").
--define(HELP_View_Stack, "Show or hide process stack").
--define(HELP_View_Environment, "Show or hide process environment").
--define(HELP_View_CurrentExpression, "Show or hide process expressions").
+-define(HELP_View_CurrentExpression, "Show current expressions").
+
+-define(HELP_View_Bindings, "Show process bindings").
+-define(HELP_View_Stack, "Show process call stack").
+-define(HELP_View_Log, "Show process logs").
+-define(HELP_View_History, "Show process history").
+
+-define(HELP_View_Mailbox, "Show system mailbox").
+
+-define(HELP_View_RelevantBindings, "Show only bindings relevant in the current scope").
+-define(HELP_View_AllBindings, "Show all bindings").
 
 -define(HELP_View_ConcurrentHistory, "Show only concurrent history").
 -define(HELP_View_FullHistory, "Show complete history").
-
--define(HELP_View_RelevantEnvironment, "Show relevant bindings from environment").
--define(HELP_View_FullEnvironment, "Show all bindings from environment").
 
 -define(HELP_View_StatusBar, "Show or hide status bar").
 

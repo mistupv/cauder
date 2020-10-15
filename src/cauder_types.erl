@@ -12,8 +12,7 @@
   environment/0, binding/0,
   option/0, semantics/0, rule/0,
   trace/0,
-  result/0, label/0,
-  print_option/0
+  result/0, label/0
 ]).
 
 % Abstract format types
@@ -65,17 +64,6 @@
                | {self, af_variable()}
                | {send, proc_id(), term()}
                | {rec, af_variable(), af_clause_seq()}.
-
-
--type print_option() :: ?PRINT_MAIL
-                      | ?PRINT_LOG
-                      | ?PRINT_HIST
-                      | ?PRINT_STACK
-                      | ?PRINT_ENV
-                      | ?PRINT_EXP
-                      | ?FULL_HIST
-                      | ?FULL_ENV
-                      | ?COMP_OPT.
 
 
 %% Custom of abstract format

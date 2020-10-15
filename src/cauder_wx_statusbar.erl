@@ -4,7 +4,7 @@
 -include("cauder_wx.hrl").
 
 %% API
--export([create/1, update/1, show/0, hide/0]).
+-export([create/1, update/1, set_visibility/1]).
 %% Predefined statuses
 -export([no_process/0, no_match/0]).
 -export([step/2, step_over/2, step_into/3]).
@@ -26,21 +26,15 @@ update(Text) ->
   wxStatusBar:setStatusText(Statusbar, Text).
 
 
--spec show() -> 'ok'.
--spec hide() -> 'ok'.
+-spec set_visibility(Visible :: boolean()) -> 'ok'.
 
-show() -> visibility(true).
-hide() -> visibility(false).
-
-
-visibility(Show) ->
+set_visibility(Visible) ->
   Frame = utils_gui:find(?FRAME, wxFrame),
   StatusBar = wxFrame:getStatusBar(Frame),
-  case Show of
+  case Visible of
     true -> wxStatusBar:show(StatusBar);
     false -> wxStatusBar:hide(StatusBar)
   end,
-  Frame = wxStatusBar:getParent(StatusBar),
   wxFrame:sendSizeEvent(Frame).
 
 
