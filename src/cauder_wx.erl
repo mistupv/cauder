@@ -98,7 +98,7 @@ init([]) ->
   wxFrame:show(Frame),
   wxFrame:raise(Frame),
 
-  refresh(true),
+  refresh(),
 
   {Frame, #wx_state{
     frame     = Frame,
@@ -230,7 +230,7 @@ handle_event(#wx{id = ?CODE_Code_Control, event = #wxStyledText{type = stc_zoom}
 %% -------------------- Process Selector -------------------- %%
 
 handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
-  refresh(true),
+  refresh(),
   {noreply, State};
 
 %% -------------------- Manual Actions -------------------- %%
@@ -239,12 +239,12 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Step_Button(Button) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
-      refresh(false);
+      refresh();
     Pid ->
       Sem = button_to_semantics(Button),
       Rule = cauder:eval_step(Sem, Pid),
       cauder_wx_statusbar:step(Sem, Rule),
-      refresh(true)
+      refresh()
   end,
   {noreply, State};
 
@@ -252,16 +252,16 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
-      refresh(false);
+      refresh();
     Pid ->
       Sem = button_to_semantics(Button),
       case cauder:eval_step_over(Sem, Pid) of
         nomatch ->
           cauder_wx_statusbar:no_match(),
-          refresh(false);
+          refresh();
         Steps ->
           cauder_wx_statusbar:step_over(Sem, Steps),
-          refresh(true)
+          refresh()
       end
   end,
   {noreply, State};
@@ -274,7 +274,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Steps = wxSpinCtrl:getValue(Spinner),
   StepsDone = cauder:eval_mult(Sem, Steps),
   cauder_wx_statusbar:multi(Sem, StepsDone, Steps),
-  refresh(true),
+  refresh(),
   {noreply, State};
 
 %% -------------------- Replay Actions -------------------- %%
@@ -283,13 +283,13 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
-      refresh(false);
+      refresh();
     Pid ->
       Spinner = utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       StepsDone = cauder:eval_replay(Pid, Steps),
       cauder_wx_statusbar:replay(StepsDone, Steps),
-      refresh(true)
+      refresh()
   end,
   {noreply, State};
 
@@ -299,11 +299,11 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:replay_spawn(false, none),
-      refresh(false);
+      refresh();
     {Pid, _} ->
       Success = cauder:eval_replay_spawn(Pid),
       cauder_wx_statusbar:replay_spawn(Success, Pid),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -313,11 +313,11 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:replay_send(false, none),
-      refresh(false);
+      refresh();
     {Uid, _} ->
       Success = cauder:eval_replay_send(Uid),
       cauder_wx_statusbar:replay_send(Success, Uid),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -327,11 +327,11 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:replay_rec(false, none),
-      refresh(false);
+      refresh();
     {Uid, _} ->
       Success = cauder:eval_replay_rec(Uid),
       cauder_wx_statusbar:replay_rec(Success, Uid),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -341,14 +341,14 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
     none ->
       cauder_wx_statusbar:no_process(),
-      refresh(false);
+      refresh();
     Pid ->
       Spinner = utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
       cauder_wx_statusbar:roll(StepsDone, Steps),
       cauder_wx_system:focus_roll_log(FocusLog),
-      refresh(true)
+      refresh()
   end,
   {noreply, State};
 
@@ -358,12 +358,12 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:roll_spawn(false, none),
-      refresh(false);
+      refresh();
     {Pid, _} ->
       {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
       cauder_wx_statusbar:roll_spawn(Success, Pid),
       cauder_wx_system:focus_roll_log(FocusLog),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -373,12 +373,12 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:roll_send(false, none),
-      refresh(false);
+      refresh();
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_send(Uid),
       cauder_wx_statusbar:roll_send(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -388,12 +388,12 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:roll_rec(false, none),
-      refresh(false);
+      refresh();
     {Uid, _} ->
       {Success, FocusLog} = cauder:eval_roll_rec(Uid),
       cauder_wx_statusbar:roll_rec(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -402,12 +402,12 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
       cauder_wx_statusbar:roll_var(false, none),
-      refresh(false);
+      refresh();
     Name ->
       {Success, FocusLog} = cauder:eval_roll_var(Name),
       cauder_wx_statusbar:roll_var(Success, Name),
       cauder_wx_system:focus_roll_log(FocusLog),
-      refresh(Success)
+      refresh()
   end,
   {noreply, State};
 
@@ -422,7 +422,7 @@ handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
     {Key, NewValue} ->
       cauder:set_binding(Pid, {Key, NewValue}),
-      refresh(true);
+      refresh();
     cancel -> ok
   end,
   {noreply, State};
@@ -430,7 +430,7 @@ handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_
 %% -------------------- Text handler -------------------- %%
 
 handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command_text_updated}}, State) ->
-  refresh(false),
+  refresh(),
   {noreply, State};
 
 handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
@@ -546,7 +546,7 @@ start_session() ->
     {M, F, A} ->
       put(line, 0),
 
-      refresh(true),
+      refresh(),
 
       cauder_wx_menu:enable(?MENU_Run_Start, false),
       cauder_wx_menu:enable(?MENU_Run_Stop, true),
@@ -573,7 +573,7 @@ stop_session() ->
         true ->
           ok = cauder:stop_system(),
 
-          refresh(true),
+          refresh(),
 
           cauder_wx_menu:enable(?MENU_Run_Start, true),
           cauder_wx_menu:enable(?MENU_Run_Stop, false),
@@ -587,25 +587,21 @@ stop_session() ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Refreshes the UI.
+%% @doc Updates the UI to show changes in the system information.
 
--spec refresh(boolean()) -> ok.
+-spec refresh() -> 'ok'.
 
-refresh(RefreshState) ->
-  % TODO Remove argument
-  System = cauder:get_system(),
-  case RefreshState of
-    false -> ok;
-    true ->
-      % First update actions so a process is selected
-      cauder_wx_actions:update(System),
-      cauder_wx_system:update(System),
+refresh() ->
+  System = cauder:get_system(), % TODO Save last system and compare with new system, then only update elements whose information changed
 
-      Pid = cauder_wx_actions:selected_pid(),
+  % First update actions so a process is selected
+  cauder_wx_actions:update(System),
+  cauder_wx_system:update(System),
 
-      cauder_wx_code:update(System, Pid),
-      cauder_wx_process:update(System, Pid)
-  end.
+  Pid = cauder_wx_actions:selected_pid(),
+
+  cauder_wx_code:update(System, Pid),
+  cauder_wx_process:update(System, Pid).
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
