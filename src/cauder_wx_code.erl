@@ -152,7 +152,7 @@ update_code(System, Pid) ->
 
   case System of
     undefined ->
-      unload_code(CodeControl),
+      goto_line(CodeControl, 1),
       erase(line);
     #sys{procs = PDict} ->
       case Pid of
