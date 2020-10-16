@@ -134,6 +134,10 @@ create_code(Parent) ->
   wxStyledTextCtrl:setZoom(CodeControl, ?ZOOM_DEFAULT),
   wxStyledTextCtrl:connect(CodeControl, 'stc_zoom'),
 
+  %% Drag and drop support
+  wxPanel:dragAcceptFiles(Win, true),
+  wxPanel:connect(Win, 'drop_files'),
+
   Win.
 
 

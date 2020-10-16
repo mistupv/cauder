@@ -7,6 +7,7 @@
 %% API
 -export([start_session/2, stop_session/1]).
 -export([edit_binding/2]).
+-export([drop_files/2]).
 -export([about/1]).
 
 
@@ -274,6 +275,30 @@ edit_binding(Parent, {Key, Value}) ->
         _ -> cancel
       end;
     _ -> cancel
+  end.
+
+
+-spec drop_files(Parent :: wxWindow:wxWindow(), Files :: [unicode:chardata()]) -> {ok, File :: unicode:chardata()} | false.
+
+drop_files(Parent, Files) ->
+  {ErlFiles, NonErlFiles} = lists:partition(fun(File) -> filename:extension(File) =:= ".erl" end, Files),
+
+  case NonErlFiles =/= [] of
+    true ->
+      Options = [{style, ?wxICON_ERROR bor ?wxOK}, {caption, ?DIALOG_DropFiles_Unsupported_Title}],
+      Dialog = wxMessageDialog:new(Parent, ?DIALOG_DropFiles_Unsupported_Message, Options),
+      wxMessageDialog:showModal(Dialog),
+      false;
+    false ->
+      case ErlFiles of
+        [File] -> {ok, File};
+        _ ->
+          Dialog = wxSingleChoiceDialog:new(Parent, ?DIALOG_DropFiles_Multiple_Message, ?DIALOG_DropFiles_Multiple_Title, ErlFiles),
+          case wxSingleChoiceDialog:showModal(Dialog) of
+            ?wxID_OK -> {ok, wxSingleChoiceDialog:getStringSelection(Dialog)};
+            _ -> false
+          end
+      end
   end.
 
 

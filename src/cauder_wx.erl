@@ -22,9 +22,7 @@
   frame :: wxFrame:wxFrame(),
   menubar :: wxMenuBar:wxMenuBar(),
   content :: wxWindow:wxWindow(),
-  statusbar :: wxStatusBar:wxStatusBar(),
-
-  module :: atom() | undefined
+  statusbar :: wxStatusBar:wxStatusBar()
 }).
 
 -type state() :: #wx_state{}.
@@ -115,22 +113,24 @@ init([]) ->
 %% -------------------- File Menu -------------------- %%
 
 handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
-  Message = "Select an Erlang file",
-  Wildcard = "Erlang (*.erl)|*.erl|All files (*.*)|*.*",
-  Dialog = wxFileDialog:new(Frame, [{message, Message},
-                                    {wildCard, Wildcard},
-                                    {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST}]),
-  State1 =
-    case wxDialog:showModal(Dialog) of
-      ?wxID_OK ->
-        Path = wxFileDialog:getPath(Dialog),
-        Module = open_file(Path),
-        State#wx_state{module = Module};
-      _Other -> State
-    end,
-  wxDialog:destroy(Dialog),
-
-  {noreply, State1};
+  case stop_session() of
+    false -> ok;
+    true ->
+      Message = "Select an Erlang file",
+      Wildcard = "Erlang (*.erl)|*.erl|All files (*.*)|*.*",
+      Dialog = wxFileDialog:new(Frame, [{message, Message},
+                                        {wildCard, Wildcard},
+                                        {style, ?wxFD_OPEN bor ?wxFD_FILE_MUST_EXIST}]),
+      case wxDialog:showModal(Dialog) of
+        ?wxID_OK ->
+          Path = wxFileDialog:getPath(Dialog),
+          Module = open_file(Path),
+          put(module, Module);
+        _Other -> ok
+      end,
+      wxDialog:destroy(Dialog)
+  end,
+  {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
   %% TODO Add confirmation dialog?
@@ -201,20 +201,12 @@ handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
 
 %% -------------------- Run Menu -------------------- %%
 
-handle_event(?MENU_EVENT(?MENU_Run_Start), #wx_state{frame = Frame, module = Module} = State) ->
-  EntryPoints = cauder:get_entry_points(Module),
-  case cauder_wx_dialog:start_session(Frame, EntryPoints) of
-    {manual, {Mod, Fun, Args}} -> start_manual_session(Mod, Fun, Args);
-    {replay, TracePath} -> start_replay_session(TracePath);
-    false -> ok
-  end,
+handle_event(?MENU_EVENT(?MENU_Run_Start), State) ->
+  start_session(),
   {noreply, State};
 
-handle_event(?MENU_EVENT(?MENU_Run_Stop), #wx_state{frame = Frame} = State) ->
-  case cauder_wx_dialog:stop_session(Frame) of
-    true -> stop_session();
-    false -> ok
-  end,
+handle_event(?MENU_EVENT(?MENU_Run_Stop), State) ->
+  stop_session(),
   {noreply, State};
 
 %% -------------------- Help Menu -------------------- %%
@@ -419,7 +411,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
   end,
   {noreply, State};
 
-%% -------------------- Bindings handler -------------------- %%
+%% -------------------- Edit Binding -------------------- %%
 
 handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
   Sys = cauder:get_system(),
@@ -443,11 +435,26 @@ handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command
 
 handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
 
-%% -------------------- Other handler -------------------- %%
+%% -------------------- DnD event -------------------- %%
+
+handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} = State) ->
+  case cauder_wx_dialog:drop_files(Frame, Files) of
+    {ok, File} ->
+      case stop_session() of
+        false -> ok;
+        true -> open_file(File)
+      end;
+    false -> ok
+  end,
+  {noreply, State};
+
+%% -------------------- Close event -------------------- %%
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   %% TODO Add confirmation dialog?
   {stop, normal, State};
+
+%% -------------------- Unhandled events -------------------- %%
 
 handle_event(Event, State) ->
   io:format("Unhandled Event:~n~p~n", [Event]),
@@ -516,57 +523,67 @@ open_file(File) ->
 
 
 %%--------------------------------------------------------------------
-%% @doc Starts a new manual debugging session with the given function application.
-
--spec start_manual_session(Module :: atom(), Function :: atom(), Arity :: list(erl_parse:abstract_expr())) -> 'ok'.
-
-start_manual_session(M, F, As) ->
-  ok = cauder:init_system(M, F, As),
-  start_session(M, F, length(As)).
-
-
-%%--------------------------------------------------------------------
-%% @doc Starts a new replay debugging session using the trace in the given directory.
-
--spec start_replay_session(LogPath :: file:filename()) -> 'ok'.
-
-start_replay_session(Path) ->
-  {M, F, A} = cauder:init_system(Path),
-  start_session(M, F, A).
-
-
-%%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session(Module :: atom(), Function :: atom(), Arity :: arity()) -> 'ok'.
+-spec start_session() -> Started :: boolean().
 
-start_session(M, F, A) ->
-  put(line, 0),
+start_session() ->
+  Frame = utils_gui:find(?FRAME, wxFrame),
+  EntryPoints = cauder:get_entry_points(get(module)),
 
-  refresh(true),
+  MFA =
+    case cauder_wx_dialog:start_session(Frame, EntryPoints) of
+      {manual, {Mod, Fun, Args}} ->
+        ok = cauder:init_system(Mod, Fun, Args),
+        {Mod, Fun, length(Args)};
+      {replay, Path} ->
+        {_, _, _} = cauder:init_system(Path);
+      false -> false
+    end,
 
-  cauder_wx_menu:enable(?MENU_Run_Start, false),
-  cauder_wx_menu:enable(?MENU_Run_Stop, true),
+  case MFA of
+    false -> false;
+    {M, F, A} ->
+      put(line, 0),
 
-  % Update status bar message
-  cauder_wx_statusbar:update(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])).
+      refresh(true),
+
+      cauder_wx_menu:enable(?MENU_Run_Start, false),
+      cauder_wx_menu:enable(?MENU_Run_Stop, true),
+
+      % Update status bar message
+      cauder_wx_statusbar:update(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])),
+
+      true
+  end.
 
 
 %%--------------------------------------------------------------------
 %% @doc Stops the current debugging session.
 
--spec stop_session() -> 'ok'.
+-spec stop_session() -> Stopped :: boolean().
 
 stop_session() ->
-  ok = cauder:stop_system(),
+  case cauder:get_system() of
+    undefined -> true; % Not running
+    _ ->
+      Frame = utils_gui:find(?FRAME, wxFrame),
+      case cauder_wx_dialog:stop_session(Frame) of
+        false -> false;
+        true ->
+          ok = cauder:stop_system(),
 
-  refresh(true),
+          refresh(true),
 
-  cauder_wx_menu:enable(?MENU_Run_Start, true),
-  cauder_wx_menu:enable(?MENU_Run_Stop, false),
+          cauder_wx_menu:enable(?MENU_Run_Start, true),
+          cauder_wx_menu:enable(?MENU_Run_Stop, false),
 
-  % Update status bar message
-  cauder_wx_statusbar:update("Stopped system!").
+          % Update status bar message
+          cauder_wx_statusbar:update("Stopped system!"),
+
+          true
+      end
+  end.
 
 
 %%--------------------------------------------------------------------
