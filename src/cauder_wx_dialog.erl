@@ -327,7 +327,7 @@ drop_files(Parent, Files) ->
 -spec about(Parent :: wxWindow:wxWindow()) -> ok.
 
 about(Parent) ->
-  Caption = "About " ++ ?APPNAME,
+  Caption = "About " ++ ?APP_NAME,
   Dialog = wxMessageDialog:new(Parent, ?DIALOG_About, [{style, ?wxOK}, {caption, Caption}]),
   wxDialog:showModal(Dialog),
   wxWindow:destroy(Dialog).

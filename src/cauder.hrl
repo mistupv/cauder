@@ -1,5 +1,5 @@
--define(APPNAME, "CauDEr").
--define(WEBPAGE, "https://github.com/mistupv/cauder-v2").
+-define(APP_NAME, "CauDEr").
+-define(APP_URL, "https://github.com/mistupv/cauder-v2").
 -define(APP_DB, 'cauder_database').
 
 -define(ID_GAMMA, 0).

@@ -108,7 +108,7 @@ find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 init([]) ->
   wx:new(),
 
-  Frame = wxFrame:new(wx:null(), ?FRAME, ?APPNAME, [{size, ?FRAME_SIZE_INIT}]),
+  Frame = wxFrame:new(wx:null(), ?FRAME, ?APP_NAME, [{size, ?FRAME_SIZE_INIT}]),
 
   Menubar = cauder_wx_menu:create(Frame),
   Content = cauder_wx_areas:create(Frame),
@@ -253,7 +253,7 @@ handle_event(?MENU_EVENT(?MENU_Run_Stop), State) ->
 %%%=============================================================================
 
 handle_event(?MENU_EVENT(?MENU_Help_ViewHelp), State) ->
-  wx_misc:launchDefaultBrowser(?WEBPAGE),
+  wx_misc:launchDefaultBrowser(?APP_URL),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->

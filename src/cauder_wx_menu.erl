@@ -85,7 +85,7 @@ create(Frame) ->
     [
       #menu_item{id = ?MENU_Help_ViewHelp, text = "View &Help"},
       separator,
-      #menu_item{id = ?MENU_Help_About, text = "&About " ?APPNAME}
+      #menu_item{id = ?MENU_Help_About, text = "&About " ?APP_NAME}
     ]
   ),
 
