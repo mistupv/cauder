@@ -28,8 +28,7 @@ docs: clean-docs
                                         \"src/cauder_wx_menu.erl\", \
                                         \"src/cauder_wx_process.erl\", \
                                         \"src/cauder_wx_statusbar.erl\", \
-                                        \"src/cauder_wx_system.erl\", \
-                                        \"src/cauder_wx_utils.erl\"]" "[{dir,\"docs\"}]"
+                                        \"src/cauder_wx_system.erl\"]" "[{dir,\"docs\"}]"
 
 clean: clean-docs
 	@rm -Rf ebin
