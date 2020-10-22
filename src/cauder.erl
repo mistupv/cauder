@@ -741,7 +741,7 @@ step_over(Sem, Sys, Pid, Es) ->
 
 step_multiple(_, Sys, Steps, Steps) -> {Sys, Steps};
 step_multiple(Sem, Sys, Steps, StepsDone) ->
-  case Sem:eval_opts(Sys) of
+  case Sem:options(Sys) of
     [] -> {Sys, StepsDone};
     [#opt{pid = Pid, sem = Sem} | _] ->
       Sys1 = Sem:step(Sys, Pid),
