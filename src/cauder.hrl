@@ -11,8 +11,10 @@
 -define(TO_STRING(X), "").
 -endif.
 
--define(FWD_SEM, fwd_sem).
--define(BWD_SEM, bwd_sem).
+%% Name of the module that defines the forwards semantics.
+-define(FWD_SEM, cauder_semantics_forwards).
+%% Name of the module that defines the backwards semantics.
+-define(BWD_SEM, cauder_semantics_backwards).
 
 -define(RULE_SEQ,      seq).
 -define(RULE_SELF,     self).
@@ -60,9 +62,9 @@
   % Environment
   env = erl_eval:new_bindings() :: cauder_types:environment(),
   % List of expressions
-  exprs :: undefined | [cauder_types:abstract_expr()],
+  exprs :: [cauder_types:abstract_expr()],
   % The entry point function for this process
-  spf :: undefined | {atom(), atom(), arity()}
+  spf :: mfa()
 }).
 
 %% Message
@@ -97,7 +99,7 @@
 % Replay info
 -record(replay, {
   log_path :: file:filename(),
-  call :: {atom(), atom(), [cauder_types:abstract_expr()]},
+  call :: {module(), atom(), cauder_types:af_args()},
   main_pid :: cauder_types:proc_id()
 }).
 

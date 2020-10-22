@@ -1,11 +1,11 @@
 -module(cauder_wx_menu).
 
+%% API
+-export([create/1, enable/2]).
+
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
-
-%% API
--export([create/1, enable/2]).
 
 
 -record(menu_item, {
@@ -16,10 +16,20 @@
   enabled = true :: boolean()
 }).
 
--type menuItemDesc() :: #menu_item{} | 'separator'.
+-type menuItemDesc() :: #menu_item{} | separator.
 
 
--spec create(Frame :: wxFrame:wxFrame()) -> wxMenuBar:wxMenuBar().
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Creates the menu bar and populates it.
+
+-spec create(Frame) -> MenuBar when
+  Frame :: wxFrame:wxFrame(),
+  MenuBar :: wxMenuBar:wxMenuBar().
 
 create(Frame) ->
   MenuBar = wxMenuBar:new(),
@@ -89,14 +99,38 @@ create(Frame) ->
 
   MenuBar.
 
--spec create_menu(list(menuItemDesc())) -> wxMenu:wxMenu().
+
+%%------------------------------------------------------------------------------
+%% @doc Enables/disables the item with the given ID.
+
+-spec enable(ItemId, Enable) -> ok when
+  ItemId :: integer(),
+  Enable :: boolean().
+
+enable(ItemId, Enable) ->
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  MenuBar = wxFrame:getMenuBar(Frame),
+  wxMenuBar:enable(MenuBar, ItemId, Enable).
+
+
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
+-spec create_menu([ItemDescription]) -> Menu when
+  ItemDescription :: menuItemDesc(),
+  Menu :: wxMenu:wxMenu().
 
 create_menu(Items) ->
   Menu = wxMenu:new(),
   lists:foreach(fun(Item) -> wxMenu:append(Menu, create_item(Item)) end, Items),
   Menu.
 
--spec create_item(menuItemDesc()) -> wxMenuItem:wxMenuItem().
+
+-spec create_item(ItemDescription) -> MenuItem when
+  ItemDescription :: menuItemDesc(),
+  MenuItem :: wxMenuItem:wxMenuItem().
 
 create_item(#menu_item{id = Id, text = Text, help = Help, kind = normal, enabled = Enabled}) ->
   Item = wxMenuItem:new([{id, Id}, {text, Text}, {help, Help}, {kind, ?wxITEM_NORMAL}]),
@@ -115,11 +149,3 @@ create_item(#menu_item{id = Id, text = Text, help = Help, kind = radio, enabled 
 
 create_item(separator) ->
   wxMenuItem:new([{kind, ?wxITEM_SEPARATOR}]).
-
-
--spec enable(ItemId :: integer(), Enable :: boolean()) -> 'ok'.
-
-enable(ItemId, Enable) ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
-  MenuBar = wxFrame:getMenuBar(Frame),
-  wxMenuBar:enable(MenuBar, ItemId, Enable).

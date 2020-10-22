@@ -1,12 +1,13 @@
 -module(cauder_wx_code).
 
+%% API
+-export([create/1, update/2]).
+% TODO Remove exports, do all work inside update/2
+-export([load_code/2, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
+
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
-
-%% API
--export([create/1, update/2]).
--export([load_code/2, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
 
 -define(KEYWORDS, ["after", "begin", "case", "try", "cond", "catch", "andalso", "orelse",
                    "end", "fun", "if", "let", "of", "receive", "when", "bnot", "not",
@@ -58,11 +59,17 @@
 -define(LINE_BACKGROUND, 1).
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
--spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+
+%%------------------------------------------------------------------------------
+%% @doc Creates the <i>code</i> panel and populates it.
+
+-spec create(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create(Parent) ->
   Win = wxPanel:new(Parent),
@@ -77,19 +84,26 @@ create(Parent) ->
   Win.
 
 
--spec update(System, Pid) -> 'ok' when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+%%------------------------------------------------------------------------------
+%% @doc Updates the <i>code</i> panel according to the given system and process.
+
+-spec update(System, Pid) -> ok when
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update(System, Pid) ->
   update_code(System, Pid),
   update_expression(System, Pid).
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
 
 
--spec create_code(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+-spec create_code(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_code(Parent) ->
   Win = wxPanel:new(Parent),
@@ -141,12 +155,12 @@ create_code(Parent) ->
   Win.
 
 
--spec update_code(System, Pid) -> 'ok' when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+-spec update_code(System, Pid) -> ok when
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_code(System, Pid) ->
-  CodeControl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeControl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
 
   wxStyledTextCtrl:freeze(CodeControl),
   case get(line) of
@@ -176,10 +190,12 @@ update_code(System, Pid) ->
   wxStyledTextCtrl:thaw(CodeControl).
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
 
--spec create_expression(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+-spec create_expression(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_expression(Parent) ->
   Win = wxPanel:new(Parent),
@@ -196,12 +212,12 @@ create_expression(Parent) ->
   Win.
 
 
--spec update_expression(System, Pid) -> 'ok' when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+-spec update_expression(System, Pid) -> ok when
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_expression(System, Pid) ->
-  ExpressionControl = utils_gui:find(?CODE_Expression_Control, wxTextCtrl),
+  ExpressionControl = cauder_wx_utils:find(?CODE_Expression_Control, wxTextCtrl),
 
   wxTextCtrl:freeze(ExpressionControl),
   wxTextCtrl:clear(ExpressionControl),
@@ -213,7 +229,7 @@ update_expression(System, Pid) ->
         none -> ok;
         _ ->
           {ok, #proc{exprs = [Expr | _]}} = orddict:find(Pid, PDict),
-          StrExpr = pretty_print:expression(Expr),
+          StrExpr = cauder_pp:expression(Expr),
           wxTextCtrl:setValue(ExpressionControl, StrExpr)
       end
   end,
@@ -221,13 +237,15 @@ update_expression(System, Pid) ->
   wxTextCtrl:thaw(ExpressionControl).
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
 
 keyWords() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
 
 
--spec load_code(wxStyledTextCtrl:wxStyledTextCtrl(), Code :: binary()) -> 'ok'.
+-spec load_code(CodeControl, Code) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  Code :: binary().
 
 load_code(CodeCtrl, Code) ->
   wxStyledTextCtrl:freeze(CodeCtrl),
@@ -238,7 +256,8 @@ load_code(CodeCtrl, Code) ->
   wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec unload_code(wxStyledTextCtrl:wxStyledTextCtrl()) -> 'ok'.
+-spec unload_code(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
 
 unload_code(CodeCtrl) ->
   wxStyledTextCtrl:freeze(CodeCtrl),
@@ -249,7 +268,9 @@ unload_code(CodeCtrl) ->
   wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec mark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
+-spec mark_line(CodeControl, Line) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  Line :: pos_integer().
 
 mark_line(CodeCtrl, Line) ->
   wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_MARKER),
@@ -257,7 +278,9 @@ mark_line(CodeCtrl, Line) ->
   ok.
 
 
--spec unmark_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
+-spec unmark_line(CodeControl, Line) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  Line :: pos_integer().
 
 unmark_line(CodeCtrl, Line) ->
   wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_MARKER),
@@ -265,23 +288,35 @@ unmark_line(CodeCtrl, Line) ->
   ok.
 
 
--spec goto_line(wxStyledTextCtrl:wxStyledTextCtrl(), Line :: pos_integer()) -> 'ok'.
+-spec goto_line(CodeControl, Line) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  Line :: pos_integer().
 
 goto_line(CodeCtrl, Line) ->
   wxStyledTextCtrl:gotoLine(CodeCtrl, Line - 1),
   ok.
 
 
--spec zoom_in(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
--spec zoom_out(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
--spec zoom_reset(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
+-spec zoom_in(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
 
 zoom_in(CodeCtrl) -> wxStyledTextCtrl:zoomIn(CodeCtrl).
+
+
+-spec zoom_out(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
+
 zoom_out(CodeCtrl) -> wxStyledTextCtrl:zoomOut(CodeCtrl).
+
+
+-spec zoom_reset(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
+
 zoom_reset(CodeCtrl) -> wxStyledTextCtrl:setZoom(CodeCtrl, ?ZOOM_DEFAULT).
 
 
--spec update_margin(wxStyledTextCtrl:wxStyledTextCtrl()) -> ok.
+-spec update_margin(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
 
 update_margin(CodeCtrl) ->
   Lines = wxStyledTextCtrl:getLineCount(CodeCtrl),
@@ -290,15 +325,24 @@ update_margin(CodeCtrl) ->
   wxStyledTextCtrl:setMarginWidth(CodeCtrl, 0, Width + 5).
 
 
--spec update_buttons(wxStyledTextCtrl:wxStyledTextCtrl(), wxMenuBar:wxMenuBar()) -> ok.
+-spec update_buttons(CodeControl, MenuBar) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  MenuBar :: wxMenuBar:wxMenuBar().
 
 update_buttons(CodeCtrl, Menubar) ->
   wxMenuBar:enable(Menubar, ?MENU_View_ZoomIn, can_zoom_in(CodeCtrl)),
   wxMenuBar:enable(Menubar, ?MENU_View_ZoomOut, can_zoom_out(CodeCtrl)).
 
 
--spec can_zoom_in(wxStyledTextCtrl:wxStyledTextCtrl()) -> boolean().
--spec can_zoom_out(wxStyledTextCtrl:wxStyledTextCtrl()) -> boolean().
+-spec can_zoom_in(CodeControl) -> CanZoomIn when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  CanZoomIn :: boolean().
 
 can_zoom_in(CodeCtrl) -> wxStyledTextCtrl:getZoom(CodeCtrl) < ?ZOOM_MAX.
+
+
+-spec can_zoom_out(CodeControl) -> CanZoomOut when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
+  CanZoomOut :: boolean().
+
 can_zoom_out(CodeCtrl) -> wxStyledTextCtrl:getZoom(CodeCtrl) > ?ZOOM_MIN.

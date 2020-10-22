@@ -28,11 +28,19 @@
 -type state() :: #wx_state{}.
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% API
-%%%===================================================================
+%%%=============================================================================
 
--spec start() -> {ok, Pid :: pid(), Window :: wxWindow:wxWindow()} | {error, Reason :: term()}.
+
+%%------------------------------------------------------------------------------
+%% @doc Starts the debugging server.
+
+-spec start() -> {ok, Pid, Window} | {error, Reason} when
+  Pid :: pid(),
+  Window :: wxWindow:wxWindow(),
+  Reason :: term().
+
 start() ->
   case whereis(cauder) of
     undefined -> cauder:start();
@@ -44,7 +52,14 @@ start() ->
   end.
 
 
--spec start_link() -> {ok, Pid :: pid(), Window :: wxWindow:wxWindow()} | {error, Reason :: term()}.
+%%------------------------------------------------------------------------------
+%% @doc Starts the debugging server as part of a supervision tree.
+
+-spec start_link() -> {ok, Pid, Window} | {error, Reason} when
+  Pid :: pid(),
+  Window :: wxWindow:wxWindow(),
+  Reason :: term().
+
 start_link() ->
   case whereis(cauder) of
     undefined -> cauder:start_link();
@@ -56,15 +71,27 @@ start_link() ->
   end.
 
 
--spec stop(WxObject :: wxWindow:wxWindow()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @doc Stops the debugging server.
+
+-spec stop(WxObject) -> ok when
+  WxObject :: wxWindow:wxWindow().
+
 stop(WxObject) -> wx_object:stop(WxObject).
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% wx_object callbacks
-%%%===================================================================
+%%%=============================================================================
 
--spec init(Args :: list()) -> {wxFrame:wxFrame(), state()}.
+
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec init(Args) -> {WxObject, State} when
+  Args :: term(),
+  WxObject :: wxFrame:wxFrame(),
+  State :: state().
 
 init([]) ->
   wx:new(),
@@ -87,7 +114,7 @@ init([]) ->
 
   wxMenuBar:check(Menubar, ?MENU_View_StatusBar, true),
 
-  CodeCtrl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeCtrl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_buttons(CodeCtrl, Menubar),
 
   wxEvtHandler:connect(Frame, close_window),
@@ -108,9 +135,13 @@ init([]) ->
   }}.
 
 
--spec handle_event(Event :: wx(), State :: state()) -> {'noreply', state()} | {'stop', 'normal', state()}.
+%%------------------------------------------------------------------------------
+%% @private
 
-%% -------------------- File Menu -------------------- %%
+-spec handle_event(Event, State) -> {noreply, NewState} | {stop, normal, NewState} when
+  Event :: wx(),
+  State :: state(),
+  NewState :: state().
 
 handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
   case stop_session() of
@@ -136,24 +167,22 @@ handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
   %% TODO Add confirmation dialog?
   {stop, normal, State};
 
-%% -------------------- View Menu -------------------- %%
-
 handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_in(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_out(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_reset(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
@@ -199,7 +228,7 @@ handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
   cauder_wx_statusbar:set_visibility(Enabled =/= 0),
   {noreply, State};
 
-%% -------------------- Run Menu -------------------- %%
+%%%=============================================================================
 
 handle_event(?MENU_EVENT(?MENU_Run_Start), State) ->
   start_session(),
@@ -209,7 +238,7 @@ handle_event(?MENU_EVENT(?MENU_Run_Stop), State) ->
   stop_session(),
   {noreply, State};
 
-%% -------------------- Help Menu -------------------- %%
+%%%=============================================================================
 
 handle_event(?MENU_EVENT(?MENU_Help_ViewHelp), State) ->
   wx_misc:launchDefaultBrowser(?WEBPAGE),
@@ -219,21 +248,21 @@ handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
   cauder_wx_dialog:about(Frame),
   {noreply, State};
 
-%% -------------------- Code Area -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{id = ?CODE_Code_Control, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
-  CodeArea = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
-%% -------------------- Process Selector -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
   refresh(),
   {noreply, State};
 
-%% -------------------- Manual Actions -------------------- %%
+%%%=============================================================================
 
 handle_event(?BUTTON_EVENT(Button), State) when ?Is_Step_Button(Button) ->
   case cauder_wx_actions:selected_pid() of
@@ -242,7 +271,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Step_Button(Button) ->
       refresh();
     Pid ->
       Sem = button_to_semantics(Button),
-      Rule = cauder:eval_step(Sem, Pid),
+      Rule = cauder:step(Sem, Pid),
       cauder_wx_statusbar:step(Sem, Rule),
       refresh()
   end,
@@ -255,7 +284,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
       refresh();
     Pid ->
       Sem = button_to_semantics(Button),
-      case cauder:eval_step_over(Sem, Pid) of
+      case cauder:step_over(Sem, Pid) of
         nomatch ->
           cauder_wx_statusbar:no_match(),
           refresh();
@@ -266,18 +295,18 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
   end,
   {noreply, State};
 
-%% -------------------- Automatic Actions -------------------- %%
+%%%=============================================================================
 
 handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
-  Spinner = utils_gui:find(?ACTION_Automatic_Steps, wxSpinCtrl),
+  Spinner = cauder_wx_utils:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
-  StepsDone = cauder:eval_mult(Sem, Steps),
-  cauder_wx_statusbar:multi(Sem, StepsDone, Steps),
+  StepsDone = cauder:step_multiple(Sem, Steps),
+  cauder_wx_statusbar:step_multiple(Sem, StepsDone, Steps),
   refresh(),
   {noreply, State};
 
-%% -------------------- Replay Actions -------------------- %%
+%%%=============================================================================
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
@@ -285,57 +314,57 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
       cauder_wx_statusbar:no_process(),
       refresh();
     Pid ->
-      Spinner = utils_gui:find(?ACTION_Replay_Steps, wxSpinCtrl),
+      Spinner = cauder_wx_utils:find(?ACTION_Replay_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
-      StepsDone = cauder:eval_replay(Pid, Steps),
-      cauder_wx_statusbar:replay(StepsDone, Steps),
+      StepsDone = cauder:replay_steps(Pid, Steps),
+      cauder_wx_statusbar:replay_steps(StepsDone, Steps),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Replay_Spawn, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:replay_spawn(false, none),
       refresh();
     {Pid, _} ->
-      Success = cauder:eval_replay_spawn(Pid),
+      Success = cauder:replay_spawn(Pid),
       cauder_wx_statusbar:replay_spawn(Success, Pid),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Replay_Send, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
       cauder_wx_statusbar:replay_send(false, none),
       refresh();
     {Uid, _} ->
-      Success = cauder:eval_replay_send(Uid),
+      Success = cauder:replay_send(Uid),
       cauder_wx_statusbar:replay_send(Success, Uid),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Replay_Receive, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:replay_rec(false, none),
+      cauder_wx_statusbar:replay_receive(false, none),
       refresh();
     {Uid, _} ->
-      Success = cauder:eval_replay_rec(Uid),
-      cauder_wx_statusbar:replay_rec(Success, Uid),
+      Success = cauder:replay_receive(Uid),
+      cauder_wx_statusbar:replay_receive(Success, Uid),
       refresh()
   end,
   {noreply, State};
 
-%% -------------------- Rollback Actions -------------------- %%
+%%%=============================================================================
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
   case cauder_wx_actions:selected_pid() of
@@ -343,75 +372,75 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
       cauder_wx_statusbar:no_process(),
       refresh();
     Pid ->
-      Spinner = utils_gui:find(?ACTION_Rollback_Steps, wxSpinCtrl),
+      Spinner = cauder_wx_utils:find(?ACTION_Rollback_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
-      {FocusLog, StepsDone} = cauder:eval_roll(Pid, Steps),
-      cauder_wx_statusbar:roll(StepsDone, Steps),
+      {FocusLog, StepsDone} = cauder:rollback_steps(Pid, Steps),
+      cauder_wx_statusbar:rollback_steps(StepsDone, Steps),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Rollback_Spawn, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:roll_spawn(false, none),
+      cauder_wx_statusbar:rollback_spawn(false, none),
       refresh();
     {Pid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_spawn(Pid),
-      cauder_wx_statusbar:roll_spawn(Success, Pid),
+      {Success, FocusLog} = cauder:rollback_spawn(Pid),
+      cauder_wx_statusbar:rollback_spawn(Success, Pid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Rollback_Send, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:roll_send(false, none),
+      cauder_wx_statusbar:rollback_send(false, none),
       refresh();
     {Uid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_send(Uid),
-      cauder_wx_statusbar:roll_send(Success, Uid),
+      {Success, FocusLog} = cauder:rollback_send(Uid),
+      cauder_wx_statusbar:rollback_send(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Rollback_Receive, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:roll_rec(false, none),
+      cauder_wx_statusbar:rollback_receive(false, none),
       refresh();
     {Uid, _} ->
-      {Success, FocusLog} = cauder:eval_roll_rec(Uid),
-      cauder_wx_statusbar:roll_rec(Success, Uid),
+      {Success, FocusLog} = cauder:rollback_receive(Uid),
+      cauder_wx_statusbar:rollback_receive(Success, Uid),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh()
   end,
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
-  TextCtrl = utils_gui:find(?ACTION_Rollback_Variable, wxTextCtrl),
+  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Variable, wxTextCtrl),
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
-      cauder_wx_statusbar:roll_var(false, none),
+      cauder_wx_statusbar:rollback_variable(false, none),
       refresh();
     Name ->
-      {Success, FocusLog} = cauder:eval_roll_var(Name),
-      cauder_wx_statusbar:roll_var(Success, Name),
+      {Success, FocusLog} = cauder:rollback_variable(Name),
+      cauder_wx_statusbar:rollback_variable(Success, Name),
       cauder_wx_system:focus_roll_log(FocusLog),
       refresh()
   end,
   {noreply, State};
 
-%% -------------------- Edit Binding -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
   Sys = cauder:get_system(),
@@ -427,7 +456,7 @@ handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_
   end,
   {noreply, State};
 
-%% -------------------- Text handler -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command_text_updated}}, State) ->
   refresh(),
@@ -435,7 +464,7 @@ handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command
 
 handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
 
-%% -------------------- DnD event -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} = State) ->
   case cauder_wx_dialog:drop_files(Frame, Files) of
@@ -448,41 +477,66 @@ handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} 
   end,
   {noreply, State};
 
-%% -------------------- Close event -------------------- %%
+%%%=============================================================================
 
 handle_event(#wx{event = #wxClose{}}, State) ->
   %% TODO Add confirmation dialog?
   {stop, normal, State};
 
-%% -------------------- Unhandled events -------------------- %%
+%%%=============================================================================
 
 handle_event(Event, State) ->
   io:format("Unhandled Event:~n~p~n", [Event]),
   {noreply, State}.
 
 
--spec handle_call(Request :: any(), From :: any(), State :: state()) -> {reply, ok, state()}.
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec handle_call(Request, From, State) -> {reply, Reply, NewState} | {stop, Reply, NewState} when
+  Request :: term(),
+  From :: {pid(), term()},
+  State :: state(),
+  Reply :: term(),
+  NewState :: state().
 
 handle_call(Request, _From, State) ->
   io:format("Unhandled Call:~n~p~n", [Request]),
   {reply, ok, State}.
 
 
--spec handle_cast(Request :: any(), State :: state()) -> {'noreply', state()}.
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec handle_cast(Request, State) -> {noreply, NewState} when
+  Request :: any(),
+  State :: state(),
+  NewState :: state().
 
 handle_cast(Request, State) ->
   io:format("Unhandled Cast:~n~p~n", [Request]),
   {noreply, State}.
 
 
--spec handle_info(Info :: any(), State :: state()) -> {'noreply', state()}.
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec handle_info(Info, State) -> {noreply, NewState} when
+  Info :: any(),
+  State :: state(),
+  NewState :: state().
 
 handle_info(Info, State) ->
   io:format("Unhandled Info:~n~p~n", [Info]),
   {noreply, State}.
 
 
--spec terminate(Reason :: any(), State :: state()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec terminate(Reason, State) -> ok when
+  Reason :: any(),
+  State :: state().
 
 terminate(_Reason, #wx_state{frame = Frame}) ->
   wxFrame:destroy(Frame),
@@ -494,25 +548,35 @@ terminate(_Reason, #wx_state{frame = Frame}) ->
   ok.
 
 
--spec code_change(any(), state(), any()) -> {'ok', state()}.
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+%%------------------------------------------------------------------------------
+%% @private
+
+-spec code_change(OldVsn, State, Extra) -> {ok, NewState} when
+  OldVsn :: (term() | {down, term()}),
+  State :: state(),
+  Extra :: term(),
+  NewState :: state().
+
+code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
 
-%%%===================================================================
+%%%=============================================================================
 %%% Internal functions
-%%%===================================================================
+%%%=============================================================================
+
 
 %%--------------------------------------------------------------------
 %% @doc Loads the specified '.erl' source file
 
--spec open_file(File :: file:filename()) -> Module :: atom().
+-spec open_file(File) -> Module when
+  File :: file:filename(),
+  Module :: module().
 
 open_file(File) ->
   {ok, Module} = cauder:load_file(File),
 
   {ok, Src, _} = erl_prim_loader:get_file(File),
-  CodeCtrl = utils_gui:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeCtrl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
@@ -525,10 +589,11 @@ open_file(File) ->
 %%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session() -> Started :: boolean().
+-spec start_session() -> Started when
+  Started :: boolean().
 
 start_session() ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
   EntryPoints = cauder:get_entry_points(get(module)),
 
   MFA =
@@ -561,13 +626,14 @@ start_session() ->
 %%--------------------------------------------------------------------
 %% @doc Stops the current debugging session.
 
--spec stop_session() -> Stopped :: boolean().
+-spec stop_session() -> Stopped when
+  Stopped :: boolean().
 
 stop_session() ->
   case cauder:get_system() of
     undefined -> true; % Not running
     _ ->
-      Frame = utils_gui:find(?FRAME, wxFrame),
+      Frame = cauder_wx_utils:find(?FRAME, wxFrame),
       case cauder_wx_dialog:stop_session(Frame) of
         false -> false;
         true ->
@@ -589,7 +655,7 @@ stop_session() ->
 %%--------------------------------------------------------------------
 %% @doc Updates the UI to show changes in the system information.
 
--spec refresh() -> 'ok'.
+-spec refresh() -> ok.
 
 refresh() ->
   System = cauder:get_system(), % TODO Save last system and compare with new system, then only update elements whose information changed

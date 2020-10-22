@@ -1,25 +1,36 @@
-%%%-------------------------------------------------------------------
-%%% @doc Some functions that implement the forward (reversible)
-%%% semantics for Erlang. These can be divided into functions to get
-%%% the evaluation options and functions to perform the evaluation
+%%%-----------------------------------------------------------------------------
+%%% @doc Forwards (reversible) semantics for Erlang.
+%%% This module includes two functions, one to get the evaluation options for a
+%%% given system and one to perform an evaluation step in a process of a given
+%%% system.
 %%% @end
-%%%-------------------------------------------------------------------
+%%%-----------------------------------------------------------------------------
 
--module(fwd_sem).
+-module(cauder_semantics_forwards).
 
--export([eval_step/2, eval_opts/1]).
+%% API
+-export([step/2, options/1]).
 
 -import(cauder_eval, [is_reducible/2]).
 
 -include("cauder.hrl").
 
 
-%% =====================================================================
-%% @doc Performs an evaluation step in process Pid, given System
+%%%=============================================================================
+%%% API
+%%%=============================================================================
 
--spec eval_step(cauder_types:system(), pos_integer()) -> cauder_types:system().
 
-eval_step(Sys, Pid) ->
+%%------------------------------------------------------------------------------
+%% @doc Performs a single forwards step in the process with the given Pid in the
+%% given System.
+
+-spec step(System, Pid) -> NewSystem when
+  System :: cauder_types:system(),
+  Pid :: cauder_types:proc_id(),
+  NewSystem :: cauder_types:system().
+
+step(Sys, Pid) ->
   #sys{mail = Ms, logs = Logs, trace = Trace} = Sys,
   {P0, PDict0} = orddict:take(Pid, Sys#sys.procs),
   #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -51,7 +62,7 @@ eval_step(Sys, Pid) ->
           {spawn, SpawnPid} = LogH,
           NewLog = LogT;
         _ ->
-          SpawnPid = utils:fresh_pid(),
+          SpawnPid = cauder_utils:fresh_pid(),
           NewLog = []
       end,
 
@@ -82,7 +93,7 @@ eval_step(Sys, Pid) ->
           {send, Uid} = LogH,
           NewLog = LogT;
         _ ->
-          Uid = utils:fresh_uid(),
+          Uid = cauder_utils:fresh_uid(),
           NewLog = []
       end,
 
@@ -124,7 +135,7 @@ eval_step(Sys, Pid) ->
       P = P0#proc{
         hist  = [{rec, Bs0, Es0, Stk0, M} | Hist],
         stack = Stk,
-        env   = utils:merge_bindings(Bs, Bs1),
+        env   = cauder_utils:merge_bindings(Bs, Bs1),
         exprs = Es1
       },
       T = #trace{
@@ -142,13 +153,15 @@ eval_step(Sys, Pid) ->
   end.
 
 
-%% =====================================================================
-%% @doc Gets the evaluation options for a given System
+%%------------------------------------------------------------------------------
+%% @doc Returns the forwards evaluation options for the given System.
 
--spec eval_opts(cauder_types:system()) -> [cauder_types:option()].
+-spec options(System) -> Options when
+  System :: cauder_types:system(),
+  Options :: [cauder_types:option()].
 
-eval_opts(#sys{procs = []}) -> [];
-eval_opts(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
+options(#sys{procs = []}) -> [];
+options(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
   lists:filtermap(
     fun
       ({Pid, #proc{pid = Pid, stack = Stk, env = Bs, exprs = Es}}) ->
@@ -157,7 +170,7 @@ eval_opts(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
             {ok, L} -> L;
             error -> []
           end,
-        case eval_expr_opt(Pid, Es, Bs, Stk, Log, Mail) of
+        case expression_option(Pid, Es, Bs, Stk, Log, Mail) of
           ?NOT_EXP -> false;
           Rule ->
             {true, #opt{
@@ -171,18 +184,29 @@ eval_opts(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
   ).
 
 
--spec eval_expr_opt(Pid, Expressions, Environment, Stack, Log, Mail) -> Rule when
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the evaluation option for the given Expression, in the given
+%% System.
+%%
+%% @todo Refactor arguments and return value
+
+-spec expression_option(Pid, Expressions, Environment, Stack, Log, Mail) -> Rule when
   Pid :: cauder_types:proc_id(),
   Expressions :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
   Environment :: cauder_types:environment(),
   Stack :: cauder_types:stack(),
   Log :: cauder_types:log(),
-  Mail :: list(cauder_types:message()),
+  Mail :: [cauder_types:message()],
   Rule :: cauder_types:rule() | ?NOT_EXP.
 
-eval_expr_opt(Pid, E, Bs, Stk, Log, Mail) when not is_list(E) ->
-  eval_expr_opt(Pid, [E], Bs, Stk, Log, Mail);
-eval_expr_opt(Pid, [E0 | Es0], Bs, Stk, Log, Mail) ->
+expression_option(Pid, E, Bs, Stk, Log, Mail) when not is_list(E) ->
+  expression_option(Pid, [E], Bs, Stk, Log, Mail);
+expression_option(Pid, [E0 | Es0], Bs, Stk, Log, Mail) ->
   case is_reducible(E0, Bs) of
     false ->
       case {Es0, Stk} of
@@ -194,14 +218,14 @@ eval_expr_opt(Pid, [E0 | Es0], Bs, Stk, Log, Mail) ->
         {var, _, _} -> ?RULE_SEQ;
         {cons, _, H, T} ->
           case is_reducible(H, Bs) of
-            true -> eval_expr_opt(Pid, H, Bs, Stk, Log, Mail);
-            false -> eval_expr_opt(Pid, T, Bs, Stk, Log, Mail)
+            true -> expression_option(Pid, H, Bs, Stk, Log, Mail);
+            false -> expression_option(Pid, T, Bs, Stk, Log, Mail)
           end;
-        {tuple, _, Es} -> eval_expr_opt(Pid, Es, Bs, Stk, Log, Mail);
+        {tuple, _, Es} -> expression_option(Pid, Es, Bs, Stk, Log, Mail);
         {'if', _, _} -> ?RULE_SEQ;
         {'case', _, E, _} ->
           case is_reducible(E, Bs) of
-            true -> eval_expr_opt(Pid, E, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, E, Bs, Stk, Log, Mail);
             false -> ?RULE_SEQ
           end;
         {'receive', _, Cs} ->
@@ -217,89 +241,89 @@ eval_expr_opt(Pid, [E0 | Es0], Bs, Stk, Log, Mail) ->
         {'make_fun', _, _, _} -> ?RULE_SEQ;
         {bif, _, _, _, As} ->
           case is_reducible(As, Bs) of
-            true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
             false -> ?RULE_SEQ
           end;
         {self, _} -> ?RULE_SELF;
         {spawn, _, F} ->
           case is_reducible(F, Bs) of
-            true -> eval_expr_opt(Pid, F, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, F, Bs, Stk, Log, Mail);
             false -> ?RULE_SPAWN
           end;
         {spawn, _, M, F, As} ->
           case is_reducible(M, Bs) of
-            true -> eval_expr_opt(Pid, M, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, M, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(F, Bs) of
-                true -> eval_expr_opt(Pid, F, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, F, Bs, Stk, Log, Mail);
                 false ->
                   case is_reducible(As, Bs) of
-                    true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+                    true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
                     false -> ?RULE_SPAWN
                   end
               end
           end;
         {Send, _, L, R} when Send =:= 'send' orelse Send =:= 'send_op' ->
           case is_reducible(L, Bs) of
-            true -> eval_expr_opt(Pid, L, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, L, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(R, Bs) of
-                true -> eval_expr_opt(Pid, R, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, R, Bs, Stk, Log, Mail);
                 false -> ?RULE_SEND
               end
           end;
         {local_call, _, _, As} ->
           case is_reducible(As, Bs) of
-            true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
             false -> ?RULE_SEQ
           end;
         {remote_call, _, _, _, As} ->
           case is_reducible(As, Bs) of
-            true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
             false -> ?RULE_SEQ
           end;
         {apply, _, M, F, As} ->
           case is_reducible(M, Bs) of
-            true -> eval_expr_opt(Pid, M, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, M, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(F, Bs) of
-                true -> eval_expr_opt(Pid, F, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, F, Bs, Stk, Log, Mail);
                 false ->
                   case is_reducible(As, Bs) of
-                    true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+                    true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
                     false -> ?RULE_SEQ
                   end
               end
           end;
         {apply_fun, _, Fun, As} ->
           case is_reducible(Fun, Bs) of
-            true -> eval_expr_opt(Pid, Fun, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, Fun, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(As, Bs) of
-                true -> eval_expr_opt(Pid, As, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, As, Bs, Stk, Log, Mail);
                 false -> ?RULE_SEQ
               end
           end;
         {match, _, P, E} ->
           case is_reducible(E, Bs) of
-            true -> eval_expr_opt(Pid, E, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, E, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(P, Bs) of
-                true -> eval_expr_opt(Pid, P, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, P, Bs, Stk, Log, Mail);
                 false -> ?RULE_SEQ
               end
           end;
         {op, _, _, Es} ->
           case is_reducible(Es, Bs) of
-            true -> eval_expr_opt(Pid, Es, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, Es, Bs, Stk, Log, Mail);
             false -> ?RULE_SEQ
           end;
         {Op, _, L, R} when Op =:= 'andalso'; Op =:= 'orelse' ->
           case is_reducible(L, Bs) of
-            true -> eval_expr_opt(Pid, L, Bs, Stk, Log, Mail);
+            true -> expression_option(Pid, L, Bs, Stk, Log, Mail);
             false ->
               case is_reducible(R, Bs) of
-                true -> eval_expr_opt(Pid, R, Bs, Stk, Log, Mail);
+                true -> expression_option(Pid, R, Bs, Stk, Log, Mail);
                 false -> ?RULE_SEQ
               end
           end

@@ -1,5 +1,6 @@
 -module(cauder_eval).
 
+%% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2, binding/2]).
 -export([match_rec_pid/4, match_rec_uid/4]).
 -export([clause_line/3]).
@@ -7,12 +8,25 @@
 -include("cauder.hrl").
 
 
-%% =====================================================================
-%% @doc Evaluates the first non-literal expression for the given `Expressions`
-%% list and returns a tuple with an updated environment, the list of expressions
-%% that resulted from the evaluation, and a label.
+%%%=============================================================================
+%%% API
+%%%=============================================================================
 
--spec eval_list(cauder_types:environment(), [cauder_types:abstract_expr()], cauder_types:stack()) -> cauder_types:result().
+
+%%------------------------------------------------------------------------------
+%% @doc Evaluates the first reducible expression from the given list.
+%%
+%% Evaluates the first reducible expression from the given list of expressions,
+%% given an environment and a call stack, then returns a record with the updated
+%% information and a label indicating the type of step performed.
+%%
+%% @see is_reducible/2
+
+-spec eval_list(Bindings, Expressions, Stack) -> Result when
+  Bindings :: cauder_types:environment(),
+  Expressions :: [cauder_types:abstract_expr()],
+  Stack :: cauder_types:stack(),
+  Result :: cauder_types:result().
 
 eval_list(Bs, [E | Es], Stk) ->
   case is_reducible(E, Bs) of
@@ -25,7 +39,24 @@ eval_list(Bs, [E | Es], Stk) ->
   end.
 
 
--spec seq(cauder_types:environment(), [cauder_types:abstract_expr()], cauder_types:stack()) -> cauder_types:result().
+%%------------------------------------------------------------------------------
+%% @doc Evaluates the given sequence of expression.
+%%
+%% If the first expression in the sequence is reducible, then it is evaluated,
+%% otherwise it is consumed, given an environment and a call stack.
+%% Also if the first expression is not reducible, and there are no more
+%% expressions in the sequence, then consumes the first element in the call
+%% stack and retrieves the stored information.
+%% Returns a record with the updated information and a label indicating the type
+%% of step performed.
+%%
+%% @see is_reducible/2
+
+-spec seq(Bindings, Expressions, Stack) -> Result when
+  Bindings :: cauder_types:environment(),
+  Expressions :: [cauder_types:abstract_expr()],
+  Stack :: cauder_types:stack(),
+  Result :: cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
   case is_reducible(E, Bs) of
@@ -59,11 +90,15 @@ seq(Bs, [E | Es], Stk) ->
   end.
 
 
-%% =====================================================================
-%% @doc Evaluates the given `Expression` and returns a tuple with an updated
+%%------------------------------------------------------------------------------
+%% @doc Evaluates the given `Expression' and returns a tuple with an updated
 %% environment, the expression that resulted from the evaluation, and a label.
 
--spec expr(cauder_types:environment(), cauder_types:abstract_expr(), cauder_types:stack()) -> cauder_types:result().
+-spec expr(Bindings, Expression, Stack) -> Result when
+  Bindings :: cauder_types:environment(),
+  Expression :: cauder_types:abstract_expr(),
+  Stack :: cauder_types:stack(),
+  Result :: cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
   {value, Value} = binding(Name, Bs),
@@ -101,7 +136,7 @@ expr(Bs, E = {tuple, Line, Es0}, Stk) ->
 expr(Bs, {'if', Line, Cs}, Stk0) ->
   case match_if(Bs, Cs) of
     {match, Body} ->
-      Var = utils:temp_variable(Line),
+      Var = cauder_utils:temp_variable(Line),
       Stk = [{'if', Body, Var} | Stk0],
       #result{env = Bs, exprs = [Var], stack = Stk};
     nomatch -> error(if_clause)
@@ -113,7 +148,7 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
     false ->
       case match_case(Bs0, Cs, A) of
         {match, Bs, Body} ->
-          Var = utils:temp_variable(Line),
+          Var = cauder_utils:temp_variable(Line),
           Stk = [{'case', Body, Var} | Stk0],
           #result{env = Bs, exprs = [Var], stack = Stk};
         nomatch -> error({case_clause, concrete(A)})
@@ -123,8 +158,8 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
 %% TODO Support receive with timeout
 expr(Bs, {'receive', Line, Cs}, Stk0) ->
   % TODO One of these variables is not necessary
-  Var = utils:temp_variable(Line),
-  VarBody = utils:temp_variable(Line),
+  Var = cauder_utils:temp_variable(Line),
+  VarBody = cauder_utils:temp_variable(Line),
   Stk = [{'receive', [VarBody], Var} | Stk0],
   #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
 
@@ -155,14 +190,14 @@ expr(Bs, E = {bif, Line, M, F, As}, Stk) ->
   end;
 
 expr(Bs, {self, Line}, Stk) ->
-  Var = utils:temp_variable(Line),
+  Var = cauder_utils:temp_variable(Line),
   #result{env = Bs, exprs = [Var], stack = Stk, label = {self, Var}};
 
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
   case is_reducible(Fun, Bs) of
     true -> eval_and_update({Bs, Fun, Stk}, {3, E});
     false ->
-      Var = utils:temp_variable(Line),
+      Var = cauder_utils:temp_variable(Line),
       Label = {spawn, Var, concrete(Fun)},
       #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
   end;
@@ -177,7 +212,7 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
           case is_reducible(As, Bs) of
             true -> eval_and_update({Bs, As, Stk}, {5, E});
             false ->
-              Var = utils:temp_variable(Line),
+              Var = cauder_utils:temp_variable(Line),
               Label = {spawn, Var, concrete(M), concrete(F), concrete(As)},
               #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
           end
@@ -202,9 +237,9 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
     false ->
       {ok, M} = current_module(Stk0),
       A = length(As),
-      {_, Cs} = utils:fundef_lookup(M, F, A),
+      {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
       {match, Bs, Body} = match_fun(Cs, As),
-      Var = utils:temp_variable(Line),
+      Var = cauder_utils:temp_variable(Line),
       Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
       #result{env = Bs0, exprs = [Var], stack = Stk}
   end;
@@ -214,7 +249,7 @@ expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
     true -> eval_and_update({Bs0, As, Stk0}, {5, E});
     false ->
       A = length(As),
-      case utils:fundef_lookup(M, F, A) of
+      case cauder_utils:fundef_lookup({M, F, A}) of
         {Exported, Cs} ->
           % Check if function is accessible
           case current_module(Stk0) of
@@ -223,7 +258,7 @@ expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
             error when Stk0 =:= [] -> ok
           end,
           {match, Bs, Body} = match_fun(Cs, As),
-          Var = utils:temp_variable(Line),
+          Var = cauder_utils:temp_variable(Line),
           Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
           #result{env = Bs0, exprs = [Var], stack = Stk};
         error ->
@@ -246,7 +281,7 @@ expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
               M = concrete(M0),
               F = concrete(F0),
               A = length(As),
-              case utils:fundef_lookup(M, F, A) of
+              case cauder_utils:fundef_lookup({M, F, A}) of
                 {Exported, Cs} ->
                   % Check if function is accessible
                   case current_module(Stk0) of
@@ -255,7 +290,7 @@ expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
                     error when Stk0 =:= [] -> ok
                   end,
                   {match, Bs, Body} = match_fun(Cs, As),
-                  Var = utils:temp_variable(Line),
+                  Var = cauder_utils:temp_variable(Line),
                   Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
                   #result{env = Bs0, exprs = [Var], stack = Stk};
                 error ->
@@ -276,8 +311,8 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
           A = length(As),
           {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
           {match, Bs2, Body} = match_fun(Cs, As),
-          Var = utils:temp_variable(Line),
-          Stk = [{{M, F, A}, utils:merge_bindings(Bs1, Bs2), Body, Var} | Stk0],
+          Var = cauder_utils:temp_variable(Line),
+          Stk = [{{M, F, A}, cauder_utils:merge_bindings(Bs1, Bs2), Body, Var} | Stk0],
           #result{env = Bs0, exprs = [Var], stack = Stk}
       end
   end;
@@ -337,11 +372,13 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
   end.
 
 
-%% =====================================================================
+%%%=============================================================================
 
 
--spec match_if(cauder_types:environment(), cauder_types:af_clause_seq()) ->
-  {match, [cauder_types:abstract_expr()]} | nomatch.
+-spec match_if(Bindings, Clauses) -> {match, Body} | nomatch when
+  Bindings :: cauder_types:environment(),
+  Clauses :: cauder_types:af_clause_seq(),
+  Body :: cauder_types:af_body().
 
 match_if(_, []) -> nomatch;
 match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
@@ -351,41 +388,48 @@ match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
   end.
 
 
--spec match_case(cauder_types:environment(), cauder_types:af_clause_seq(), cauder_types:af_literal()) ->
-  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+-spec match_case(Bindings, Clauses, Argument) -> {match, ScopeBindings, Body} | nomatch when
+  Bindings :: cauder_types:environment(),
+  Clauses :: cauder_types:af_clause_seq(),
+  Argument :: cauder_types:af_literal(),
+  ScopeBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body().
 
 match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 
 
--spec match_fun(cauder_types:af_clause_seq(), [cauder_types:af_literal()]) ->
-  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+-spec match_fun(Clauses, Arguments) -> {match, ScopeBindings, Body} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  Arguments :: [cauder_types:af_literal()],
+  ScopeBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body().
 
 match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Environment, RecipientPid, Mail) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
-  Environment :: cauder_types:environment(),
+  Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
   Mail :: [cauder_types:message()],
-  NewEnvironment :: cauder_types:environment(),
-  MatchedBranch :: [cauder_types:abstract_expr()],
+  NewBindings :: cauder_types:environment(),
+  MatchedBranch :: cauder_types:af_body(),
   MatchedMessage :: cauder_types:message(),
-  RestMessages :: [cauder_types:message()].
+  NewMail :: [cauder_types:message()].
 
 match_rec_pid(Cs, Bs, Pid, Mail) -> match_rec_pid(Cs, Bs, Pid, Mail, []).
 
 
--spec match_rec_pid(Clauses, Environment, RecipientPid, RemainingMail, CheckedMail) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, RemainingMail, CheckedMail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
-  Environment :: cauder_types:environment(),
+  Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
   RemainingMail :: [cauder_types:message()],
   CheckedMail :: [cauder_types:message()],
-  NewEnvironment :: cauder_types:environment(),
-  MatchedBranch :: [cauder_types:abstract_expr()],
+  NewBindings :: cauder_types:environment(),
+  MatchedBranch :: cauder_types:af_body(),
   MatchedMessage :: cauder_types:message(),
-  RestMessages :: [cauder_types:message()].
+  NewMail :: [cauder_types:message()].
 
 match_rec_pid(_, _, _, [], _) -> nomatch;
 match_rec_pid(Cs, Bs0, Pid, [Msg | Mail], Checked) ->
@@ -399,20 +443,20 @@ match_rec_pid(Cs, Bs0, Pid, [Msg | Mail], Checked) ->
   end.
 
 
--spec match_rec_uid(Clauses, Environment, Uid, Mail) -> {NewEnvironment, MatchedBranch, MatchedMessage, RestMessages} | nomatch when
+-spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
-  Environment :: cauder_types:environment(),
+  Bindings :: cauder_types:environment(),
   Uid :: cauder_types:msg_id(),
   Mail :: [cauder_types:message()],
-  NewEnvironment :: cauder_types:environment(),
-  MatchedBranch :: [cauder_types:abstract_expr()],
+  NewBindings :: cauder_types:environment(),
+  MatchedBranch :: cauder_types:af_body(),
   MatchedMessage :: cauder_types:message(),
-  RestMessages :: [cauder_types:message()].
+  NewMail :: [cauder_types:message()].
 
 match_rec_uid(Cs, Bs0, Uid, Mail) ->
-  case utils:check_msg(Mail, Uid) of
-    none -> nomatch;
-    Msg ->
+  case cauder_utils:find_message(Mail, Uid) of
+    false -> nomatch;
+    {value, Msg} ->
       case match_clause(Bs0, Cs, [abstract(Msg#msg.val)]) of
         {match, Bs, Body} -> {Bs, Body, Msg, lists:delete(Msg, Mail)};
         nomatch -> nomatch
@@ -420,8 +464,12 @@ match_rec_uid(Cs, Bs0, Uid, Mail) ->
   end.
 
 
--spec match_clause(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:af_literal()]) ->
-  {match, cauder_types:environment(), [cauder_types:abstract_expr()]} | nomatch.
+-spec match_clause(Bindings, Clauses, Arguments) -> {match, ScopeBindings, Body} | nomatch when
+  Bindings :: cauder_types:environment(),
+  Clauses :: cauder_types:af_clause_seq(),
+  Arguments :: [cauder_types:af_literal()],
+  ScopeBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body().
 
 match_clause(_, [], _) -> nomatch;
 match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
@@ -435,7 +483,11 @@ match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
   end.
 
 
--spec clause_line(cauder_types:environment(), cauder_types:af_clause_seq(), [cauder_types:af_literal()]) -> non_neg_integer().
+-spec clause_line(Bindings, Clauses, Arguments) -> Line when
+  Bindings :: cauder_types:environment(),
+  Clauses :: cauder_types:af_clause_seq(),
+  Arguments :: [cauder_types:af_literal()],
+  Line :: non_neg_integer().
 
 clause_line(_, [], _) -> -1;
 clause_line(Bs0, [{'clause', Line, Ps, G, _} | Cs], Vs) ->
@@ -452,19 +504,27 @@ clause_line(Bs0, [{'clause', Line, Ps, G, _} | Cs], Vs) ->
 %% Tries to match a list of values against a list of patterns using the given environment.
 %% The list of values should have no variables.
 
--spec match(cauder_types:environment(), [cauder_types:af_pattern()], [cauder_types:af_literal()]) ->
-  {match, cauder_types:environment()} | nomatch.
+-spec match(Bindings, Patterns, Arguments) -> {match, NewBindings} | nomatch when
+  Bindings :: cauder_types:environment(),
+  Patterns :: [cauder_types:af_pattern()],
+  Arguments :: [cauder_types:af_literal()],
+  NewBindings :: cauder_types:environment().
 
 match(Bs, [], [])    -> {match, Bs};
 match(Bs0, [Pat | Ps0], [{value, _, Val} | Vs0]) when length(Ps0) == length(Vs0) ->
   case catch match1(Pat, Val, Bs0) of
     {match, Bs} -> match(Bs, Ps0, Vs0);
-    Result -> Result
+    nomatch -> nomatch
   end;
 match(_Bs, _Ps, _Vs) -> nomatch.
 
 
--spec match1(cauder_types:abstract_expr(), term(), cauder_types:environment()) -> {match, cauder_types:environment()} | nomatch.
+% TODO Organize arguments to be consistent
+-spec match1(Pattern, Term, Bindings) -> {match, NewBindings} | no_return() when
+  Pattern :: cauder_types:af_pattern(),
+  Term :: term(),
+  Bindings :: cauder_types:environment(),
+  NewBindings :: cauder_types:environment().
 
 match1({value, _, V}, V, Bs) ->
   {match, Bs};
@@ -488,13 +548,23 @@ match1(_, _, _) ->
   throw(nomatch).
 
 
+-spec match_tuple(Values, Tuple, Index, Bindings) -> {match, NewBindings} | no_return() when
+  Values :: [cauder_types:af_literal()],
+  Tuple :: tuple(),
+  Index :: pos_integer(),
+  Bindings :: cauder_types:environment(),
+  NewBindings :: cauder_types:environment().
+
 match_tuple([], _, _, Bs) -> {match, Bs};
 match_tuple([E | Es], Tuple, I, Bs0) ->
   {match, Bs} = match1(E, element(I, Tuple), Bs0),
   match_tuple(Es, Tuple, I + 1, Bs).
 
 
--spec eval_guard_seq(cauder_types:environment(), cauder_types:af_guard_seq()) -> cauder_types:af_boolean().
+-spec eval_guard_seq(Bindings, Guards) -> Boolean when
+  Bindings :: cauder_types:environment(),
+  Guards :: cauder_types:af_guard_seq(),
+  Boolean :: cauder_types:af_boolean().
 
 eval_guard_seq(_, []) -> abstract(true);
 eval_guard_seq(Bs, Gs) when is_list(Gs) ->
@@ -503,13 +573,19 @@ eval_guard_seq(Bs, Gs) when is_list(Gs) ->
   abstract(lists:any(fun(G) -> concrete(eval_guard(Bs, G)) end, Gs)).
 
 
--spec eval_guard(cauder_types:environment(), cauder_types:af_guard()) -> cauder_types:af_boolean().
+-spec eval_guard(Bindings, Guard) -> Boolean when
+  Bindings :: cauder_types:environment(),
+  Guard :: cauder_types:af_guard(),
+  Boolean :: cauder_types:af_boolean().
 
 eval_guard(Bs, G) when is_list(G) ->
   abstract(lists:all(fun(Gt) -> concrete(eval_guard_test(Bs, Gt)) end, G)).
 
 
--spec eval_guard_test(cauder_types:environment(), cauder_types:af_guard_test()) -> cauder_types:af_guard_test() | cauder_types:af_boolean().
+-spec eval_guard_test(Bindings, GuardTest) -> GuardTest | Boolean when
+  Bindings :: cauder_types:environment(),
+  GuardTest :: cauder_types:af_guard_test(),
+  Boolean :: cauder_types:af_boolean().
 
 eval_guard_test(Bs, Gt) ->
   case is_reducible(Gt, Bs) of
@@ -520,43 +596,57 @@ eval_guard_test(Bs, Gt) ->
   end.
 
 
-%% =====================================================================
-%% Converts the given Erlang data structure into an abstract expression.
+%%%=============================================================================
 
--spec abstract(term()) -> cauder_types:af_literal().
+
+%%------------------------------------------------------------------------------
+%% @doc Converts the given Erlang term into its abstract form.
+
+-spec abstract(Term) -> Literal when
+  Term :: term(),
+  Literal :: cauder_types:af_literal().
 
 abstract(Value) -> {value, 0, Value}.
 
 
-%% =====================================================================
-%% Converts the given abstract expression of a term into a conventional Erlang data structure (that is, the term itself).
+%%------------------------------------------------------------------------------
+%% @doc Converts the given abstract literal element into the Erlang term that it
+%% represents.
 
--spec concrete(cauder_types:af_literal()) -> term().
+-spec concrete(Literal) -> Term when
+  Literal :: cauder_types:af_literal(),
+  Term :: term().
 
 concrete({value, _, Value})                       -> Value;
 concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 
 
-%% =====================================================================
-%% @doc Checks if the given abstract expression can be reduced any further or not.
+%%------------------------------------------------------------------------------
+%% @doc Checks if the given abstract expression (or list of expressions) can be
+%% reduced any further or not, given an environment.
 
--spec is_reducible(cauder_types:abstract_expr() | [cauder_types:abstract_expr()], cauder_types:environment()) -> boolean().
+-spec is_reducible(Expression | [Expression], Bindings) -> IsReducible when
+  Expression :: cauder_types:abstract_expr(),
+  Bindings :: cauder_types:environment(),
+  IsReducible :: boolean().
 
 is_reducible([], _)                 -> false;
 is_reducible([E | Es], Bs)          -> is_reducible(E, Bs) orelse is_reducible(Es, Bs);
 
 is_reducible({value, _, _}, _)      -> false;
 is_reducible({var, _, '_'}, _)      -> false;
-is_reducible({var, _, Name}, Bs)    -> not utils:is_temp_variable_name(Name) andalso binding(Name, Bs) =/= unbound;
+is_reducible({var, _, Name}, Bs)    -> not cauder_utils:is_temp_variable_name(Name) andalso binding(Name, Bs) =/= unbound;
 is_reducible({cons, _, H, T}, Bs)   -> is_reducible(H, Bs) orelse is_reducible(T, Bs);
 is_reducible({tuple, _, Es}, Bs)    -> is_reducible(Es, Bs);
 is_reducible(E, _) when is_tuple(E) -> true.
 
 
-%% =====================================================================
+%%------------------------------------------------------------------------------
 %% @doc Checks if the given abstract expression is a literal value.
 
--spec is_value(cauder_types:abstract_expr() | [cauder_types:abstract_expr()]) -> boolean().
+-spec is_value(Expression | [Expression]) -> IsValue when
+  Expression :: cauder_types:abstract_expr(),
+  IsValue :: boolean().
 
 is_value([])                 -> true;
 is_value([E | Es])           -> is_value(E) andalso is_value(Es);
@@ -567,23 +657,36 @@ is_value({tuple, _, Es})     -> is_value(Es);
 is_value(E) when is_tuple(E) -> false.
 
 
-%% =====================================================================
-%% @doc Returns the binding for the given name in the given environment.
+%%------------------------------------------------------------------------------
+%% @doc Returns binding for the given name if bound.
 
--spec binding(atom(), cauder_types:environment()) -> {value, term()} | unbound.
+-spec binding(Name, Bindings) -> {value, Value} | unbound when
+  Name :: atom(),
+  Bindings :: cauder_types:environment(),
+  Value :: term().
 
 binding(Name, Bs) -> erl_eval:binding(Name, Bs).
 
 
-%% =====================================================================
+%%------------------------------------------------------------------------------
 %% @doc Returns the current module according to the stack.
 
--spec current_module(cauder_types:stack()) -> {ok, atom()} | error.
+-spec current_module(Stack) -> {ok, Module} | error when
+  Stack :: cauder_types:stack(),
+  Module :: module().
 
 current_module([{{M, _, _}, _, _, _} | _]) -> {ok, M};
 current_module([_ | Stk])                  -> current_module(Stk);
 current_module([])                         -> error.
 
+
+-spec eval_and_update({Bindings, Expression | [Expression], Stack}, {Index, Tuple}) -> Result when
+  Bindings :: cauder_types:environment(),
+  Expression :: cauder_types:abstract_expr(),
+  Stack :: cauder_types:stack(),
+  Index :: pos_integer(),
+  Tuple :: tuple(),
+  Result :: cauder_types:result().
 
 eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
   R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),

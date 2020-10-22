@@ -1,13 +1,23 @@
 -module(cauder_wx_areas).
 
--include_lib("wx/include/wx.hrl").
--include("cauder_wx.hrl").
-
 %% API
 -export([create/1]).
 
+-include_lib("wx/include/wx.hrl").
+-include("cauder_wx.hrl").
 
--spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Creates all the different areas and populates them.
+
+-spec create(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create(Frame) ->
   Win = wxPanel:new(Frame),

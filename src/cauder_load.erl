@@ -1,17 +1,32 @@
 -module(cauder_load).
 
+%% API
 -export([file/1]).
+
+
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Loads the given file (module) and stores it into the database.
 
 -spec file(File) -> {ok, Module} when
   File :: file:filename(),
-  Module :: atom().
+  Module :: module().
 
 file(File) -> store_module(File).
 
 
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
 -spec store_module(File) -> {ok, Module} when
   File :: file:filename(),
-  Module :: atom().
+  Module :: module().
 
 store_module(File) ->
   {ok, Forms0} = epp:parse_file(File, [], []),
@@ -19,13 +34,13 @@ store_module(File) ->
   Forms = erl_expand_records:module(Forms1, []),
 
   [Module] = [M || {attribute, _, module, M} <- Forms],
-  Exp = sets:union([sets:from_list(FAs) || {attribute, _, export, FAs} <- Forms]),
+  Exports = sets:union([sets:from_list(FAs) || {attribute, _, export, FAs} <- Forms]),
 
   % TODO Check module name matches filename
 
   put(var_count, 0),
   put(fun_count, 0),
-  store_forms(Module, Forms, Exp),
+  store_forms(Module, Forms, Exports),
   erase(var_count),
   erase(fun_count),
   erase(current_function),
@@ -33,11 +48,10 @@ store_module(File) ->
   {ok, Module}.
 
 
--type abstract_form() :: af_function_decl() | erl_parse:abstract_form().
--type af_function_decl() :: {'function', erl_anno:anno(), atom(), arity(), [erl_parse:abstract_clause(), ...]}.
-
-
--spec store_forms(atom(), [abstract_form()], sets:set({atom(), arity()})) -> ok.
+-spec store_forms(Module, Forms, Exports) -> ok when
+  Module :: module(),
+  Forms :: [erl_parse:abstract_form()],
+  Exports :: sets:set({atom(), arity()}).
 
 store_forms(Mod, [{function, _, Name, Arity, Cs0} | Fs], Exp) ->
   FA = {Name, Arity},

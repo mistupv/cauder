@@ -16,7 +16,7 @@
 ]).
 
 % Abstract format types
--export_type([abstract_expr/0, af_literal/0, af_boolean/0, af_variable/0, af_remote_call/0, af_clause_seq/0, af_clause/0, af_guard_seq/0, af_guard/0, af_guard_test/0, af_pattern/0]).
+-export_type([line/0, abstract_expr/0, af_args/0, af_literal/0, af_boolean/0, af_variable/0, af_remote_call/0, af_clause_seq/0, af_clause/0, af_pattern/0, af_guard_seq/0, af_guard/0, af_guard_test/0, af_body/0]).
 
 
 %% Record types
@@ -44,7 +44,7 @@
                        | {rec, environment(), [abstract_expr()], stack(), message()}.
 
 -type stack() :: [stack_entry()].
--type stack_entry() :: {{atom(), atom(), arity()}, environment(), [abstract_expr()], af_variable()}
+-type stack_entry() :: {mfa(), environment(), [abstract_expr()], af_variable()}
                      | {atom(), [abstract_expr()], af_variable()}.
 
 -type environment() :: orddict:orddict(atom(), term()).
@@ -59,8 +59,8 @@
 -type result() :: #result{}.
 
 -type label() :: tau
-               | {spawn, af_variable(), fun()}
-               | {spawn, af_variable(), atom(), atom(), [term()]}
+               | {spawn, af_variable(), function()}
+               | {spawn, af_variable(), module(), atom(), [term()]}
                | {self, af_variable()}
                | {send, proc_id(), term()}
                | {rec, af_variable(), af_clause_seq()}.
@@ -94,11 +94,7 @@
 
 -type af_args() :: [abstract_expr()].
 
--type af_literal() :: {value, line(), integer()}
-                    | {value, line(), float()}
-                    | {value, line(), atom()}
-                    | {value, line(), string()}
-                    | {value, line(), []}.
+-type af_literal() :: {value, line(), term()}.
 
 -type af_boolean() :: {value, line(), true | false}.
 
@@ -116,7 +112,7 @@
 
 -type af_make_fun() :: {make_fun, line(), atom(), af_clause_seq()}.
 
--type af_bif_call() :: {bif, line(), atom(), atom(), af_args()}.
+-type af_bif_call() :: {bif, line(), module(), atom(), af_args()}.
 
 -type af_self_call() :: {self, line()}.
 
@@ -128,7 +124,7 @@
 
 -type af_local_call() :: {local_call, line(), atom(), af_args()}.
 
--type af_remote_call() :: {remote_call, line(), atom(), atom(), af_args()}.
+-type af_remote_call() :: {remote_call, line(), module(), atom(), af_args()}.
 
 -type af_apply() :: {apply, line(), abstract_expr(), abstract_expr(), af_args()}.
 

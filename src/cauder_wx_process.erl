@@ -1,15 +1,26 @@
 -module(cauder_wx_process).
 
+%% API
+-export([create/1, update/2]).
+% TODO Remove exports, do all work inside update/2
+-export([update_bindings/2, update_stack/2, update_log/2, update_history/2]).
+
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 
-%% API
--export([create/1, update/2]).
--export([update_bindings/2, update_stack/2, update_log/2, update_history/2]).
+
+%%%=============================================================================
+%%% API
+%%%=============================================================================
 
 
--spec create(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+%%------------------------------------------------------------------------------
+%% @doc Creates the <i>process info</i> panel and populates it.
+
+-spec create(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?PROCESS_Panel}]),
@@ -52,9 +63,13 @@ create(Parent) ->
   Win.
 
 
+%%------------------------------------------------------------------------------
+%% @doc Updates the <i>process info</i> panel according to the given system and
+%% process.
+
 -spec update(System, Pid) -> ok when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update(System, Pid) ->
   update_bindings(System, Pid),
@@ -63,7 +78,14 @@ update(System, Pid) ->
   update_history(System, Pid).
 
 
--spec create_bindings(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
+-spec create_bindings(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_bindings(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?PROCESS_Bindings_Panel}]),
@@ -94,20 +116,20 @@ create_bindings(Parent) ->
 
 
 -spec update_bindings(System, Pid) -> ok when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_bindings(System, Pid) ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Bindings),
 
-  show_and_resize(utils_gui:find(?PROCESS_Bindings_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx_utils:find(?PROCESS_Bindings_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      BindingsControl = utils_gui:find(?PROCESS_Bindings_Control, wxListCtrl),
+      BindingsControl = cauder_wx_utils:find(?PROCESS_Bindings_Control, wxListCtrl),
       wxListCtrl:freeze(BindingsControl),
       wxListCtrl:deleteAllItems(BindingsControl),
       case System of
@@ -143,10 +165,12 @@ update_bindings(System, Pid) ->
   end.
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
 
--spec create_stack(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+-spec create_stack(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_stack(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?PROCESS_Stack_Panel}]),
@@ -164,20 +188,20 @@ create_stack(Parent) ->
 
 
 -spec update_stack(System, Pid) -> ok when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_stack(System, Pid) ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Stack),
 
-  show_and_resize(utils_gui:find(?PROCESS_Stack_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx_utils:find(?PROCESS_Stack_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      StackControl = utils_gui:find(?PROCESS_Stack_Control, wxListBox),
+      StackControl = cauder_wx_utils:find(?PROCESS_Stack_Control, wxListBox),
       wxListBox:freeze(StackControl),
       wxListBox:clear(StackControl),
       case System of
@@ -187,7 +211,7 @@ update_stack(System, Pid) ->
             none -> ok;
             _ ->
               {ok, #proc{stack = Stk}} = orddict:find(Pid, PDict),
-              Entries = lists:map(fun lists:flatten/1, lists:map(fun pretty_print:stack_entry/1, Stk)),
+              Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
               lists:foreach(fun(Entry) -> wxListBox:append(StackControl, Entry) end, Entries)
           end
       end,
@@ -195,10 +219,12 @@ update_stack(System, Pid) ->
   end.
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
 
--spec create_log(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+-spec create_log(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_log(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?PROCESS_Log_Panel}]),
@@ -216,20 +242,20 @@ create_log(Parent) ->
 
 
 -spec update_log(System, Pid) -> ok when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_log(System, Pid) ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Log),
 
-  show_and_resize(utils_gui:find(?PROCESS_Log_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx_utils:find(?PROCESS_Log_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      LogControl = utils_gui:find(?PROCESS_Log_Control, wxTextCtrl),
+      LogControl = cauder_wx_utils:find(?PROCESS_Log_Control, wxTextCtrl),
       wxTextCtrl:freeze(LogControl),
       wxTextCtrl:clear(LogControl),
       case System of
@@ -241,8 +267,8 @@ update_log(System, Pid) ->
               case orddict:find(Pid, Logs) of
                 error -> ok;
                 {ok, Log} ->
-                  Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:log_entry/1, Log))),
-                  utils_gui:pp_marked_text(LogControl, Entries)
+                  Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_entry/1, Log))),
+                  cauder_wx_utils:pp_marked_text(LogControl, Entries)
               end
           end
       end,
@@ -250,10 +276,12 @@ update_log(System, Pid) ->
   end.
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
 
--spec create_history(Parent :: wxWindow:wxWindow()) -> wxWindow:wxWindow().
+-spec create_history(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_history(Parent) ->
   Win = wxPanel:new(Parent, [{winid, ?PROCESS_History_Panel}]),
@@ -271,20 +299,20 @@ create_history(Parent) ->
 
 
 -spec update_history(System, Pid) -> ok when
-  System :: cauder_types:system() | 'undefined',
-  Pid :: cauder_types:proc_id() | 'none'.
+  System :: cauder_types:system() | undefined,
+  Pid :: cauder_types:proc_id() | none.
 
 update_history(System, Pid) ->
-  Frame = utils_gui:find(?FRAME, wxFrame),
+  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_History),
 
-  show_and_resize(utils_gui:find(?PROCESS_History_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx_utils:find(?PROCESS_History_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      HistoryControl = utils_gui:find(?PROCESS_History_Control, wxTextCtrl),
+      HistoryControl = cauder_wx_utils:find(?PROCESS_History_Control, wxTextCtrl),
       wxTextCtrl:freeze(HistoryControl),
       wxTextCtrl:clear(HistoryControl),
       case System of
@@ -294,21 +322,23 @@ update_history(System, Pid) ->
             none -> ok;
             _ ->
               {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
-              MenuBar = wxFrame:getMenuBar(utils_gui:find(?FRAME, wxFrame)),
+              MenuBar = wxFrame:getMenuBar(cauder_wx_utils:find(?FRAME, wxFrame)),
               Hist1 =
                 case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
                   true -> Hist;
                   false -> lists:filter(fun is_conc_item/1, Hist)
                 end,
-              Entries = lists:flatten(lists:join("\n", lists:map(fun pretty_print:history_entry/1, Hist1))),
-              utils_gui:pp_marked_text(HistoryControl, Entries)
+              Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
+              cauder_wx_utils:pp_marked_text(HistoryControl, Entries)
           end
       end,
       wxTextCtrl:thaw(HistoryControl)
   end.
 
 
--spec is_conc_item(cauder_types:history_entry()) -> boolean().
+-spec is_conc_item(HistoryEntry) -> IsConcurrent when
+  HistoryEntry :: cauder_types:history_entry(),
+  IsConcurrent :: boolean().
 
 is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
 is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
@@ -316,8 +346,12 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true;
 is_conc_item(_)                             -> false.
 
 
-%%--------------------------------------------------------------------
+%%%=============================================================================
 
+
+-spec show_and_resize(Panel, Show) -> ok when
+  Panel :: wxPanel:wxPanel(),
+  Show :: boolean().
 
 show_and_resize(Panel, Show) ->
   wxPanel:show(Panel, [{show, Show}]),
@@ -335,7 +369,7 @@ show_and_resize(Panel, Show) ->
 
   % -----
 
-  ProcessPanel = utils_gui:find(?PROCESS_Panel, wxPanel),
+  ProcessPanel = cauder_wx_utils:find(?PROCESS_Panel, wxPanel),
   ProcessSizer = wx:typeCast(wxPanel:getSizer(ProcessPanel), wxSizer),
 
   [Left, Spacer1, Right] = wxSizer:getChildren(ProcessSizer),
@@ -352,4 +386,5 @@ show_and_resize(Panel, Show) ->
 
   % -----
 
-  wxPanel:layout(ProcessPanel).
+  wxPanel:layout(ProcessPanel),
+  ok.

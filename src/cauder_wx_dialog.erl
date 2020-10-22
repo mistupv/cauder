@@ -1,24 +1,26 @@
 -module(cauder_wx_dialog).
 
--include_lib("wx/include/wx.hrl").
--include("cauder.hrl").
--include("cauder_wx.hrl").
-
 %% API
 -export([start_session/2, stop_session/1]).
 -export([edit_binding/2]).
 -export([drop_files/2]).
 -export([about/1]).
 
+-include_lib("wx/include/wx.hrl").
+-include("cauder.hrl").
+-include("cauder_wx.hrl").
 
--spec start_session(Parent, EntryPoints) -> Result when
+
+%%------------------------------------------------------------------------------
+%% @doc Shows a dialog where the use can choose the execution mode, with the
+%% required information in each case.
+
+-spec start_session(Parent, EntryPoints) -> {manual, {Module, Function, Args}} | {replay, TracePath} | false when
   Parent :: wxWindow:wxWindow(),
-  EntryPoints :: list({Module, Function, Arity}),
-  Result :: {manual, {Module, Function, Args}} | {replay, TracePath} | false,
-  Module :: atom(),
+  EntryPoints :: [mfa()],
+  Module :: module(),
   Function :: atom(),
-  Arity :: arity(),
-  Args :: [erl_parse:abstract_expr()],
+  Args :: cauder_types:af_args(),
   TracePath :: file:filename().
 
 start_session(Parent, MFAs) ->
@@ -118,7 +120,7 @@ start_session(Parent, MFAs) ->
         case wxRadioButton:getValue(ManualRadio) of
           true ->
             {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
-            case utils:stringToExprs(wxTextCtrl:getValue(ArgsCtrl)) of
+            case cauder_utils:stringToExpressions(wxTextCtrl:getValue(ArgsCtrl)) of
               error ->
                 Message = ?DIALOG_BadArgs_Message,
                 Options = [{caption, ?DIALOG_BadArgs_Title}, {style, ?wxICON_ERROR}],
@@ -147,8 +149,8 @@ start_session(Parent, MFAs) ->
 
   %% -----
 
-  fun_args_event_handler(FunChoice, ArgsCtrl),
-  radio_event_handler(orddict:from_list([{ManualRadio, ManualPanel}, {ReplayRadio, ReplayPanel}])),
+  event_handler_entry_point(FunChoice, ArgsCtrl),
+  event_handler_start_mode([{ManualRadio, ManualPanel}, {ReplayRadio, ReplayPanel}]),
 
   wxWindow:enable(ReplayPanel, [{enable, false}]),
 
@@ -163,7 +165,7 @@ start_session(Parent, MFAs) ->
   end.
 
 
-fun_args_event_handler(Choice, TextCtrl) ->
+event_handler_entry_point(Choice, TextCtrl) ->
   Callback =
     fun(_, _) ->
       Index = wxChoice:getSelection(Choice),
@@ -173,7 +175,7 @@ fun_args_event_handler(Choice, TextCtrl) ->
   wxChoice:connect(Choice, command_choice_selected, [{callback, Callback}]).
 
 
-radio_event_handler(RadioPanels) ->
+event_handler_start_mode(RadioPanels) ->
   lists:foreach(
     fun({Radio, ThisPanel}) ->
       {ThisPanel, OtherPanels} = orddict:take(Radio, RadioPanels),
@@ -188,7 +190,13 @@ radio_event_handler(RadioPanels) ->
   ).
 
 
--spec stop_session(Parent :: wxWindow:wxWindow()) -> boolean().
+%%------------------------------------------------------------------------------
+%% @doc Shows a dialog warning the user that s/he is about to stop the session,
+%% loosing any unsaved data.
+
+-spec stop_session(Parent) -> Result when
+  Parent :: wxWindow:wxWindow(),
+  Result :: boolean().
 
 stop_session(Parent) ->
   Options = [{style, ?wxICON_EXCLAMATION bor ?wxYES_NO bor ?wxNO_DEFAULT}, {caption, ?DIALOG_StopSession_Title}],
@@ -199,6 +207,10 @@ stop_session(Parent) ->
     _ -> false
   end.
 
+
+%%------------------------------------------------------------------------------
+%% @doc Shows a dialog that allows the user to change the value of the given
+%% binding.
 
 -spec edit_binding(Parent, Binding) -> NewBinding | cancel when
   Parent :: wxWindow:wxWindow(),
@@ -270,7 +282,7 @@ edit_binding(Parent, {Key, Value}) ->
   case wxDialog:showModal(Dialog) of
     ?wxID_OK ->
       Str = wxTextCtrl:getValue(ValueText),
-      case utils:stringToExprs(Str) of
+      case cauder_utils:stringToExpressions(Str) of
         [{value, _, NewValue}] -> {Key, NewValue};
         _ -> cancel
       end;
@@ -278,7 +290,14 @@ edit_binding(Parent, {Key, Value}) ->
   end.
 
 
--spec drop_files(Parent :: wxWindow:wxWindow(), Files :: [unicode:chardata()]) -> {ok, File :: unicode:chardata()} | false.
+%%------------------------------------------------------------------------------
+%% @doc If the given list of files has more than one file, or any unsupported
+%% file, a dialog will be shown to inform the user.
+
+-spec drop_files(Parent, Files) -> {ok, File} | false when
+  Parent :: wxWindow:wxWindow(),
+  Files :: [unicode:chardata()],
+  File :: unicode:chardata().
 
 drop_files(Parent, Files) ->
   {ErlFiles, NonErlFiles} = lists:partition(fun(File) -> filename:extension(File) =:= ".erl" end, Files),
@@ -302,7 +321,10 @@ drop_files(Parent, Files) ->
   end.
 
 
--spec about(Parent :: wxWindow:wxWindow()) -> 'ok'.
+%%------------------------------------------------------------------------------
+%% @doc Shows a dialog with some basic information about CauDEr.
+
+-spec about(Parent :: wxWindow:wxWindow()) -> ok.
 
 about(Parent) ->
   Caption = "About " ++ ?APPNAME,

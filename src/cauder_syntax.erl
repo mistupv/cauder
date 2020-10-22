@@ -1,16 +1,28 @@
-%% @doc CauDEr syntax trees
-%%
-%% This module defines functions that transform "parse trees" to custom syntax trees
-%% based on the ones used by the Erlang debugger.
+%%%-----------------------------------------------------------------------------
+%%% @doc CauDEr syntax trees.
+%%% This module defines functions that transform "parse trees" to custom syntax
+%%% trees based on the ones used by the Erlang debugger.
+%%% @see erl_parse
+%%% @see cauder_types
+%%% @end
+%%%-----------------------------------------------------------------------------
 
 -module(cauder_syntax).
 
+%% API
 -export([clauses/1, expr_list/1]).
 -export([replace_variable/3]).
 -export([to_abstract_expr/1]).
 -export([remote_call/3]).
 
--spec clauses([erl_parse:abstract_clause()]) -> [cauder_types:af_clause()].
+
+%%------------------------------------------------------------------------------
+%% @doc Transforms a list of abstract clauses to the custom CauDEr
+%% representation.
+
+-spec clauses(Clauses1) -> Clauses2 when
+  Clauses1 :: [erl_parse:abstract_clause()],
+  Clauses2 :: [cauder_types:af_clause()].
 
 clauses([C0 | Cs]) ->
   C1 = clause(C0),
@@ -18,7 +30,9 @@ clauses([C0 | Cs]) ->
 clauses([]) -> [].
 
 
--spec clause(erl_parse:abstract_clause()) -> cauder_types:af_clause().
+-spec clause(Clause1) -> Clause2 when
+  Clause1 :: erl_parse:abstract_clause(),
+  Clause2 :: cauder_types:af_clause().
 
 clause({clause, Anno, H0, G0, B0}) ->
   H1 = head(H0),
@@ -26,14 +40,15 @@ clause({clause, Anno, H0, G0, B0}) ->
   B1 = exprs(B0),
   {clause, ln(Anno), H1, G1, B1}.
 
+
 head(Ps) -> patterns(Ps).
 
-%%==================== Patterns ====================
 
 patterns([P0 | Ps]) ->
   P1 = pattern(P0),
   [P1 | patterns(Ps)];
 patterns([]) -> [].
+
 
 pattern({integer, Anno, I})               -> {value, ln(Anno), I};
 pattern({char, Anno, I})                  -> {value, ln(Anno), I};
@@ -55,22 +70,24 @@ pattern({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I}.
 %% TODO Patterns - Map & Bit String
 %% TODO Patterns - Evaluate compile-time expressions.
 
+
 pattern_list([P0 | Ps]) ->
   P1 = pattern(P0),
   [P1 | pattern_list(Ps)];
 pattern_list([]) -> [].
 
-%%==================== Guards ====================
 
 guard([G0 | Gs]) ->
   G1 = and_guard(G0),
   [G1 | guard(Gs)];
 guard([]) -> [].
 
+
 and_guard([G0 | Gs]) ->
   G1 = guard_test(G0),
   [G1 | and_guard(Gs)];
 and_guard([]) -> [].
+
 
 guard_test({var, _, _} = V)    -> V; % Boolean var
 guard_test({atom, Anno, true}) -> {value, ln(Anno), true};
@@ -104,6 +121,7 @@ guard_test({op, Anno, Op, L0, R0}) ->
   R1 = gexpr(R0),
   {op, ln(Anno), Op, [L1, R1]};
 guard_test(_)                  -> error(guard_expr).
+
 
 gexpr({integer, Anno, I})               -> {value, ln(Anno), I};
 gexpr({char, Anno, I})                  -> {value, ln(Anno), I};
@@ -152,17 +170,18 @@ gexpr({op, Anno, Op, L0, R0}) ->
   {op, ln(Anno), Op, [L1, R1]};
 gexpr(_)                                -> error(guard_expr).
 
+
 gexpr_list([E0 | Es]) ->
   E1 = gexpr(E0),
   [E1 | gexpr_list(Es)];
 gexpr_list([]) -> [].
 
-%%==================== Expressions ====================
 
 exprs([E0 | Es]) ->
   E1 = expr(E0),
   [E1 | exprs(Es)];
 exprs([]) -> [].
+
 
 expr({var, Anno, V})                   -> {var, ln(Anno), V};
 expr({integer, Anno, I})               -> {value, ln(Anno), I};
@@ -252,17 +271,25 @@ expr({op, Anno, Op, L0, R0}) ->
 %% TODO Expressions - Map, Block, Try-Catch, Comprehensions & Bit String
 
 
--spec expr_list([erl_parse:abstract_expr()]) -> [cauder_types:abstract_expr()].
+%%------------------------------------------------------------------------------
+%% @doc Transforms a list of abstract expressions to the custom CauDEr
+%% representation.
+
+-spec expr_list(Expressions1) -> Expressions2 when
+  Expressions1 :: [erl_parse:abstract_expr()],
+  Expressions2 :: [cauder_types:abstract_expr()].
 
 expr_list([E0 | Es]) ->
   E1 = expr(E0),
   [E1 | expr_list(Es)];
 expr_list([]) -> [].
 
+
 icr_clauses([C0 | Cs]) ->
   C1 = clause(C0),
   [C1 | icr_clauses(Cs)];
 icr_clauses([]) -> [].
+
 
 fun_clauses([{clause, A, H, G, B} | Cs]) ->
   [{clause, ln(A), head(H), guard(G), exprs(B)} | fun_clauses(Cs)];
@@ -276,10 +303,8 @@ new_fun_name() ->
   Name = "-" ++ atom_to_list(F) ++ "/" ++ integer_to_list(A) ++ "-fun-" ++ integer_to_list(I) ++ "-",
   list_to_atom(Name).
 
+
 ln(Anno) -> erl_anno:line(Anno).
-
-
-%% ========== Utilities ==========
 
 
 check_guard_bif(Name, Arity) ->
@@ -297,12 +322,18 @@ check_guard_op(Op, Arity, AllowedTypes) ->
   end.
 
 
-%% =====================================================================
-%% @doc Replaces all occurrences of the given Variable in each one of
-%% the Expressions with the given literal Value.
+%%%=============================================================================
 
--spec replace_variable(cauder_types:abstract_expr(), cauder_types:af_variable(), term()) -> cauder_types:abstract_expr();
-                      ([cauder_types:abstract_expr()], cauder_types:af_variable(), term()) -> [cauder_types:abstract_expr()].
+
+%%------------------------------------------------------------------------------
+%% @doc Replaces all occurrences of the given `Variable' in each one of the
+%% `Expressions' with the given literal `Value'.
+
+-spec replace_variable(Expression | [Expression], Variable, Value) -> NewExpression | [NewExpression] when
+  Expression :: cauder_types:abstract_expr(),
+  Variable :: cauder_types:af_variable(),
+  Value :: term(),
+  NewExpression :: cauder_types:abstract_expr().
 
 replace_variable([E0 | Es], Var = {var, _, _}, Val) ->
   E = replace_variable(E0, Var, Val),
@@ -402,16 +433,21 @@ replace_variable({Op, Line, L0, R0}, Var, Val) when Op =:= 'andalso'; Op =:= 'or
   {Op, Line, L, R}.
 
 
-%% =====================================================================
-%% @doc Converts the given custom syntax trees back to "parse trees".
+%%%=============================================================================
 
--spec to_abstract_expr(cauder_types:abstract_expr()) -> erl_syntax:syntaxTree();
-                      ([cauder_types:abstract_expr()]) -> [erl_parse:abstract_expr()].
 
-to_abstract_expr([E | Es]) ->
-  E1 = erl_syntax:revert(to_abstract_expr(E)),
-  [E1 | to_abstract_expr(Es)];
-to_abstract_expr([]) -> [];
+%%------------------------------------------------------------------------------
+%% @doc Converts the given expression to the original `erl_parse'
+%% representation.
+
+-spec to_abstract_expr(Expression) -> NewExpression when
+  Expression :: cauder_types:abstract_expr(),
+  NewExpression :: erl_syntax:syntaxTree()
+;                     (Expressions) -> NewExpressions when
+  Expressions :: [cauder_types:abstract_expr()],
+  NewExpressions :: [erl_syntax:syntaxTree()].
+
+to_abstract_expr(Es) when is_list(Es) -> lists:map(fun to_abstract_expr/1, Es);
 
 to_abstract_expr({clause, Line, H, G, B}) ->
   Node = erl_syntax:clause(to_abstract_expr(H), to_abstract_expr(G), to_abstract_expr(B)),
@@ -492,19 +528,28 @@ to_abstract_expr({Op, Line, L, R}) when Op =:= 'andalso'; Op =:= 'orelse' ->
   set_line(Node, Line).
 
 
--spec set_line(erl_syntax:syntaxTree(), pos_integer()) -> erl_syntax:syntaxTree().
+-spec set_line(SyntaxTree1, Line) -> SyntaxTree2 when
+  SyntaxTree1 :: erl_syntax:syntaxTree(),
+  Line :: non_neg_integer(),
+  SyntaxTree2 :: erl_syntax:syntaxTree().
 
 set_line(Node, Line) -> erl_syntax:set_pos(Node, erl_anno:new(Line)).
 
 
+%%%=============================================================================
 
--spec remote_call(atom(), atom(), list(cauder_types:af_literal())) -> cauder_types:af_remote_call().
 
-remote_call(M, F, Vs) ->
-  A = length(Vs),
-  {_, Cs} = utils:fundef_lookup(M, F, A),
-  Line = cauder_eval:clause_line([], Cs, Vs),
-  {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, Vs)}.
+-spec remote_call(Module, Function, Arguments) -> RemoteCall when
+  Module :: module(),
+  Function :: atom(),
+  Arguments :: [cauder_types:af_literal()],
+  RemoteCall :: cauder_types:af_remote_call().
+
+remote_call(M, F, As) ->
+  A = length(As),
+  {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
+  Line = cauder_eval:clause_line([], Cs, As),
+  {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, As)}.
 
 
 
