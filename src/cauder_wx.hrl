@@ -14,6 +14,9 @@
 
 -define(MAX_STEPS, 10000).
 
+-define(ICON_ALIVE, "🏃").
+-define(ICON_DEAD, "💀").
+
 %% -----
 
 -define(SPACER_SMALL, 5).

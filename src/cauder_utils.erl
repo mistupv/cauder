@@ -17,7 +17,7 @@
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
 -export([load_replay_data/1]).
--export([current_line/1]).
+-export([current_line/1, is_dead/1]).
 
 -include("cauder.hrl").
 
@@ -547,3 +547,14 @@ parse_call(Call) ->
   Line :: non_neg_integer().
 
 current_line(#proc{exprs = [E | _]}) -> element(2, E).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether a process has finished execution or not.
+
+-spec is_dead(Process) -> IsDead when
+  Process :: cauder_types:process(),
+  IsDead :: boolean().
+
+is_dead(#proc{exprs = [{value, _, _}], stack = []}) -> true;
+is_dead(#proc{})                                    -> false.

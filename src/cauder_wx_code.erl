@@ -152,6 +152,8 @@ create_code(Parent) ->
   wxPanel:dragAcceptFiles(Win, true),
   wxPanel:connect(Win, 'drop_files'),
 
+  wxPanel:connect(Win, 'stc_updateui'),
+
   Win.
 
 

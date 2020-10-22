@@ -22,7 +22,8 @@
   frame :: wxFrame:wxFrame(),
   menubar :: wxMenuBar:wxMenuBar(),
   content :: wxWindow:wxWindow(),
-  statusbar :: wxStatusBar:wxStatusBar()
+  statusbar :: wxStatusBar:wxStatusBar(),
+  position = -1 :: integer()
 }).
 
 -type state() :: #wx_state{}.
@@ -476,23 +477,37 @@ handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command
 
 handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
 
+handle_event(#wx{event = #wxStyledText{type = stc_updateui}}, #wx_state{position = OldPosition} = State) ->
+  CodeControl = find(?CODE_Code_Control, wxStyledTextCtrl),
+  case wxStyledTextCtrl:getCurrentPos(CodeControl) of
+    OldPosition ->
+      {noreply, State};
+    NewPosition ->
+      Line = wxStyledTextCtrl:lineFromPosition(CodeControl, NewPosition),
+      Column = NewPosition - wxStyledTextCtrl:positionFromLine(CodeControl, Line),
+      cauder_wx_statusbar:update_position(Line + 1, Column + 1),
+      {noreply, State#wx_state{position = NewPosition}}
+  end;
+
 %%%=============================================================================
 
 handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} = State) ->
   case cauder_wx_dialog:drop_files(Frame, Files) of
     {ok, File} ->
       case stop_session() of
-        false -> ok;
+        false ->
+          ok;
         true -> open_file(File)
       end;
-    false -> ok
+    false ->
+      ok
   end,
   {noreply, State};
 
 %%%=============================================================================
 
 handle_event(#wx{event = #wxClose{}}, State) ->
-  %% TODO Add confirmation dialog?
+%% TODO Add confirmation dialog?
   {stop, normal, State};
 
 %%%=============================================================================
@@ -593,7 +608,7 @@ open_file(File) ->
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
 
-  cauder_wx_statusbar:update("Loaded file " ++ File),
+  cauder_wx_statusbar:update_text("Loaded file " ++ File),
 
   Module.
 
@@ -629,7 +644,7 @@ start_session() ->
       cauder_wx_menu:enable(?MENU_Run_Stop, true),
 
       % Update status bar message
-      cauder_wx_statusbar:update(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])),
+      cauder_wx_statusbar:update_text(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])),
 
       true
   end.
@@ -657,7 +672,7 @@ stop_session() ->
           cauder_wx_menu:enable(?MENU_Run_Stop, false),
 
           % Update status bar message
-          cauder_wx_statusbar:update("Stopped system!"),
+          cauder_wx_statusbar:update_text("Stopped system!"),
 
           true
       end
@@ -671,6 +686,8 @@ stop_session() ->
 
 refresh() ->
   System = cauder:get_system(), % TODO Save last system and compare with new system, then only update elements whose information changed
+
+  cauder_wx_statusbar:update_process_count(System),
 
   % First update actions so a process is selected
   cauder_wx_actions:update(System),

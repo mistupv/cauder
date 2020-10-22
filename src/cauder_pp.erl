@@ -9,6 +9,7 @@
 -export([pid/1, to_string/1]).
 
 -include("cauder.hrl").
+-include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
 
@@ -17,10 +18,12 @@
   String :: string().
 
 process(#proc{pid = Pid, spf = {M, F, A}} = Proc) ->
-  lists:flatten(state_icon(Proc) ++ io_lib:format("PID: ~p - ~s:~s/~p", [Pid, M, F, A])).
-
-state_icon(#proc{exprs = [{value, _, _}], stack = []}) -> "💀 ";
-state_icon(#proc{})                                    -> "".
+  Icon =
+    case cauder_utils:is_dead(Proc) of
+      true -> ?ICON_DEAD;
+      false -> ?ICON_ALIVE
+    end,
+  lists:flatten(Icon ++ io_lib:format(" PID: ~p - ~s:~s/~p", [Pid, M, F, A])).
 
 
 %%%=============================================================================
