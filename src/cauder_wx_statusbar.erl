@@ -35,7 +35,7 @@ create(Frame) -> wxFrame:createStatusBar(Frame).
   Text :: unicode:chardata().
 
 update(Text) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   Statusbar = wxFrame:getStatusBar(Frame),
   wxStatusBar:setStatusText(Statusbar, Text).
 
@@ -47,7 +47,7 @@ update(Text) ->
   Visible :: boolean().
 
 set_visibility(Visible) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   StatusBar = wxFrame:getStatusBar(Frame),
   case Visible of
     true -> wxStatusBar:show(StatusBar);

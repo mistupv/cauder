@@ -114,7 +114,7 @@ init([]) ->
 
   wxMenuBar:check(Menubar, ?MENU_View_StatusBar, true),
 
-  CodeCtrl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_buttons(CodeCtrl, Menubar),
 
   wxEvtHandler:connect(Frame, close_window),
@@ -168,21 +168,21 @@ handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
   {stop, normal, State};
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_in(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomOut), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_out(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = State) ->
-  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:zoom_reset(CodeArea),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
@@ -251,7 +251,7 @@ handle_event(?MENU_EVENT(?MENU_Help_About), #wx_state{frame = Frame} = State) ->
 %%%=============================================================================
 
 handle_event(#wx{id = ?CODE_Code_Control, event = #wxStyledText{type = stc_zoom}}, #wx_state{menubar = Menubar} = State) ->
-  CodeArea = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeArea = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:update_margin(CodeArea),
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
@@ -299,7 +299,7 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
 
 handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
-  Spinner = cauder_wx_utils:find(?ACTION_Automatic_Steps, wxSpinCtrl),
+  Spinner = cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
   StepsDone = cauder:step_multiple(Sem, Steps),
   cauder_wx_statusbar:step_multiple(Sem, StepsDone, Steps),
@@ -314,7 +314,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
       cauder_wx_statusbar:no_process(),
       refresh();
     Pid ->
-      Spinner = cauder_wx_utils:find(?ACTION_Replay_Steps, wxSpinCtrl),
+      Spinner = cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       StepsDone = cauder:replay_steps(Pid, Steps),
       cauder_wx_statusbar:replay_steps(StepsDone, Steps),
@@ -323,7 +323,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Spawn, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Replay_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -337,7 +337,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Send, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Replay_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -351,7 +351,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Replay_Receive, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Replay_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -372,7 +372,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
       cauder_wx_statusbar:no_process(),
       refresh();
     Pid ->
-      Spinner = cauder_wx_utils:find(?ACTION_Rollback_Steps, wxSpinCtrl),
+      Spinner = cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl),
       Steps = wxSpinCtrl:getValue(Spinner),
       {FocusLog, StepsDone} = cauder:rollback_steps(Pid, Steps),
       cauder_wx_statusbar:rollback_steps(StepsDone, Steps),
@@ -382,7 +382,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Spawn, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Rollback_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -397,7 +397,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Send, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Rollback_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -412,7 +412,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Receive, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Rollback_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
@@ -427,7 +427,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
   {noreply, State};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
-  TextCtrl = cauder_wx_utils:find(?ACTION_Rollback_Variable, wxTextCtrl),
+  TextCtrl = cauder_wx:find(?ACTION_Rollback_Variable, wxTextCtrl),
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
       cauder_wx_statusbar:rollback_variable(false, none),
@@ -576,7 +576,7 @@ open_file(File) ->
   {ok, Module} = cauder:load_file(File),
 
   {ok, Src, _} = erl_prim_loader:get_file(File),
-  CodeCtrl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
   cauder_wx_menu:enable(?MENU_Run_Start, true),
@@ -593,7 +593,7 @@ open_file(File) ->
   Started :: boolean().
 
 start_session() ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   EntryPoints = cauder:get_entry_points(get(module)),
 
   MFA =
@@ -633,7 +633,7 @@ stop_session() ->
   case cauder:get_system() of
     undefined -> true; % Not running
     _ ->
-      Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+      Frame = cauder_wx:find(?FRAME, wxFrame),
       case cauder_wx_dialog:stop_session(Frame) of
         false -> false;
         true ->
@@ -668,6 +668,21 @@ refresh() ->
 
   cauder_wx_code:update(System, Pid),
   cauder_wx_process:update(System, Pid).
+
+
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Find the first window with the given `Id' and casts it to the given
+%% `Type'.
+
+-spec find(Id, Type) -> Window when
+  Id :: integer(),
+  Type :: atom(),
+  Window :: wx:wx_object().
+
+find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when

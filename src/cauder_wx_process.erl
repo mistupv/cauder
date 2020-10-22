@@ -120,16 +120,16 @@ create_bindings(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_bindings(System, Pid) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Bindings),
 
-  show_and_resize(cauder_wx_utils:find(?PROCESS_Bindings_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      BindingsControl = cauder_wx_utils:find(?PROCESS_Bindings_Control, wxListCtrl),
+      BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
       wxListCtrl:freeze(BindingsControl),
       wxListCtrl:deleteAllItems(BindingsControl),
       case System of
@@ -192,16 +192,16 @@ create_stack(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_stack(System, Pid) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Stack),
 
-  show_and_resize(cauder_wx_utils:find(?PROCESS_Stack_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      StackControl = cauder_wx_utils:find(?PROCESS_Stack_Control, wxListBox),
+      StackControl = cauder_wx:find(?PROCESS_Stack_Control, wxListBox),
       wxListBox:freeze(StackControl),
       wxListBox:clear(StackControl),
       case System of
@@ -246,16 +246,16 @@ create_log(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_log(System, Pid) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Log),
 
-  show_and_resize(cauder_wx_utils:find(?PROCESS_Log_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      LogControl = cauder_wx_utils:find(?PROCESS_Log_Control, wxTextCtrl),
+      LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),
       wxTextCtrl:freeze(LogControl),
       wxTextCtrl:clear(LogControl),
       case System of
@@ -268,7 +268,7 @@ update_log(System, Pid) ->
                 error -> ok;
                 {ok, Log} ->
                   Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_entry/1, Log))),
-                  cauder_wx_utils:pp_marked_text(LogControl, Entries)
+                  pp_marked_text(LogControl, Entries)
               end
           end
       end,
@@ -303,16 +303,16 @@ create_history(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_history(System, Pid) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_History),
 
-  show_and_resize(cauder_wx_utils:find(?PROCESS_History_Panel, wxPanel), Show),
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), Show),
 
   case Show of
     false -> ok;
     true ->
-      HistoryControl = cauder_wx_utils:find(?PROCESS_History_Control, wxTextCtrl),
+      HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
       wxTextCtrl:freeze(HistoryControl),
       wxTextCtrl:clear(HistoryControl),
       case System of
@@ -322,14 +322,14 @@ update_history(System, Pid) ->
             none -> ok;
             _ ->
               {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
-              MenuBar = wxFrame:getMenuBar(cauder_wx_utils:find(?FRAME, wxFrame)),
+              MenuBar = wxFrame:getMenuBar(cauder_wx:find(?FRAME, wxFrame)),
               Hist1 =
                 case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
                   true -> Hist;
                   false -> lists:filter(fun is_conc_item/1, Hist)
                 end,
               Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
-              cauder_wx_utils:pp_marked_text(HistoryControl, Entries)
+              pp_marked_text(HistoryControl, Entries)
           end
       end,
       wxTextCtrl:thaw(HistoryControl)
@@ -369,7 +369,7 @@ show_and_resize(Panel, Show) ->
 
   % -----
 
-  ProcessPanel = cauder_wx_utils:find(?PROCESS_Panel, wxPanel),
+  ProcessPanel = cauder_wx:find(?PROCESS_Panel, wxPanel),
   ProcessSizer = wx:typeCast(wxPanel:getSizer(ProcessPanel), wxSizer),
 
   [Left, Spacer1, Right] = wxSizer:getChildren(ProcessSizer),
@@ -388,3 +388,36 @@ show_and_resize(Panel, Show) ->
 
   wxPanel:layout(ProcessPanel),
   ok.
+
+
+-spec pp_marked_text(TextControl, TextList) -> ok when
+  TextControl :: wxTextCtrl:wxTextCtrl(),
+  TextList :: [char() | {wx:wx_colour(), string()}].
+
+pp_marked_text(Ctrl, TextList) ->
+  % Freeze control when inserting text
+  wxTextCtrl:freeze(Ctrl),
+  wxTextCtrl:clear(Ctrl),
+  marked(Ctrl, TextList, ""),
+  % Put scroll back at the top
+  wxTextCtrl:setInsertionPoint(Ctrl, 0),
+  % Unfreeze control
+  wxTextCtrl:thaw(Ctrl).
+
+
+-spec marked(TextControl, TextList, StringAcc) -> ok when
+  TextControl :: wxTextCtrl:wxTextCtrl(),
+  TextList :: [char() | {wx:wx_colour(), string()}],
+  StringAcc :: string().
+
+marked(Ctrl, [], Acc) ->
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(?wxBLACK)),
+  wxTextCtrl:appendText(Ctrl, Acc);
+marked(Ctrl, [{Attr, Text} | Rest], Acc) ->
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(?wxBLACK)),
+  wxTextCtrl:appendText(Ctrl, Acc),
+  wxTextCtrl:setDefaultStyle(Ctrl, wxTextAttr:new(Attr)),
+  wxTextCtrl:appendText(Ctrl, Text),
+  marked(Ctrl, Rest, "");
+marked(Ctrl, [Char | Rest], Acc) ->
+  marked(Ctrl, Rest, Acc ++ [Char]).

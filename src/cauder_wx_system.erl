@@ -61,7 +61,7 @@ update(System) ->
   Focus :: boolean().
 
 focus_roll_log(false) -> ok;
-focus_roll_log(true)  -> wxNotebook:setSelection(cauder_wx_utils:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog), ok.
+focus_roll_log(true)  -> wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog), ok.
 
 
 %%%=============================================================================
@@ -112,7 +112,7 @@ create_mail(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_mail(System) ->
-  MailArea = cauder_wx_utils:find(?SYSTEM_Mail, wxListCtrl),
+  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   case System of
@@ -158,7 +158,7 @@ create_trace(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_trace(System) ->
-  TraceArea = cauder_wx_utils:find(?SYSTEM_Trace, wxListBox),
+  TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
   wxListBox:freeze(TraceArea),
   wxListBox:clear(TraceArea),
   case System of
@@ -196,7 +196,7 @@ create_roll_log(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_roll_log(System) ->
-  RollLogArea = cauder_wx_utils:find(?SYSTEM_RollLog, wxListBox),
+  RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
   wxListBox:freeze(RollLogArea),
   wxListBox:clear(RollLogArea),
   case System of

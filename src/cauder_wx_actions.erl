@@ -62,7 +62,7 @@ create(Frame) ->
 
 update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   % Disable and clear process selector
-  Choice = cauder_wx_utils:find(?ACTION_Process, wxChoice),
+  Choice = cauder_wx:find(?ACTION_Process, wxChoice),
   wxChoice:disable(Choice),
   wxChoice:clear(Choice),
 
@@ -75,7 +75,7 @@ update(System) when System =:= undefined orelse System#sys.procs =:= [] ->
   ok;
 
 update(#sys{procs = PDict} = System) ->
-  Choice = cauder_wx_utils:find(?ACTION_Process, wxChoice),
+  Choice = cauder_wx:find(?ACTION_Process, wxChoice),
   {_, Procs} = lists:unzip(orddict:to_list(PDict)),
 
   % Enable and populate process selector
@@ -120,7 +120,7 @@ update(#sys{procs = PDict} = System) ->
   Pid :: cauder_types:proc_id().
 
 selected_pid() ->
-  Choice = cauder_wx_utils:find(?ACTION_Process, wxChoice),
+  Choice = cauder_wx:find(?ACTION_Process, wxChoice),
   case wxChoice:getSelection(Choice) of
     ?wxNOT_FOUND -> none;
     Idx -> wxChoice:getClientData(Choice, Idx)
@@ -220,20 +220,20 @@ create_manual(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_manual(System) when System =:= undefined orelse System#sys.procs =:= [] ->
-  wxPanel:disable(cauder_wx_utils:find(?ACTION_Manual, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
   ok;
 
 update_manual(System) ->
-  wxPanel:enable(cauder_wx_utils:find(?ACTION_Manual, wxPanel)),
+  wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
   case selected_pid() of
     none ->
-      wxPanel:disable(cauder_wx_utils:find(?ACTION_Manual_Step, wxPanel));
+      wxPanel:disable(cauder_wx:find(?ACTION_Manual_Step, wxPanel));
     Pid ->
       ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
       CanStep = ProcOpts =/= [],
 
-      wxPanel:enable(cauder_wx_utils:find(?ACTION_Manual_Step, wxPanel), [{enable, CanStep}]),
+      wxPanel:enable(cauder_wx:find(?ACTION_Manual_Step, wxPanel), [{enable, CanStep}]),
 
       case CanStep of
         false -> ok;
@@ -241,8 +241,8 @@ update_manual(System) ->
           CanStepFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
           CanStepBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
 
-          wxButton:enable(cauder_wx_utils:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
-          wxButton:enable(cauder_wx_utils:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}])
+          wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
+          wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}])
       end
   end,
   ok.
@@ -306,18 +306,18 @@ create_automatic(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_automatic(System) when System =:= undefined orelse System#sys.procs =:= [] ->
-  wxPanel:disable(cauder_wx_utils:find(?ACTION_Automatic, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
   ok;
 update_automatic(System) ->
-  wxPanel:enable(cauder_wx_utils:find(?ACTION_Automatic, wxPanel)),
+  wxPanel:enable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
 
   Options = cauder:eval_opts(System),
   HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
   HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
 
-  wxSpinCtrl:enable(cauder_wx_utils:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
-  wxButton:enable(cauder_wx_utils:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
-  wxButton:enable(cauder_wx_utils:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
+  wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
   ok.
 
 
@@ -437,15 +437,15 @@ create_replay(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_replay(System) when System =:= undefined orelse System#sys.procs =:= [] ->
-  wxPanel:disable(cauder_wx_utils:find(?ACTION_Replay, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
   ok;
 update_replay(#sys{logs = Logs}) ->
   Pid = selected_pid(),
   case Pid =:= none orelse lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
     true ->
-      wxPanel:disable(cauder_wx_utils:find(?ACTION_Replay, wxPanel));
+      wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel));
     false ->
-      wxPanel:enable(cauder_wx_utils:find(?ACTION_Replay, wxPanel)),
+      wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
       CanReplaySteps =
         case orddict:find(Pid, Logs) of
@@ -453,8 +453,8 @@ update_replay(#sys{logs = Logs}) ->
           error -> false
         end,
 
-      wxSpinCtrl:enable(cauder_wx_utils:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
-      wxButton:enable(cauder_wx_utils:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
+      wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
+      wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
   end,
   ok.
 
@@ -597,7 +597,7 @@ create_rollback(Parent) ->
   System :: cauder_types:system() | undefined.
 
 update_rollback(System) when System =:= undefined orelse System#sys.procs =:= [] ->
-  wxPanel:disable(cauder_wx_utils:find(?ACTION_Rollback, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
   ok;
 update_rollback(#sys{procs = PDict}) ->
   {_, Procs} = lists:unzip(orddict:to_list(PDict)),
@@ -613,15 +613,15 @@ update_rollback(#sys{procs = PDict}) ->
     end, Procs),
   case Pid =:= none orelse not CanRollBack of
     true ->
-      wxPanel:disable(cauder_wx_utils:find(?ACTION_Rollback, wxPanel));
+      wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel));
     false ->
-      wxPanel:enable(cauder_wx_utils:find(?ACTION_Rollback, wxPanel)),
+      wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
-      Choice = cauder_wx_utils:find(?ACTION_Process, wxChoice),
+      Choice = cauder_wx:find(?ACTION_Process, wxChoice),
       #proc{hist = Hist} = lists:nth(wxChoice:getSelection(Choice) + 1, Procs),
       CanRollbackSteps = length(Hist) > 0,
 
-      wxSpinCtrl:enable(cauder_wx_utils:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
-      wxButton:enable(cauder_wx_utils:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
+      wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
+      wxButton:enable(cauder_wx:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
   end,
   ok.

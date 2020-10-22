@@ -160,7 +160,7 @@ create_code(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_code(System, Pid) ->
-  CodeControl = cauder_wx_utils:find(?CODE_Code_Control, wxStyledTextCtrl),
+  CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
 
   wxStyledTextCtrl:freeze(CodeControl),
   case get(line) of
@@ -217,7 +217,7 @@ create_expression(Parent) ->
   Pid :: cauder_types:proc_id() | none.
 
 update_expression(System, Pid) ->
-  ExpressionControl = cauder_wx_utils:find(?CODE_Expression_Control, wxTextCtrl),
+  ExpressionControl = cauder_wx:find(?CODE_Expression_Control, wxTextCtrl),
 
   wxTextCtrl:freeze(ExpressionControl),
   wxTextCtrl:clear(ExpressionControl),

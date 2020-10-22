@@ -108,7 +108,7 @@ create(Frame) ->
   Enable :: boolean().
 
 enable(ItemId, Enable) ->
-  Frame = cauder_wx_utils:find(?FRAME, wxFrame),
+  Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
   wxMenuBar:enable(MenuBar, ItemId, Enable).
 
