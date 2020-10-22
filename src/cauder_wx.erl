@@ -3,7 +3,7 @@
 -behaviour(wx_object).
 
 %% API
--export([start/0, start_link/0, stop/1]).
+-export([start/0, start_link/0, stop/1, find/2]).
 
 %% wx_object callbacks
 -export([init/1, handle_event/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -78,6 +78,18 @@ start_link() ->
   WxObject :: wxWindow:wxWindow().
 
 stop(WxObject) -> wx_object:stop(WxObject).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Find the first window with the given `Id' and casts it to the given
+%% `Type'.
+
+-spec find(Id, Type) -> Window when
+  Id :: integer(),
+  Type :: atom(),
+  Window :: wx:wx_object().
+
+find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 
 
 %%%=============================================================================
@@ -671,18 +683,6 @@ refresh() ->
 
 
 %%%=============================================================================
-
-
-%%------------------------------------------------------------------------------
-%% @doc Find the first window with the given `Id' and casts it to the given
-%% `Type'.
-
--spec find(Id, Type) -> Window when
-  Id :: integer(),
-  Type :: atom(),
-  Window :: wx:wx_object().
-
-find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
