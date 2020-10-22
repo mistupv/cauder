@@ -1,5 +1,6 @@
 -define(APPNAME, "CauDEr").
 -define(WEBPAGE, "https://github.com/mistupv/cauder-v2").
+-define(APP_DB, 'cauder_database').
 
 -define(ID_GAMMA, 0).
 
@@ -22,9 +23,6 @@
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').
 
-% ets defs
--define(APP_REF, '_._app').
--define(GUI_REF, '_._gui').
 
 -define(REPLAY_DATA,  200).
 

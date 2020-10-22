@@ -33,8 +33,6 @@
 
 -type state() :: #state{}.
 
--export([db_match/1]). % TODO Remove
-
 
 %%%=============================================================================
 %%% API
@@ -369,8 +367,7 @@ set_binding(Pid, {Key, Value}) -> gen_server:call(?SERVER, {set, {binding, Pid},
   State :: state().
 
 init([]) ->
-  Db = ets:new(?MODULE, [set, public, named_table]),
-  put(db, Db),
+  ?APP_DB = ets:new(?APP_DB, [set, private, named_table]),
   {ok, #state{}}.
 
 
@@ -537,7 +534,7 @@ handle_call(?EVAL_ROLLBACK(var, Name), _From, #state{system = Sys0} = State) ->
 %%%=============================================================================
 
 handle_call({get, {entry_points, Module}}, _From, State) ->
-  Defs = db_match({{Module, '_', '_', '_'}, '_'}),
+  Defs = ets:match_object(?APP_DB, {{Module, '_', '_', '_'}, '_'}),
   SortedDefs = lists:sort(fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end, Defs),
   % TODO Only allow to start system from an exported function?
   EntryPoints = lists:map(fun({{M, F, A, _}, _}) -> {M, F, A} end, SortedDefs),
@@ -602,7 +599,7 @@ handle_info(Info, State) ->
   State :: state().
 
 terminate(_Reason, _State) ->
-  ets:delete(?MODULE),
+  ets:delete(?APP_DB),
   ok.
 
 
@@ -786,9 +783,3 @@ rollback_steps(Sys0, Pid, Steps, StepsDone) ->
       Sys1 = cauder_rollback:rollback_step(Sys0, Pid),
       rollback_steps(Sys1, Pid, Steps, StepsDone + 1)
   end.
-
-
-%%%=============================================================================
-
-
-db_match(Key) -> ets:match_object(get(db), Key).

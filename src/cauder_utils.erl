@@ -37,14 +37,14 @@
   Clauses :: cauder_types:af_clause_seq().
 
 fundef_lookup({M, F, A}) ->
-  case cauder:db_match({{M, F, A, '_'}, '_'}) of
+  case ets:match_object(?APP_DB, {{M, F, A, '_'}, '_'}) of
     [{{M, F, A, Exported}, Cs}] -> {Exported, Cs};
     [] ->
       File = filename:join(get(path), atom_to_list(M) ++ ".erl"),
       case filelib:is_regular(File) of
         true ->
           {ok, M} = cauder_load:file(File),
-          [{{M, F, A, Exported}, Cs}] = cauder:db_match({{M, F, A, '_'}, '_'}),
+          [{{M, F, A, Exported}, Cs}] = ets:match_object(?APP_DB, {{M, F, A, '_'}, '_'}),
           {Exported, Cs};
         false -> error
       end
