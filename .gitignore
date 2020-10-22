@@ -1,6 +1,7 @@
 # Erlang
 *.beam
 erl_crash.dump
+/docs
 /ebin
 
 # IntelliJ
