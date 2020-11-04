@@ -42,6 +42,7 @@
 create(Frame) ->
   StatusBar = wxFrame:createStatusBar(Frame),
   wxStatusBar:setFieldsCount(StatusBar, 3, [{widths, [-1, 100, 125]}]),
+  wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]),
   StatusBar.
 
 
