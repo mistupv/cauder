@@ -1,16 +1,30 @@
 -module(cauder_wx_statusbar).
 
 %% API
--export([create/1, update_text/1, update_position/2, update_process_count/1, set_visibility/1]).
+-export([create/1, update_position/2, update_process_count/2, set_visibility/1]).
 %% Predefined statuses
 -export([no_process/0, no_match/0]).
--export([step/2, step_over/2, step_into/3]).
--export([step_multiple/3]).
--export([replay_steps/2, replay_spawn/2, replay_send/2, replay_receive/2]).
--export([rollback_steps/2, rollback_spawn/2, rollback_send/2, rollback_receive/2, rollback_variable/2]).
+-export([load_start/1, load_finish/2]).
+-export([init_start/0, init_finish/1]).
+-export([stop_finish/0]).
+% Manual
+-export([step_start/1, step_finish/3]).
+-export([step_over_finish/3, step_into_finish/3, step_multiple_finish/3]).
+% Replay
+-export([replay_steps_start/0, replay_steps_finish/2]).
+-export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
+-export([replay_send_start/1, replay_send_finish/2, replay_send_fail/0]).
+-export([replay_receive_start/1, replay_receive_finish/2, replay_receive_fail/0]).
+% Rollback
+-export([rollback_steps_start/0, rollback_steps_finish/2]).
+-export([rollback_spawn_start/1, rollback_spawn_finish/2, rollback_spawn_fail/0]).
+-export([rollback_send_start/1, rollback_send_finish/2, rollback_send_fail/0]).
+-export([rollback_receive_start/1, rollback_receive_finish/2, rollback_receive_fail/0]).
+-export([rollback_variable_start/1, rollback_variable_finish/2, rollback_variable_fail/0]).
 
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
+-include("cauder_wx_statusbar.hrl").
 
 
 %%%=============================================================================
@@ -60,10 +74,12 @@ update_position(Line, Column) ->
 %%------------------------------------------------------------------------------
 %% @doc Updates the position shown in the status bar.
 
--spec update_process_count(System) -> ok when
-  System :: cauder_types:system() | undefined.
+-spec update_process_count(OldSystem, NewSystem) -> ok when
+  OldSystem :: cauder_types:system() | undefined,
+  NewSystem :: cauder_types:system() | undefined.
 
-update_process_count(#sys{procs = PDict}) ->
+update_process_count(#sys{procs = PDict}, #sys{procs = PDict}) -> ok;
+update_process_count(_, #sys{procs = PDict}) ->
   {Alive, Dead} =
     orddict:fold(
       fun(_, Proc, {Alive, Dead}) ->
@@ -78,8 +94,7 @@ update_process_count(#sys{procs = PDict}) ->
   StatusBar = wxFrame:getStatusBar(Frame),
   Text = io_lib:format(" Alive ~b, Dead ~b", [Alive, Dead]),
   wxStatusBar:setStatusText(StatusBar, Text, [{number, 2}]);
-
-update_process_count(undefined) ->
+update_process_count(_, undefined) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   StatusBar = wxFrame:getStatusBar(Frame),
   wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]).
@@ -106,135 +121,324 @@ set_visibility(Visible) ->
 %%%=============================================================================
 
 
-no_process() -> update_text("Cannot perform any action because no process is selected.").
+no_process() -> update_text(?NO_PROCESS).
 
 
-no_match() -> update_text("Cannot perform any forward action because there is no matching message to be received.").
+no_match() -> update_text(?NO_MATCH).
 
 
 %%%=============================================================================
 
 
--spec step(Semantics, Rule) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Rule :: cauder_types:rule().
+-spec load_start(File) -> ok when
+  File :: file:filename().
 
-step(Sem, Rule) ->
-  StrSem = semantics_to_string(Sem),
-  StrRule = rule_to_string(Rule),
-  Status = io_lib:format("Performed a single ~s reduction step using rule: ~s.", [StrSem, StrRule]),
+load_start(File) ->
+  Status = io_lib:format(?LOAD_START, [File]),
   update_text(Status).
 
 
--spec step_over(Semantics, Steps) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer().
+-spec load_finish(Module, Time) -> ok when
+  Module :: module(),
+  Time :: non_neg_integer().
 
-step_over(Sem, Steps) ->
-  StrSem = semantics_to_string(Sem),
-  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped over to the next expression.", [Steps, StrSem]),
+load_finish(Module, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?LOAD_FINISH, [Module, TimeStr]),
   update_text(Status).
 
 
--spec step_into(Semantics, Steps, MFA) -> ok when
+%%%=============================================================================
+
+
+-spec init_start() -> ok.
+
+init_start() -> update_text(?INIT_START).
+
+
+-spec init_finish(Time) -> ok when
+  Time :: non_neg_integer().
+
+init_finish(Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?INIT_FINISH, [TimeStr]),
+  update_text(Status).
+
+
+%%%=============================================================================
+
+
+-spec stop_finish() -> ok.
+
+stop_finish() -> update_text(?STOP_FINISH).
+
+
+%%%=============================================================================
+
+
+-spec step_start(Semantics) -> ok when
+  Semantics :: cauder_types:semantics().
+
+step_start(Sem) ->
+  SemStr = semantics_to_string(Sem),
+  Status = io_lib:format(?STEP_START, [SemStr]),
+  update_text(Status).
+
+
+-spec step_finish(Semantics, Rule, Time) -> ok when
+  Semantics :: cauder_types:semantics(),
+  Rule :: cauder_types:rule(),
+  Time :: non_neg_integer().
+
+step_finish(Sem, Rule, Time) ->
+  SemStr = semantics_to_string(Sem),
+  RuleStr = rule_to_string(Rule),
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?STEP_FINISH, [SemStr, RuleStr, TimeStr]),
+  update_text(Status).
+
+
+-spec step_over_finish(Semantics, Steps, Time) -> ok when
   Semantics :: cauder_types:semantics(),
   Steps :: pos_integer(),
-  MFA :: mfa().
+  Time :: non_neg_integer().
 
-step_into(Sem, Steps, {M, F, A}) ->
-  StrSem = semantics_to_string(Sem),
-  Status = io_lib:format("Performed ~b ~s reduction steps. Stepped into the definition of function: ~s:~s/~b.", [Steps, StrSem, M, F, A]),
+step_over_finish(Sem, Steps, Time) ->
+  SemStr = semantics_to_string(Sem),
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?STEP_OVER_FINISH, [Steps, SemStr, TimeStr]),
   update_text(Status).
 
 
-%%%=============================================================================
+-spec step_into_finish(Semantics, Steps, Time) -> ok when
+  Semantics :: cauder_types:semantics(),
+  Steps :: pos_integer(),
+  Time :: non_neg_integer().
+
+step_into_finish(Sem, Steps, Time) ->
+  SemStr = semantics_to_string(Sem),
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?STEP_INTO_FINISH, [Steps, SemStr, TimeStr]),
+  update_text(Status).
 
 
--spec step_multiple(Semantics, StepsDone, StepsTotal) -> ok when
+-spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
   Semantics :: cauder_types:semantics(),
   StepsDone :: non_neg_integer(),
-  StepsTotal :: pos_integer().
+  StepsTotal :: pos_integer(),
+  Time :: non_neg_integer().
 
-step_multiple(Sem, Done, Total) ->
-  StrSem = semantics_to_string(Sem),
-  Status = io_lib:format("Performed ~b ~s steps, from a total of ~b.", [Done, StrSem, Total]),
+step_multiple_finish(Sem, {Done, Total}, Time) ->
+  SemStr = semantics_to_string(Sem),
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?STEP_MULTIPLE_FINISH, [Done, Total, SemStr, TimeStr]),
   update_text(Status).
 
 
 %%%=============================================================================
 
 
--spec replay_steps(StepsDone, StepsTotal) -> ok when
+-spec replay_steps_start() -> ok.
+
+replay_steps_start() -> update_text(?REPLAY_STEPS_START).
+
+
+-spec replay_steps_finish({StepsDone, StepsTotal}, Time) -> ok when
   StepsDone :: non_neg_integer(),
-  StepsTotal :: pos_integer().
+  StepsTotal :: pos_integer(),
+  Time :: non_neg_integer().
 
-replay_steps(Done, Total) -> update_text(io_lib:format("~b of ~b steps replayed.", [Done, Total])).
-
-
--spec replay_spawn(DidSucceed, Pid) -> ok when
-  DidSucceed :: boolean(),
-  Pid :: cauder_types:proc_id() | none.
-
-replay_spawn(false, _)  -> update_text("Could not replay the spawning of that process");
-replay_spawn(true, Pid) -> update_text(io_lib:format("Replayed spawning of process with PID: ~p", [Pid])).
-
-
--spec replay_send(DidSucceed, Uid) -> ok when
-  DidSucceed :: boolean(),
-  Uid :: cauder_types:msg_id() | none.
-
-replay_send(false, _)  -> update_text("Could not replay the sending of that message");
-replay_send(true, Uid) -> update_text(io_lib:format("Replayed sending of message with UID: ~p", [Uid])).
-
-
--spec replay_receive(DidSucceed, Uid) -> ok when
-  DidSucceed :: boolean(),
-  Uid :: cauder_types:msg_id() | none.
-
-replay_receive(false, _)  -> update_text("Could not replay the receiving of that message");
-replay_receive(true, Uid) -> update_text(io_lib:format("Replayed receiving of message with UID: ~p", [Uid])).
+replay_steps_finish({Done, Total}, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?REPLAY_STEPS_FINISH, [Done, Total, TimeStr]),
+  update_text(Status).
 
 
 %%%=============================================================================
 
 
--spec rollback_steps(StepsDone, StepsTotal) -> ok when
+-spec replay_spawn_start(Pid) -> ok when
+  Pid :: cauder_types:proc_id().
+
+replay_spawn_start(Pid) -> update_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
+
+
+-spec replay_spawn_finish(Pid, Time) -> ok when
+  Pid :: cauder_types:proc_id(),
+  Time :: non_neg_integer().
+
+replay_spawn_finish(Pid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?REPLAY_SPAWN_FINISH, [Pid, TimeStr]),
+  update_text(Status).
+
+
+-spec replay_spawn_fail() -> ok.
+
+replay_spawn_fail() -> update_text(?REPLAY_SPAWN_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec replay_send_start(Uid) -> ok when
+  Uid :: cauder_types:msg_id().
+
+replay_send_start(Uid) -> update_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
+
+
+-spec replay_send_finish(Uid, Time) -> ok when
+  Uid :: cauder_types:msg_id(),
+  Time :: non_neg_integer().
+
+replay_send_finish(Uid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?REPLAY_SEND_FINISH, [Uid, TimeStr]),
+  update_text(Status).
+
+
+-spec replay_send_fail() -> ok.
+
+replay_send_fail() -> update_text(?REPLAY_SEND_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec replay_receive_start(Uid) -> ok when
+  Uid :: cauder_types:msg_id().
+
+replay_receive_start(Uid) -> update_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
+
+
+-spec replay_receive_finish(Uid, Time) -> ok when
+  Uid :: cauder_types:msg_id(),
+  Time :: non_neg_integer().
+
+replay_receive_finish(Uid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?REPLAY_RECEIVE_FINISH, [Uid, TimeStr]),
+  update_text(Status).
+
+
+-spec replay_receive_fail() -> ok.
+
+replay_receive_fail() -> update_text(?REPLAY_RECEIVE_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec rollback_steps_start() -> ok.
+
+rollback_steps_start() -> update_text(?ROLLBACK_STEPS_START).
+
+
+-spec rollback_steps_finish({StepsDone, StepsTotal}, Time) -> ok when
   StepsDone :: non_neg_integer(),
-  StepsTotal :: pos_integer().
+  StepsTotal :: pos_integer(),
+  Time :: non_neg_integer().
 
-rollback_steps(Done, Total) -> update_text(io_lib:format("~b of ~b steps rolled back.", [Done, Total])).
-
-
--spec rollback_spawn(DidSucceed, Pid) -> ok when
-  DidSucceed :: boolean(),
-  Pid :: cauder_types:proc_id() | none.
-
-rollback_spawn(false, _)  -> update_text("Could not roll back the spawning of that process");
-rollback_spawn(true, Pid) -> update_text(io_lib:format("Rolled back spawning of process with PID: ~p", [Pid])).
+rollback_steps_finish({Done, Total}, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_STEPS_FINISH, [Done, Total, TimeStr]),
+  update_text(Status).
 
 
--spec rollback_send(DidSucceed, Uid) -> ok when
-  DidSucceed :: boolean(),
-  Uid :: cauder_types:msg_id() | none.
-
-rollback_send(false, _)  -> update_text("Could not roll back the sending of that message");
-rollback_send(true, Uid) -> update_text(io_lib:format("Rolled back sending of message with UID: ~p", [Uid])).
+%%%=============================================================================
 
 
--spec rollback_receive(DidSucceed, Uid) -> ok when
-  DidSucceed :: boolean(),
-  Uid :: cauder_types:msg_id() | none.
+-spec rollback_spawn_start(Pid) -> ok when
+  Pid :: cauder_types:proc_id().
 
-rollback_receive(false, _)  -> update_text("Could not roll back the receiving of that message");
-rollback_receive(true, Uid) -> update_text(io_lib:format("Rolled back receiving of message with UID: ~p", [Uid])).
+rollback_spawn_start(Pid) -> update_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
 
 
--spec rollback_variable(DidSucceed, Name) -> ok when
-  DidSucceed :: boolean(),
-  Name :: atom() | none.
+-spec rollback_spawn_finish(Pid, Time) -> ok when
+  Pid :: cauder_types:proc_id(),
+  Time :: non_neg_integer().
 
-rollback_variable(false, _)   -> update_text("Could not roll back the binding of that variable");
-rollback_variable(true, Name) -> update_text(io_lib:format("Rolled back binding of variable with name: ~p", [Name])).
+rollback_spawn_finish(Pid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_SPAWN_FINISH, [Pid, TimeStr]),
+  update_text(Status).
+
+
+-spec rollback_spawn_fail() -> ok.
+
+rollback_spawn_fail() -> update_text(?ROLLBACK_SPAWN_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec rollback_send_start(Uid) -> ok when
+  Uid :: cauder_types:msg_id().
+
+rollback_send_start(Uid) -> update_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
+
+
+-spec rollback_send_finish(Uid, Time) -> ok when
+  Uid :: cauder_types:msg_id(),
+  Time :: non_neg_integer().
+
+rollback_send_finish(Uid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_SEND_FINISH, [Uid, TimeStr]),
+  update_text(Status).
+
+
+-spec rollback_send_fail() -> ok.
+
+rollback_send_fail() -> update_text(?ROLLBACK_SEND_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec rollback_receive_start(Uid) -> ok when
+  Uid :: cauder_types:msg_id().
+
+rollback_receive_start(Uid) -> update_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
+
+
+-spec rollback_receive_finish(Uid, Time) -> ok when
+  Uid :: cauder_types:msg_id(),
+  Time :: non_neg_integer().
+
+rollback_receive_finish(Uid, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_RECEIVE_FINISH, [Uid, TimeStr]),
+  update_text(Status).
+
+
+-spec rollback_receive_fail() -> ok.
+
+rollback_receive_fail() -> update_text(?ROLLBACK_RECEIVE_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec rollback_variable_start(Name) -> ok when
+  Name :: atom().
+
+rollback_variable_start(Name) -> update_text(io_lib:format(?ROLLBACK_VARIABLE_START, [Name])).
+
+
+-spec rollback_variable_finish(Name, Time) -> ok when
+  Name :: atom(),
+  Time :: non_neg_integer().
+
+rollback_variable_finish(Name, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_VARIABLE_FINISH, [Name, TimeStr]),
+  update_text(Status).
+
+
+-spec rollback_variable_fail() -> ok.
+
+rollback_variable_fail() -> update_text(?ROLLBACK_VARIABLE_FAIL).
 
 
 %%%=============================================================================
@@ -257,3 +461,12 @@ rule_to_string(?RULE_SELF)    -> "Self";
 rule_to_string(?RULE_SPAWN)   -> "Spawn";
 rule_to_string(?RULE_SEND)    -> "Send";
 rule_to_string(?RULE_RECEIVE) -> "Receive".
+
+
+-spec time_to_string(Time) -> String when
+  Time :: non_neg_integer(),
+  String :: string().
+
+time_to_string(Time) when Time < 1000      -> "<1 ms";
+time_to_string(Time) when Time < 1000 * 60 -> io_lib:format("~b ms", [Time div 1000]);
+time_to_string(Time)                       -> io_lib:format("~b s ~s ms", [Time div 1000 * 60, Time div 1000]).

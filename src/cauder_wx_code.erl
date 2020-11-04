@@ -87,13 +87,13 @@ create(Parent) ->
 %%------------------------------------------------------------------------------
 %% @doc Updates the <i>code</i> panel according to the given system and process.
 
--spec update(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update(System, Pid) ->
-  update_code(System, Pid),
-  update_expression(System, Pid).
+update(OldState, NewState) ->
+  update_code(OldState, NewState),
+  update_expression(OldState, NewState).
 
 
 %%%=============================================================================
@@ -157,39 +157,30 @@ create_code(Parent) ->
   Win.
 
 
--spec update_code(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_code(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_code(System, Pid) ->
+update_code(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+update_code(_, #wx_state{system = undefined}) ->
   CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
-
-  wxStyledTextCtrl:freeze(CodeControl),
-  case get(line) of
-    undefined -> ok;
-    PrevLine -> unmark_line(CodeControl, PrevLine)
-  end,
-
-  case System of
-    undefined ->
-      goto_line(CodeControl, 1),
-      erase(line);
-    #sys{procs = PDict} ->
-      case Pid of
-        none ->
-          Line = 1,
-          goto_line(CodeControl, Line),
-          put(line, Line);
-        _ ->
-          {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
-          Line = element(2, E),
-          mark_line(CodeControl, Line),
-          goto_line(CodeControl, Line),
-          put(line, Line)
-      end
-  end,
-
-  wxStyledTextCtrl:thaw(CodeControl).
+  unmark_line(CodeControl),
+  goto_line(CodeControl, 1),
+  ok;
+update_code(_, #wx_state{pid = undefined}) ->
+  CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
+  unmark_line(CodeControl),
+  goto_line(CodeControl, 1),
+  ok;
+update_code(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
+  CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
+  unmark_line(CodeControl),
+  {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
+  Line = element(2, E),
+  mark_line(CodeControl, Line),
+  goto_line(CodeControl, Line),
+  ok.
 
 
 %%%=============================================================================
@@ -214,29 +205,24 @@ create_expression(Parent) ->
   Win.
 
 
--spec update_expression(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_expression(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_expression(System, Pid) ->
+update_expression(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+update_expression(_, #wx_state{system = undefined}) ->
+  wxTextCtrl:clear(cauder_wx:find(?CODE_Expression_Control, wxTextCtrl)),
+  ok;
+update_expression(_, #wx_state{pid = undefined}) ->
+  wxTextCtrl:clear(cauder_wx:find(?CODE_Expression_Control, wxTextCtrl)),
+  ok;
+update_expression(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
   ExpressionControl = cauder_wx:find(?CODE_Expression_Control, wxTextCtrl),
-
-  wxTextCtrl:freeze(ExpressionControl),
-  wxTextCtrl:clear(ExpressionControl),
-
-  case System of
-    undefined -> ok;
-    #sys{procs = PDict} ->
-      case Pid of
-        none -> ok;
-        _ ->
-          {ok, #proc{exprs = [Expr | _]}} = orddict:find(Pid, PDict),
-          StrExpr = cauder_pp:expression(Expr),
-          wxTextCtrl:setValue(ExpressionControl, StrExpr)
-      end
-  end,
-
-  wxTextCtrl:thaw(ExpressionControl).
+  {ok, #proc{exprs = [Expr | _]}} = orddict:find(Pid, PDict),
+  StrExpr = cauder_pp:expression(Expr),
+  wxTextCtrl:setValue(ExpressionControl, StrExpr),
+  ok.
 
 
 %%%=============================================================================
@@ -275,18 +261,23 @@ unload_code(CodeCtrl) ->
   Line :: pos_integer().
 
 mark_line(CodeCtrl, Line) ->
+  put(line, Line),
   wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_MARKER),
   wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
   ok.
 
 
--spec unmark_line(CodeControl, Line) -> ok when
-  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
-  Line :: pos_integer().
+-spec unmark_line(CodeControl) -> ok when
+  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
 
-unmark_line(CodeCtrl, Line) ->
-  wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_MARKER),
-  wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
+unmark_line(CodeCtrl) ->
+  case get(line) of
+    undefined -> ok;
+    Line ->
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_MARKER),
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_BACKGROUND)
+  end,
+  erase(line),
   ok.
 
 

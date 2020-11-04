@@ -1,7 +1,7 @@
 -module(cauder_wx_system).
 
 %% API
--export([create/1, update/1, focus_roll_log/1]).
+-export([create/1, update/2]).
 
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
@@ -44,24 +44,14 @@ create(Parent) ->
 %% @doc Updates the <i>system info</i> panel according to the given system and
 %% process.
 
--spec update(System) -> ok when
-  System :: cauder_types:system() | undefined.
+-spec update(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update(System) ->
-  update_mail(System),
-  update_trace(System),
-  update_roll_log(System).
-
-
-%%------------------------------------------------------------------------------
-%% @doc Updates the <i>process info</i> panel according to the given system and
-%% process.
-
--spec focus_roll_log(Focus) -> ok when
-  Focus :: boolean().
-
-focus_roll_log(false) -> ok;
-focus_roll_log(true)  -> wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog), ok.
+update(OldState, NewState) ->
+  update_mail(OldState, NewState),
+  update_trace(OldState, NewState),
+  update_roll_log(OldState, NewState).
 
 
 %%%=============================================================================
@@ -108,28 +98,31 @@ create_mail(Parent) ->
   Win.
 
 
--spec update_mail(System) -> ok when
-  System :: cauder_types:system() | undefined.
+-spec update_mail(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_mail(System) ->
+update_mail(#wx_state{system = #sys{mail = Mail}}, #wx_state{system = #sys{mail = Mail}}) ->
+  ok;
+update_mail(_, #wx_state{system = undefined}) ->
+  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail, wxListCtrl)),
+  ok;
+update_mail(_, #wx_state{system = #sys{mail = Mail}}) ->
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
-  case System of
-    undefined -> ok;
-    #sys{mail = Mail} ->
-      Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-      lists:foldl(
-        fun(#msg{dest = Dest, val = Value, uid = Uid}, Row) ->
-          wxListCtrl:insertItem(MailArea, Row, ""),
-          wxListCtrl:setItemFont(MailArea, Row, Font),
-          wxListCtrl:setItem(MailArea, Row, 0, integer_to_list(Dest)),
-          wxListCtrl:setItem(MailArea, Row, 1, io_lib:format("~p", [Value])),
-          wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(Uid)),
-          Row + 1
-        end, 0, Mail)
-  end,
-  wxListCtrl:thaw(MailArea).
+  lists:foldl(
+    fun(#msg{dest = Dest, val = Value, uid = Uid}, Row) ->
+      wxListCtrl:insertItem(MailArea, Row, ""),
+      wxListCtrl:setItemFont(MailArea, Row, Font),
+      wxListCtrl:setItem(MailArea, Row, 0, integer_to_list(Dest)),
+      wxListCtrl:setItem(MailArea, Row, 1, io_lib:format("~p", [Value])),
+      wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(Uid)),
+      Row + 1
+    end, 0, Mail),
+  wxListCtrl:thaw(MailArea),
+  ok.
 
 
 %%%=============================================================================
@@ -154,19 +147,25 @@ create_trace(Parent) ->
   Win.
 
 
--spec update_trace(System) -> ok when
-  System :: cauder_types:system() | undefined.
+-spec update_trace(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_trace(System) ->
+update_trace(#wx_state{system = #sys{trace = Trace}}, #wx_state{system = #sys{trace = Trace}}) ->
+  ok;
+update_trace(_, #wx_state{system = undefined}) ->
+  wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+  ok;
+update_trace(_, #wx_state{system = #sys{trace = []}}) ->
+  wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+  ok;
+update_trace(_, #wx_state{system = #sys{trace = Trace}}) ->
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_Trace),
   TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
   wxListBox:freeze(TraceArea),
   wxListBox:clear(TraceArea),
-  case System of
-    undefined -> ok;
-    #sys{trace = Trace} ->
-      Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
-      lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries)
-  end,
+  Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
+  lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
   wxListBox:thaw(TraceArea).
 
 
@@ -192,17 +191,23 @@ create_roll_log(Parent) ->
   Win.
 
 
--spec update_roll_log(System) -> ok when
-  System :: cauder_types:system() | undefined.
+-spec update_roll_log(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_roll_log(System) ->
+update_roll_log(#wx_state{system = #sys{roll = RollLog}}, #wx_state{system = #sys{roll = RollLog}}) ->
+  ok;
+update_roll_log(_, #wx_state{system = undefined}) ->
+  wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
+  ok;
+update_roll_log(_, #wx_state{system = #sys{roll = []}}) ->
+  wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
+  ok;
+update_roll_log(_, #wx_state{system = #sys{roll = RollLog}}) ->
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog),
   RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
   wxListBox:freeze(RollLogArea),
   wxListBox:clear(RollLogArea),
-  case System of
-    undefined -> ok;
-    #sys{roll = RollLog} ->
-      lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog)
-  end,
+  lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog),
   wxListBox:thaw(RollLogArea).
 

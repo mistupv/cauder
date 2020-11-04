@@ -1,3 +1,16 @@
+-record(wx_state, {
+  frame :: wxFrame:wxFrame(),
+  menubar :: wxMenuBar:wxMenuBar(),
+  content :: wxWindow:wxWindow(),
+  statusbar :: wxStatusBar:wxStatusBar(),
+
+  module :: atom() | undefined,
+  position = -1 :: integer(),
+  task :: atom() | undefined,
+  system :: cauder_types:system() | undefined,
+  pid :: cauder_types:proc_id() | undefined
+}).
+
 -define(FRAME, 500).
 
 -define(FRAME_SIZE_INIT, {900, 800}).

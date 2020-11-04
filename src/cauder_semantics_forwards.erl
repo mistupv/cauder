@@ -160,7 +160,6 @@ step(Sys, Pid) ->
   System :: cauder_types:system(),
   Options :: [cauder_types:option()].
 
-options(#sys{procs = []}) -> [];
 options(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
   lists:filtermap(
     fun

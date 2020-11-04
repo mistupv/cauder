@@ -125,7 +125,7 @@ rollback_step(#sys{procs = PDict, roll = RollLog} = Sys0, Pid) ->
 
 rollback_spawn(#sys{procs = PDict} = Sys, SpawnPid) ->
   {value, #proc{pid = Pid}} = cauder_utils:find_process_with_spawn(PDict, SpawnPid),
-  rollback_until_spawn(Sys, Pid, SpawnPid).
+  rollback_until_spawn(Sys#sys{roll = []}, Pid, SpawnPid).
 
 
 %%------------------------------------------------------------------------------
@@ -139,7 +139,7 @@ rollback_spawn(#sys{procs = PDict} = Sys, SpawnPid) ->
 
 rollback_send(#sys{procs = PDict} = Sys, UID) ->
   {value, #proc{pid = Pid}} = cauder_utils:find_process_with_send(PDict, UID),
-  rollback_until_send(Sys, Pid, UID).
+  rollback_until_send(Sys#sys{roll = []}, Pid, UID).
 
 
 %%------------------------------------------------------------------------------
@@ -153,7 +153,7 @@ rollback_send(#sys{procs = PDict} = Sys, UID) ->
 
 rollback_receive(#sys{procs = PDict} = Sys, UID) ->
   {value, #proc{pid = Pid}} = cauder_utils:find_process_with_receive(PDict, UID),
-  rollback_until_receive(Sys, Pid, UID).
+  rollback_until_receive(Sys#sys{roll = []}, Pid, UID).
 
 
 %%------------------------------------------------------------------------------
@@ -167,7 +167,7 @@ rollback_receive(#sys{procs = PDict} = Sys, UID) ->
 
 rollback_variable(#sys{procs = PDict} = Sys, Name) ->
   {value, #proc{pid = Pid}} = cauder_utils:find_process_with_variable(PDict, Name),
-  rollback_until_variable(Sys, Pid, Name).
+  rollback_until_variable(Sys#sys{roll = []}, Pid, Name).
 
 
 %%%=============================================================================

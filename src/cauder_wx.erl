@@ -18,15 +18,9 @@
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
--record(wx_state, {
-  frame :: wxFrame:wxFrame(),
-  menubar :: wxMenuBar:wxMenuBar(),
-  content :: wxWindow:wxWindow(),
-  statusbar :: wxStatusBar:wxStatusBar(),
-  position = -1 :: integer()
-}).
-
 -type state() :: #wx_state{}.
+
+-export_type([state/0]).
 
 
 %%%=============================================================================
@@ -115,6 +109,8 @@ init([]) ->
   Content = cauder_wx_areas:create(Frame),
   StatusBar = cauder_wx_statusbar:create(Frame),
 
+  cauder:subscribe(),
+
   wxMenuBar:check(Menubar, ?MENU_View_Mailbox, true),
   wxMenuBar:check(Menubar, ?MENU_View_Log, true),
   wxMenuBar:check(Menubar, ?MENU_View_History, true),
@@ -135,17 +131,23 @@ init([]) ->
   wxEvtHandler:connect(Frame, command_menu_selected),
   wxEvtHandler:connect(Frame, command_text_updated),
 
+  wxChoice:disable(cauder_wx:find(?ACTION_Process, wxChoice)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+  wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+
   wxFrame:show(Frame),
   wxFrame:raise(Frame),
 
-  refresh(),
-
-  {Frame, #wx_state{
+  State = #wx_state{
     frame     = Frame,
     menubar   = Menubar,
     content   = Content,
     statusbar = StatusBar
-  }}.
+  },
+
+  {Frame, refresh(State)}.
 
 
 %%------------------------------------------------------------------------------
@@ -157,7 +159,7 @@ init([]) ->
   NewState :: state().
 
 handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
-  case stop_session() of
+  case stop_session(State) of
     false -> ok;
     true ->
       Message = "Select an Erlang file",
@@ -168,13 +170,12 @@ handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
       case wxDialog:showModal(Dialog) of
         ?wxID_OK ->
           Path = wxFileDialog:getPath(Dialog),
-          Module = open_file(Path),
-          put(module, Module);
+          open_file(Path);
         _Other -> ok
       end,
       wxDialog:destroy(Dialog)
   end,
-  {noreply, State};
+  {noreply, refresh(State, State#wx_state{task = load})};
 
 handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
   %% TODO Add confirmation dialog?
@@ -202,40 +203,22 @@ handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = Sta
   {noreply, State};
 
 handle_event(?MENU_EVENT(?MENU_View_Bindings), State) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_bindings(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(?MENU_View_Stack), State) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_stack(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(?MENU_View_Log), State) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_log(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(?MENU_View_History), State) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_history(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(Item), State) when ?Is_Bindings_Mode(Item) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_bindings(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(Item), State) when ?Is_History_Mode(Item) ->
-  System = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  cauder_wx_process:update_history(System, Pid),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
   cauder_wx_statusbar:set_visibility(Enabled =/= 0),
@@ -244,12 +227,17 @@ handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
 %%%=============================================================================
 
 handle_event(?MENU_EVENT(?MENU_Run_Start), State) ->
-  start_session(),
-  {noreply, State};
+  IsStarting = start_session(State),
+  if
+    IsStarting ->
+      {noreply, State#wx_state{task = start}};
+    true ->
+      {noreply, State}
+  end;
 
 handle_event(?MENU_EVENT(?MENU_Run_Stop), State) ->
-  stop_session(),
-  {noreply, State};
+  stop_session(State),
+  {noreply, refresh(State)};
 
 %%%=============================================================================
 
@@ -272,41 +260,21 @@ handle_event(#wx{id = ?CODE_Code_Control, event = #wxStyledText{type = stc_zoom}
 %%%=============================================================================
 
 handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
-  refresh(),
-  {noreply, State};
+  {noreply, refresh(State)};
 
 %%%=============================================================================
 
-handle_event(?BUTTON_EVENT(Button), State) when ?Is_Step_Button(Button) ->
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      cauder_wx_statusbar:no_process(),
-      refresh();
-    Pid ->
-      Sem = button_to_semantics(Button),
-      Rule = cauder:step(Sem, Pid),
-      cauder_wx_statusbar:step(Sem, Rule),
-      refresh()
-  end,
-  {noreply, State};
+handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_Step_Button(Button) andalso Pid =/= undefined ->
+  Sem = button_to_semantics(Button),
+  ok = cauder:step(Sem, Pid),
+  cauder_wx_statusbar:step_start(Sem),
+  {noreply, refresh(State, State#wx_state{task = step})};
 
-handle_event(?BUTTON_EVENT(Button), State) when ?Is_StepOver_Button(Button) ->
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      cauder_wx_statusbar:no_process(),
-      refresh();
-    Pid ->
-      Sem = button_to_semantics(Button),
-      case cauder:step_over(Sem, Pid) of
-        nomatch ->
-          cauder_wx_statusbar:no_match(),
-          refresh();
-        Steps ->
-          cauder_wx_statusbar:step_over(Sem, Steps),
-          refresh()
-      end
-  end,
-  {noreply, State};
+handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_StepOver_Button(Button) andalso Pid =/= undefined ->
+  Sem = button_to_semantics(Button),
+  ok = cauder:step_over(Sem, Pid),
+  cauder_wx_statusbar:step_start(Sem),
+  {noreply, refresh(State, State#wx_state{task = step_over})};
 
 %%%=============================================================================
 
@@ -314,166 +282,137 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
   Spinner = cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
-  StepsDone = cauder:step_multiple(Sem, Steps),
-  cauder_wx_statusbar:step_multiple(Sem, StepsDone, Steps),
-  refresh(),
-  {noreply, State};
+  ok = cauder:step_multiple(Sem, Steps),
+  cauder_wx_statusbar:step_start(Sem),
+  {noreply, refresh(State, State#wx_state{task = step_multiple})};
 
 %%%=============================================================================
 
-handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), State) ->
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      cauder_wx_statusbar:no_process(),
-      refresh();
-    Pid ->
-      Spinner = cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl),
-      Steps = wxSpinCtrl:getValue(Spinner),
-      StepsDone = cauder:replay_steps(Pid, Steps),
-      cauder_wx_statusbar:replay_steps(StepsDone, Steps),
-      refresh()
-  end,
-  {noreply, State};
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), #wx_state{pid = Pid} = State) when Pid =/= undefined ->
+  Spinner = cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl),
+  Steps = wxSpinCtrl:getValue(Spinner),
+  ok = cauder:replay_steps(Pid, Steps),
+  cauder_wx_statusbar:replay_steps_start(),
+  {noreply, refresh(State, State#wx_state{task = replay_steps})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Replay_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:replay_spawn(false, none),
-      refresh();
+      cauder_wx_statusbar:replay_spawn_fail(),
+      {noreply, State};
     {Pid, _} ->
-      Success = cauder:replay_spawn(Pid),
-      cauder_wx_statusbar:replay_spawn(Success, Pid),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:replay_spawn(Pid),
+      cauder_wx_statusbar:replay_spawn_start(Pid),
+      {noreply, refresh(State, State#wx_state{task = replay_spawn})}
+  end;
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Replay_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:replay_send(false, none),
-      refresh();
+      cauder_wx_statusbar:replay_send_fail(),
+      {noreply, State};
     {Uid, _} ->
-      Success = cauder:replay_send(Uid),
-      cauder_wx_statusbar:replay_send(Success, Uid),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:replay_send(Uid),
+      cauder_wx_statusbar:replay_send_start(Uid),
+      {noreply, refresh(State, State#wx_state{task = replay_send})}
+  end;
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Replay_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:replay_receive(false, none),
-      refresh();
+      cauder_wx_statusbar:replay_receive_fail(),
+      {noreply, State};
     {Uid, _} ->
-      Success = cauder:replay_receive(Uid),
-      cauder_wx_statusbar:replay_receive(Success, Uid),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:replay_receive(Uid),
+      cauder_wx_statusbar:replay_receive_start(Uid),
+      {noreply, refresh(State, State#wx_state{task = replay_receive})}
+  end;
 
 %%%=============================================================================
 
-handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), State) ->
-  case cauder_wx_actions:selected_pid() of
-    none ->
-      cauder_wx_statusbar:no_process(),
-      refresh();
-    Pid ->
-      Spinner = cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl),
-      Steps = wxSpinCtrl:getValue(Spinner),
-      {FocusLog, StepsDone} = cauder:rollback_steps(Pid, Steps),
-      cauder_wx_statusbar:rollback_steps(StepsDone, Steps),
-      cauder_wx_system:focus_roll_log(FocusLog),
-      refresh()
-  end,
-  {noreply, State};
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), #wx_state{pid = Pid} = State) when Pid =/= undefined ->
+  Spinner = cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl),
+  Steps = wxSpinCtrl:getValue(Spinner),
+  ok = cauder:rollback_steps(Pid, Steps),
+  cauder_wx_statusbar:rollback_steps_start(),
+  {noreply, refresh(State, State#wx_state{task = rollback_steps})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Rollback_Spawn, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:rollback_spawn(false, none),
-      refresh();
+      cauder_wx_statusbar:rollback_spawn_fail(),
+      {noreply, State};
     {Pid, _} ->
-      {Success, FocusLog} = cauder:rollback_spawn(Pid),
-      cauder_wx_statusbar:rollback_spawn(Success, Pid),
-      cauder_wx_system:focus_roll_log(FocusLog),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:rollback_spawn(Pid),
+      cauder_wx_statusbar:rollback_spawn_start(Pid),
+      {noreply, refresh(State, State#wx_state{task = rollback_spawn})}
+  end;
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Rollback_Send, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:rollback_send(false, none),
-      refresh();
+      cauder_wx_statusbar:rollback_send_fail(),
+      {noreply, State};
     {Uid, _} ->
-      {Success, FocusLog} = cauder:rollback_send(Uid),
-      cauder_wx_statusbar:rollback_send(Success, Uid),
-      cauder_wx_system:focus_roll_log(FocusLog),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:rollback_send(Uid),
+      cauder_wx_statusbar:rollback_send_start(Uid),
+      {noreply, refresh(State, State#wx_state{task = rollback_send})}
+  end;
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Rollback_Receive, wxTextCtrl),
   case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
     % What if error?
     {error, _} ->
-      cauder_wx_statusbar:rollback_receive(false, none),
-      refresh();
+      cauder_wx_statusbar:rollback_receive_fail(),
+      {noreply, State};
     {Uid, _} ->
-      {Success, FocusLog} = cauder:rollback_receive(Uid),
-      cauder_wx_statusbar:rollback_receive(Success, Uid),
-      cauder_wx_system:focus_roll_log(FocusLog),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:rollback_receive(Uid),
+      cauder_wx_statusbar:rollback_receive_start(Uid),
+      {noreply, refresh(State, State#wx_state{task = rollback_receive})}
+  end;
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Rollback_Variable, wxTextCtrl),
   case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
     '' ->
-      cauder_wx_statusbar:rollback_variable(false, none),
-      refresh();
+      cauder_wx_statusbar:rollback_variable_fail(),
+      {noreply, State};
     Name ->
-      {Success, FocusLog} = cauder:rollback_variable(Name),
-      cauder_wx_statusbar:rollback_variable(Success, Name),
-      cauder_wx_system:focus_roll_log(FocusLog),
-      refresh()
-  end,
-  {noreply, State};
+      ok = cauder:rollback_variable(Name),
+      cauder_wx_statusbar:rollback_variable_start(Name),
+      {noreply, refresh(State, State#wx_state{task = rollback_variable})}
+  end;
 
 %%%=============================================================================
 
-handle_event(#wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList}, #wx_state{frame = Frame} = State) ->
-  Sys = cauder:get_system(),
-  Pid = cauder_wx_actions:selected_pid(),
-  {ok, #proc{env = Bs}} = orddict:find(Pid, Sys#sys.procs),
+handle_event(
+    #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList},
+    #wx_state{frame = Frame, system = #sys{procs = PDict}, pid = Pid} = State
+) when Pid =/= undefined ->
+  {ok, #proc{env = Bs}} = orddict:find(Pid, PDict),
   Nth = wxListCtrl:getItemData(BindingList, Index),
   {Key, Value} = lists:nth(Nth, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
-    {Key, NewValue} ->
-      cauder:set_binding(Pid, {Key, NewValue}),
-      refresh();
+    {Key, NewValue} -> ok = cauder:set_binding(Pid, {Key, NewValue});
     cancel -> ok
   end,
-  {noreply, State};
+  {noreply, refresh(State)};
 
 %%%=============================================================================
 
-handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command_text_updated}}, State) ->
-  refresh(),
-  {noreply, State};
+%%handle_event(#wx{id = ?ACTION_Automatic_Steps, event = #wxCommand{type = command_text_updated}}, State) ->
+%%  {noreply, refresh(State)};
 
 handle_event(#wx{event = #wxCommand{type = command_text_updated}}, State) -> {noreply, State};
 
@@ -494,15 +433,13 @@ handle_event(#wx{event = #wxStyledText{type = stc_updateui}}, #wx_state{position
 handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} = State) ->
   case cauder_wx_dialog:drop_files(Frame, Files) of
     {ok, File} ->
-      case stop_session() of
-        false ->
-          ok;
+      case stop_session(State) of
+        false -> ok;
         true -> open_file(File)
       end;
-    false ->
-      ok
+    false -> ok
   end,
-  {noreply, State};
+  {noreply, refresh(State)};
 
 %%%=============================================================================
 
@@ -553,6 +490,117 @@ handle_cast(Request, State) ->
   State :: state(),
   NewState :: state().
 
+handle_info({dbg, {finish, {load, File, Module}, Time}}, #wx_state{task = load} = State) ->
+  {ok, Src, _} = erl_prim_loader:get_file(File),
+
+  CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
+  cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
+
+  cauder_wx_menu:enable(?MENU_Run_Start, true), % TODO Create cauder_wx_menu:update/1
+  cauder_wx_statusbar:load_finish(Module, Time),
+
+  {noreply, refresh(State, State#wx_state{module = Module, task = undefined})};
+
+handle_info({dbg, {finish, start, Time}}, #wx_state{task = start} = State) ->
+  cauder_wx_menu:enable(?MENU_Run_Stop, true),
+  cauder_wx_statusbar:init_finish(Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+%%%=============================================================================
+
+handle_info({dbg, {finish, {step, Sem, Rule}, Time}}, #wx_state{task = step} = State) ->
+  cauder_wx_statusbar:step_finish(Sem, Rule, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {finish, {step_over, Sem, Steps}, Time}}, #wx_state{task = step_over} = State) ->
+  cauder_wx_statusbar:step_over_finish(Sem, Steps, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {finish, {step_multiple, Sem, Steps}, Time}}, #wx_state{task = step_multiple} = State) ->
+  cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+%%%=============================================================================
+
+handle_info({dbg, {finish, {replay_steps, Steps}, Time}}, #wx_state{task = replay_steps} = State) ->
+  cauder_wx_statusbar:replay_steps_finish(Steps, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {replay_spawn, Pid}, Time}}, #wx_state{task = replay_spawn} = State) ->
+  cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, replay_spawn, no_replay}}, #wx_state{task = replay_spawn} = State) ->
+  cauder_wx_statusbar:replay_spawn_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {replay_send, Uid}, Time}}, #wx_state{task = replay_send} = State) ->
+  cauder_wx_statusbar:replay_send_finish(Uid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, replay_send, no_replay}}, #wx_state{task = replay_send} = State) ->
+  cauder_wx_statusbar:replay_send_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {replay_receive, Uid}, Time}}, #wx_state{task = replay_receive} = State) ->
+  cauder_wx_statusbar:replay_receive_finish(Uid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, replay_receive, no_replay}}, #wx_state{task = replay_receive} = State) ->
+  cauder_wx_statusbar:replay_receive_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+%%%=============================================================================
+
+handle_info({dbg, {finish, {rollback_steps, Steps}, Time}}, #wx_state{task = rollback_steps} = State) ->
+  cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {rollback_spawn, Pid}, Time}}, #wx_state{task = rollback_spawn} = State) ->
+  cauder_wx_statusbar:rollback_spawn_finish(Pid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, rollback_spawn, no_rollback}}, #wx_state{task = rollback_spawn} = State) ->
+  cauder_wx_statusbar:rollback_spawn_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {rollback_send, Uid}, Time}}, #wx_state{task = rollback_send} = State) ->
+  cauder_wx_statusbar:rollback_send_finish(Uid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, rollback_send, no_rollback}}, #wx_state{task = rollback_send} = State) ->
+  cauder_wx_statusbar:rollback_send_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {rollback_receive, Uid}, Time}}, #wx_state{task = rollback_receive} = State) ->
+  cauder_wx_statusbar:rollback_receive_finish(Uid, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, rollback_receive, no_rollback}}, #wx_state{task = rollback_receive} = State) ->
+  cauder_wx_statusbar:rollback_receive_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, {rollback_variable, Name}, Time}}, #wx_state{task = rollback_variable} = State) ->
+  cauder_wx_statusbar:rollback_variable_finish(Name, Time),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info({dbg, {fail, rollback_variable, no_rollback}}, #wx_state{task = rollback_variable} = State) ->
+  cauder_wx_statusbar:rollback_variable_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+%%%=============================================================================
+
+% TODO Handle failed tasks when the user did not start the task.
+% i.e.: given {fail, Task1, _} and #wx_state{task = Task2} then Task1 != Task2
+
+
 handle_info(Info, State) ->
   io:format("Unhandled Info:~n~p~n", [Info]),
   {noreply, State}.
@@ -595,108 +643,123 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%--------------------------------------------------------------------
 %% @doc Loads the specified '.erl' source file
 
--spec open_file(File) -> Module when
-  File :: file:filename(),
-  Module :: module().
+-spec open_file(File) -> ok when
+  File :: file:filename().
 
 open_file(File) ->
-  {ok, Module} = cauder:load_file(File),
-
-  {ok, Src, _} = erl_prim_loader:get_file(File),
-  CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
-  cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
-
-  cauder_wx_menu:enable(?MENU_Run_Start, true),
-
-  cauder_wx_statusbar:update_text("Loaded file " ++ File),
-
-  Module.
+  ok = cauder:load_file(File),
+  cauder_wx_statusbar:load_start(filename:basename(File)).
 
 
 %%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session() -> Started when
-  Started :: boolean().
+-spec start_session(State) -> IsStarting when
+  State :: state(),
+  IsStarting :: boolean().
 
-start_session() ->
+start_session(#wx_state{module = Module}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
-  EntryPoints = cauder:get_entry_points(get(module)),
+  EntryPoints = cauder:get_entry_points(Module),
 
-  MFA =
+  Starting =
     case cauder_wx_dialog:start_session(Frame, EntryPoints) of
       {manual, {Mod, Fun, Args}} ->
         ok = cauder:init_system(Mod, Fun, Args),
-        {Mod, Fun, length(Args)};
+        true;
       {replay, Path} ->
-        {_, _, _} = cauder:init_system(Path);
+        ok = cauder:init_system(Path),
+        true;
       false -> false
     end,
 
-  case MFA of
-    false -> false;
-    {M, F, A} ->
-      put(line, 0),
-
-      refresh(),
-
+  if
+    Starting ->
       cauder_wx_menu:enable(?MENU_Run_Start, false),
-      cauder_wx_menu:enable(?MENU_Run_Stop, true),
+      cauder_wx_statusbar:init_start();
+    true -> ok
+  end,
 
-      % Update status bar message
-      cauder_wx_statusbar:update_text(io_lib:format("Started system with ~p:~p/~b fun application!", [M, F, A])),
+  Starting.
+
+
+%%--------------------------------------------------------------------
+%% @doc Stops the current debugging session.
+
+-spec stop_session(State) -> Stopped when
+  State :: state(),
+  Stopped :: boolean().
+
+stop_session(#wx_state{system = undefined}) ->
+  true;
+stop_session(#wx_state{frame = Frame} = State) ->
+  case cauder_wx_dialog:stop_session(Frame) of
+    false -> false;
+    true ->
+      ok = cauder:stop_system(),
+
+      refresh(State),
+
+      cauder_wx_menu:enable(?MENU_Run_Start, true),
+      cauder_wx_menu:enable(?MENU_Run_Stop, false),
+
+      cauder_wx_statusbar:stop_finish(),
 
       true
   end.
 
 
 %%--------------------------------------------------------------------
-%% @doc Stops the current debugging session.
+%% @doc Updates the UI to show changes in the state.
+%% Use this function when the state is not explicitly updated, otherwise use
+%% `refresh/2'.
+%%
+%% @see refresh/2
 
--spec stop_session() -> Stopped when
-  Stopped :: boolean().
+-spec refresh(OldState) -> State when
+  OldState :: state(),
+  State :: state().
 
-stop_session() ->
-  case cauder:get_system() of
-    undefined -> true; % Not running
-    _ ->
-      Frame = cauder_wx:find(?FRAME, wxFrame),
-      case cauder_wx_dialog:stop_session(Frame) of
-        false -> false;
-        true ->
-          ok = cauder:stop_system(),
-
-          refresh(),
-
-          cauder_wx_menu:enable(?MENU_Run_Start, true),
-          cauder_wx_menu:enable(?MENU_Run_Stop, false),
-
-          % Update status bar message
-          cauder_wx_statusbar:update_text("Stopped system!"),
-
-          true
-      end
-  end.
+refresh(State) -> refresh(State, State).
 
 
 %%--------------------------------------------------------------------
-%% @doc Updates the UI to show changes in the system information.
+%% @doc Updates the UI to show changes in the state.
+%% The first argument is the `OldState' without updating any value, and the
+%% second one is the `NewState' with the updated values.
+%%
+%% For example, if we wanted to update a field named `my_field' with the value
+%% `new_value', we would call this function like follows.
+%%
+%% ```refresh(State, State#wx_state{my_field = new_value})'''
+%%
+%% This allows to improve UI updates by skipping unchanged data.
+%%
+%% Also explicit updates to `system' and `pid' fields are not necessary as they
+%% are automatically updated by this function.
+%%
+%% @see refresh/2
 
--spec refresh() -> ok.
+-spec refresh(OldState, NewState) -> State when
+  OldState :: state(),
+  NewState :: state(),
+  State :: state().
 
-refresh() ->
-  System = cauder:get_system(), % TODO Save last system and compare with new system, then only update elements whose information changed
+refresh(OldState, NewState) ->
+  State0 = NewState#wx_state{system = cauder:get_system()},
 
-  cauder_wx_statusbar:update_process_count(System),
+  cauder_wx_actions:update_process(OldState, State0),
 
-  % First update actions so a process is selected
-  cauder_wx_actions:update(System),
-  cauder_wx_system:update(System),
+  State1 = State0#wx_state{pid = cauder_wx_actions:selected_pid()},
 
-  Pid = cauder_wx_actions:selected_pid(),
+  cauder_wx_statusbar:update_process_count(OldState#wx_state.system, State1#wx_state.system),
 
-  cauder_wx_code:update(System, Pid),
-  cauder_wx_process:update(System, Pid).
+  cauder_wx_code:update(OldState, State1),
+  cauder_wx_actions:update(OldState, State1),
+  cauder_wx_process:update(OldState, State1),
+  cauder_wx_system:update(OldState, State1),
+
+  State1.
 
 
 %%%=============================================================================

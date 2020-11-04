@@ -32,7 +32,7 @@
                    | {send, msg_id()}
                    | {'receive', msg_id()}.
 
--type process_dict() :: orddict:orddict(proc_id(), process()).
+-type process_dict() :: [{proc_id(), process()}, ...].
 -type proc_id() :: pos_integer().
 -type process() :: #proc{}.
 

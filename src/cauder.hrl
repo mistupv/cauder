@@ -42,7 +42,7 @@
   % Global mailbox
   mail = [] :: [cauder_types:message()],
   % Pool of processes
-  procs = [] :: cauder_types:process_dict(),
+  procs :: cauder_types:process_dict(),
   % System log
   logs = [] :: cauder_types:log_dict(),
   trace = [] :: [cauder_types:trace()],
@@ -108,10 +108,3 @@
   stack :: cauder_types:stack(),
   label = tau :: cauder_types:label()
 }).
-
-
-
--define(EVAL_MANUAL(Type, Args), {eval, {manual, Type, Args}}).
--define(EVAL_AUTOMATIC(Args), {eval, {automatic, Args}}).
--define(EVAL_REPLAY(Type, Args), {eval, {replay, Type, Args}}).
--define(EVAL_ROLLBACK(Type, Args), {eval, {rollback, Type, Args}}).

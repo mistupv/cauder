@@ -11,6 +11,7 @@
 
 %% API
 -export([start/0, start_link/0, stop/0]).
+-export([subscribe/0, unsubscribe/0]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
@@ -28,7 +29,9 @@
 -include("cauder.hrl").
 
 -record(state, {
-  system :: cauder_types:system() | undefined
+  subs = [] :: [pid()],
+  system :: cauder_types:system() | undefined,
+  task :: {atom(), pid()} | undefined
 }).
 
 -type state() :: #state{}.
@@ -71,47 +74,88 @@ stop() -> gen_server:stop(?SERVER).
 
 
 %%------------------------------------------------------------------------------
-%% @doc Loads the given file (module). Returns the name of the loaded module.
+%% @doc Subscribes the calling process to receive information about system
+%% changes.
 
--spec load_file(File) -> {ok, Module} when
-  File :: file:filename(),
-  Module :: module().
+-spec subscribe() -> ok.
 
-load_file(File) -> gen_server:call(?SERVER, {load, File}).
+subscribe() -> gen_server:call(?SERVER, {subscribe, self()}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Unsubscribes the calling process to receive information about system
+%% changes.
+
+-spec unsubscribe() -> ok.
+
+unsubscribe() -> gen_server:call(?SERVER, {unsubscribe, self()}).
+
+
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Loads the given file (module).
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_load/2
+
+-spec load_file(File) -> ok | busy when
+  File :: file:filename().
+
+load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Initializes the system in manual mode.
 %% The system starts with a call to the given function, from the given module,
 %% with the given arguments.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_start/2
 
--spec init_system(Module, Function, Arguments) -> ok when
+-spec init_system(Module, Function, Arguments) -> ok | busy when
   Module :: module(),
   Function :: atom(),
   Arguments :: cauder_types:af_args().
 
-init_system(Mod, Fun, Args) -> gen_server:call(?SERVER, {system, {init, {Mod, Fun, Args}}}).
+init_system(Mod, Fun, Args) -> gen_server:call(?SERVER, {user, {start, {Mod, Fun, Args}}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Initializes the system in replay mode.
 %% The system starts with a call to the function specified in the specified
 %% replay data.
-%% Returns a MFA tuple that corresponds to the initial function call.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_start/2
 
--spec init_system(LogPath) -> MFA when
-  LogPath :: file:filename(),
-  MFA :: mfa().
+-spec init_system(LogPath) -> ok | busy when
+  LogPath :: file:filename().
 
-init_system(Path) -> gen_server:call(?SERVER, {system, {init, Path}}).
+init_system(Path) -> gen_server:call(?SERVER, {user, {start, Path}}).
 
 
 %%------------------------------------------------------------------------------
-%% @doc Stops the system.
+%% @doc Stops the system and any running task in the server.
+%%
+%% This is a synchronous action.
+%%
+%% All the subscribers excluding the one who called this function (if a
+%% subscriber) will be notified.
 
 -spec stop_system() -> ok.
 
-stop_system() -> gen_server:call(?SERVER, {system, stop}).
+stop_system() -> gen_server:call(?SERVER, {user, stop}).
 
 
 %%%=============================================================================
@@ -119,6 +163,8 @@ stop_system() -> gen_server:call(?SERVER, {system, stop}).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation options for the given system.
+%%
+%% This is a synchronous action.
 %%
 %% @todo Remove argument
 
@@ -134,30 +180,37 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys) ++ cauder_semantics_bac
 
 %%------------------------------------------------------------------------------
 %% @doc Performs a step in the given process using the given semantics.
-%% Returns the rule applied.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_step/2
 
--spec step(Semantics, Pid) -> Rule when
+-spec step(Semantics, Pid) -> ok | busy when
   Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id(),
-  Rule :: cauder_types:rule().
+  Pid :: cauder_types:proc_id().
 
-step(Sem, Pid) -> gen_server:call(?SERVER, ?EVAL_MANUAL(step, {Sem, Pid})).
+step(Sem, Pid) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid}}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Steps over to the next line in the given process using the given
 %% semantics.
-%% Returns the number of steps performed, or `nomatch' if the evaluation reaches
-%% a receive expression that cannot evaluate.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_step_over/2
 %%
 %% @todo Currently not in use.
 
--spec step_over(Semantics, Pid) -> nomatch | StepsDone when
+-spec step_over(Semantics, Pid) -> ok | busy when
   Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id(),
-  StepsDone :: pos_integer().
+  Pid :: cauder_types:proc_id().
 
-step_over(Sem, Pid) -> gen_server:call(?SERVER, ?EVAL_MANUAL(step_over, {Sem, Pid})).
+step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}}).
 
 
 %%%=============================================================================
@@ -166,15 +219,18 @@ step_over(Sem, Pid) -> gen_server:call(?SERVER, ?EVAL_MANUAL(step_over, {Sem, Pi
 %%------------------------------------------------------------------------------
 %% @doc Performs the given number of steps, in any process, using the given
 %% semantics.
-%% Returns the number of steps that were actually performed.
-%% Note: `Steps >= StepsDone >= 0'.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_step_multiple/2
 
--spec step_multiple(Semantics, Steps) -> StepsDone when
+-spec step_multiple(Semantics, Steps) -> ok | busy when
   Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer(),
-  StepsDone :: non_neg_integer().
+  Steps :: pos_integer().
 
-step_multiple(Sem, Steps) -> gen_server:call(?SERVER, ?EVAL_AUTOMATIC({Sem, Steps})).
+step_multiple(Sem, Steps) -> gen_server:call(?SERVER, {user, {step_multiple, {Sem, Steps}}}).
 
 
 %%%=============================================================================
@@ -182,51 +238,63 @@ step_multiple(Sem, Steps) -> gen_server:call(?SERVER, ?EVAL_AUTOMATIC({Sem, Step
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the given number of steps in the given process.
-%% Returns the actual number of steps that were replayed.
-%% Note: `Steps >= StepsDone >= 0'.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_replay_steps/2
 
--spec replay_steps(Pid, Steps) -> StepsDone when
+-spec replay_steps(Pid, Steps) -> ok | busy when
   Pid :: cauder_types:proc_id(),
-  Steps :: pos_integer(),
-  StepsDone :: non_neg_integer().
+  Steps :: pos_integer().
 
-replay_steps(Pid, Steps) -> gen_server:call(?SERVER, ?EVAL_REPLAY(steps, {Pid, Steps})).
+replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid, Steps}}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the spawning of the process with the given pid.
-%% Returns `true' if the process was spawned successfully, or `false' if the
-%% process could not be spawned.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_replay_spawn/2
 
--spec replay_spawn(Pid) -> Success when
-  Pid :: cauder_types:proc_id(),
-  Success :: boolean().
+-spec replay_spawn(Pid) -> ok | busy when
+  Pid :: cauder_types:proc_id().
 
-replay_spawn(Pid) -> gen_server:call(?SERVER, ?EVAL_REPLAY(spawn, Pid)).
+replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the sending of the message with the given uid.
-%% Returns `true' if the message was sent successfully, or `false' if the
-%% message could not be sent.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_replay_send/2
 
--spec replay_send(Uid) -> Success when
-  Uid :: cauder_types:msg_id(),
-  Success :: boolean().
+-spec replay_send(Uid) -> ok | busy when
+  Uid :: cauder_types:msg_id().
 
-replay_send(Uid) -> gen_server:call(?SERVER, ?EVAL_REPLAY(send, Uid)).
+replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the reception of the message with the given uid.
-%% Returns `true' if the message was received successfully, or `false' if the
-%% message could not be received.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_replay_receive/2
 
--spec replay_receive(Uid) -> Success when
-  Uid :: cauder_types:msg_id(),
-  Success :: boolean().
+-spec replay_receive(Uid) -> ok | busy when
+  Uid :: cauder_types:msg_id().
 
-replay_receive(Uid) -> gen_server:call(?SERVER, ?EVAL_REPLAY(rec, Uid)).
+replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
 
 %%%=============================================================================
@@ -234,78 +302,78 @@ replay_receive(Uid) -> gen_server:call(?SERVER, ?EVAL_REPLAY(rec, Uid)).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the given number of steps in the given process.
-%% Returns `{FocusLog, StepsDone}' where `FocusLog' is a boolean value
-%% indicating whether the roll log should be focused or not, and `StepsDone' is
-%% the actual number of steps that were rolled back.
-%% Note: `Steps >= StepsDone >= 0'.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_rollback_steps/2
 
--spec rollback_steps(Pid, Steps) -> {FocusLog, StepsDone} when
+-spec rollback_steps(Pid, Steps) -> ok | busy when
   Pid :: cauder_types:proc_id(),
-  Steps :: pos_integer(),
-  FocusLog :: boolean(),
-  StepsDone :: non_neg_integer().
+  Steps :: pos_integer().
 
-rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(steps, {Pid, Steps})).
+rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {Pid, Steps}}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the spawning of the process with the given pid.
-%% Returns `{Success, FocusLog}' where `Success' indicates if the spawning of
-%% the process was successfully rolled back (`true'), or if the process was not
-%% found (`false'); and `FocusLog' is a boolean value indicating whether the
-%% roll log should be focused or not.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_rollback_spawn/2
 
--spec rollback_spawn(Pid) -> {Success, FocusLog} when
-  Pid :: cauder_types:proc_id(),
-  Success :: boolean(),
-  FocusLog :: boolean().
+-spec rollback_spawn(Pid) -> ok | busy when
+  Pid :: cauder_types:proc_id().
 
-rollback_spawn(Pid) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(spawn, Pid)).
+rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the sending of the message with the given uid.
-%% Returns `{Success, FocusLog}' where `Success' indicates if the sending of
-%% the message was successfully rolled back (`true'), or if the message was not
-%% found (`false'); and `FocusLog' is a boolean value indicating whether the
-%% roll log should be focused or not.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_rollback_send/2
 
--spec rollback_send(Uid) -> {Success, FocusLog} when
-  Uid :: cauder_types:msg_id(),
-  Success :: boolean(),
-  FocusLog :: boolean().
+-spec rollback_send(Uid) -> ok | busy when
+  Uid :: cauder_types:msg_id().
 
-rollback_send(Uid) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(send, Uid)).
+rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid.
-%% Returns `{Success, FocusLog}' where `Success' indicates if the reception of
-%% the message was successfully rolled back (`true'), or if the message was not
-%% found (`false'); and `FocusLog' is a boolean value indicating whether the
-%% roll log should be focused or not.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_rollback_receive/2
 
--spec rollback_receive(Uid) -> {Success, FocusLog} when
-  Uid :: cauder_types:msg_id(),
-  Success :: boolean(),
-  FocusLog :: boolean().
+-spec rollback_receive(Uid) -> ok | busy when
+  Uid :: cauder_types:msg_id().
 
-rollback_receive(Uid) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(rec, Uid)).
+rollback_receive(Uid) -> gen_server:call(?SERVER, {user, {rollback_receive, Uid}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the binding of the variable with the given name.
-%% Returns `{Success, FocusLog}' where `Success' indicates if the binding of
-%% the variable was successfully rolled back (`true'), or if the variable was
-%% not found (`false'); and `FocusLog' is a boolean value indicating whether the
-%% roll log should be focused or not.
+%%
+%% This is an asynchronous action: this functions returns the atom `ok' if the
+%% server accepted the task, or the atom `busy' if the server is currently
+%% executing a different task.
+%%
+%% @see task_rollback_variable/2
 
--spec rollback_variable(Name) -> {Success, FocusLog} when
-  Name :: atom(),
-  Success :: boolean(),
-  FocusLog :: boolean().
+-spec rollback_variable(Name) -> ok | busy when
+  Name :: atom().
 
-rollback_variable(Name) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(var, Name)).
+rollback_variable(Name) -> gen_server:call(?SERVER, {user, {rollback_variable, Name}}).
 
 
 %%%=============================================================================
@@ -313,30 +381,36 @@ rollback_variable(Name) -> gen_server:call(?SERVER, ?EVAL_ROLLBACK(var, Name)).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the possible entry points of the given module.
+%%
+%% This is a synchronous action.
 
 -spec get_entry_points(Module) -> MFAs when
   Module :: module(),
   MFAs :: [mfa()].
 
-get_entry_points(Module) -> gen_server:call(?SERVER, {get, {entry_points, Module}}).
+get_entry_points(Module) -> gen_server:call(?SERVER, {user, {get, {entry_points, Module}}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the system.
+%%
+%% This is a synchronous action.
 
 -spec get_system() -> System when
   System :: cauder_types:system() | undefined.
 
-get_system() -> gen_server:call(?SERVER, {get, system}).
+get_system() -> gen_server:call(?SERVER, {user, {get, system}}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the current working directory.
+%%
+%% This is a synchronous action.
 
 -spec get_path() -> Path when
   Path :: file:filename() | undefined.
 
-get_path() -> gen_server:call(?SERVER, {get, path}).
+get_path() -> gen_server:call(?SERVER, {user, {get, path}}).
 
 
 %%%=============================================================================
@@ -345,13 +419,15 @@ get_path() -> gen_server:call(?SERVER, {get, path}).
 %%------------------------------------------------------------------------------
 %% @doc Sets a new binding for the variable with the given name in the given
 %% process.
+%%
+%% This is a synchronous action.
 
 -spec set_binding(Pid, {Key, Value}) -> ok when
   Pid :: cauder_types:proc_id(),
   Key :: atom(),
   Value :: term().
 
-set_binding(Pid, {Key, Value}) -> gen_server:call(?SERVER, {set, {binding, Pid}, {Key, Value}}).
+set_binding(Pid, {Key, Value}) -> gen_server:call(?SERVER, {user, {set, {binding, Pid}, {Key, Value}}}).
 
 
 %%%=============================================================================
@@ -367,186 +443,77 @@ set_binding(Pid, {Key, Value}) -> gen_server:call(?SERVER, {set, {binding, Pid},
   State :: state().
 
 init([]) ->
-  ?APP_DB = ets:new(?APP_DB, [set, private, named_table]),
+  ?APP_DB = ets:new(?APP_DB, [set, public, named_table]), % TODO Can this be not public?
   {ok, #state{}}.
 
 
 %%------------------------------------------------------------------------------
 %% @private
 
--spec handle_call(Request, From, State) -> {reply, Reply, NewState} | {stop, Reply, NewState} when
+-spec handle_call(Request, From, State) -> {reply, Reply, NewState} when
   Request :: term(),
   From :: {pid(), term()},
   State :: state(),
-  Reply :: term(),
+  Reply :: ok | busy,
   NewState :: state().
 
-handle_call({load, File}, _From, State) ->
-  put(path, filename:absname(filename:dirname(File))),
-  {ok, Module} = cauder_load:file(File),
-  {reply, {ok, Module}, State};
 
-handle_call({system, {init, {M, F, As}}}, _From, State) ->
-  Pid = cauder_utils:fresh_pid(),
-  Proc = #proc{
-    pid   = Pid,
-    exprs = [cauder_syntax:remote_call(M, F, As)],
-    spf   = {M, F, length(As)}
-  },
-  System = #sys{
-    procs = orddict:from_list([{Pid, Proc}])
-  },
+handle_call({subscribe, Sub}, _From, #state{subs = Subs} = State) ->
+  {reply, ok, State#state{subs = [Sub | Subs]}};
 
-  put(last_pid, Pid),
-
-  {reply, ok, State#state{system = System}};
-
-handle_call({system, {init, LogPath}}, _From, State) ->
-  #replay{log_path = LogPath, call = {M, F, As}, main_pid = Pid} = cauder_utils:load_replay_data(LogPath),
-  Proc = #proc{
-    pid   = Pid,
-    exprs = [cauder_syntax:remote_call(M, F, As)],
-    spf   = {M, F, length(As)}
-  },
-  System = #sys{
-    procs = orddict:from_list([{Pid, Proc}]),
-    logs  = load_logs(LogPath)
-  },
-
-  put(last_pid, Pid),
-
-  {reply, {M, F, length(As)}, State#state{system = System}};
-
-handle_call({system, stop}, _From, State) ->
-  erase(last_pid),
-  erase(last_uid),
-  erase(last_var),
-  {reply, ok, State#state{system = undefined}};
+handle_call({unsubscribe, Sub}, _From, #state{subs = Subs} = State) ->
+  {reply, ok, State#state{subs = lists:delete(Sub, Subs)}};
 
 %%%=============================================================================
 
-handle_call(?EVAL_MANUAL(step, {Sem, Pid}), _From, #state{system = Sys0} = State) ->
-  Opts = cauder_utils:filter_options(eval_opts(Sys0), Pid),
-  {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
-  Sys1 = Sem:step(Sys0, Pid),
-  {reply, Rule, State#state{system = Sys1}};
+handle_call({task, {finish, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
+  % Check finished task matches running task
+  Task =
+    if
+      is_tuple(Value) -> element(1, Value);
+      true -> Value
+    end,
+  lists:foreach(fun(Sub) -> Sub ! {dbg, {finish, Value, Time}} end, Subs),
+  {reply, ok, State#state{system = NewSystem, task = undefined}};
 
-handle_call(?EVAL_MANUAL(step_over, {Sem, Pid}), _From, #state{system = Sys0} = State) ->
-  {#proc{exprs = Es}, _} = orddict:take(Pid, Sys0#sys.procs),
-  case step_over(Sem, Sys0, Pid, Es) of
-    {Sys1, Steps} ->
-      {reply, Steps, State#state{system = Sys1}};
-    nomatch ->
-      {reply, nomatch, State}
-  end;
-
-%%%=============================================================================
-
-handle_call(?EVAL_AUTOMATIC({Sem, Steps}), _From, #state{system = Sys0} = State) ->
-  {Sys1, StepsDone} = step_multiple(Sem, Sys0, Steps, 0),
-  {reply, StepsDone, State#state{system = Sys1}};
+handle_call({task, {fail, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
+  lists:foreach(fun(Sub) -> Sub ! {dbg, {fail, Task, Reason}} end, Subs),
+  {reply, ok, State#state{task = undefined}};
 
 %%%=============================================================================
 
-handle_call(?EVAL_REPLAY(steps, {Pid, Steps}), _From, #state{system = Sys0} = State) ->
-  {Sys1, StepsDone} = replay_steps(Sys0, Pid, Steps, 0),
-  {reply, StepsDone, State#state{system = Sys1}};
-
-handle_call(?EVAL_REPLAY(spawn, Pid), _From, #state{system = Sys0} = State) ->
-  case cauder_replay:can_replay_spawn(Sys0, Pid) of
-    false ->
-      {reply, false, State};
-    true ->
-      Sys1 = cauder_replay:replay_spawn(Sys0, Pid),
-      {reply, true, State#state{system = Sys1}}
-  end;
-
-handle_call(?EVAL_REPLAY(send, Uid), _From, #state{system = Sys0} = State) ->
-  case cauder_replay:can_replay_send(Sys0, Uid) of
-    false ->
-      {reply, false, State};
-    true ->
-      Sys1 = cauder_replay:replay_send(Sys0, Uid),
-      {reply, true, State#state{system = Sys1}}
-  end;
-
-handle_call(?EVAL_REPLAY(rec, Uid), _From, #state{system = Sys0} = State) ->
-  case cauder_replay:can_replay_receive(Sys0, Uid) of
-    false ->
-      {reply, false, State};
-    true ->
-      Sys1 = cauder_replay:replay_receive(Sys0, Uid),
-      {reply, true, State#state{system = Sys1}}
-  end;
-
-%%%=============================================================================
-
-handle_call(?EVAL_ROLLBACK(steps, {Pid, Steps}), _From, #state{system = Sys0} = State) ->
-  Sys1 = cauder_utils:clear_log(Sys0),
-  {Sys2, StepsDone} = rollback_steps(Sys1, Pid, Steps, 0),
-  FocusLog = cauder_utils:must_focus_log(Sys2),
-  {reply, {FocusLog, StepsDone}, State#state{system = Sys2}};
-
-handle_call(?EVAL_ROLLBACK(spawn, Pid), _From, #state{system = Sys0} = State) ->
-  case cauder_rollback:can_rollback_spawn(Sys0, Pid) of
-    false ->
-      {reply, {false, false}, State};
-    true ->
-      Sys1 = cauder_utils:clear_log(Sys0),
-      Sys2 = cauder_rollback:rollback_spawn(Sys1, Pid),
-      FocusLog = cauder_utils:must_focus_log(Sys2),
-      {reply, {true, FocusLog}, State#state{system = Sys2}}
-  end;
-
-handle_call(?EVAL_ROLLBACK(send, Uid), _From, #state{system = Sys0} = State) ->
-  case cauder_rollback:can_rollback_send(Sys0, Uid) of
-    false ->
-      {reply, {false, false}, State};
-    true ->
-      Sys1 = cauder_utils:clear_log(Sys0),
-      Sys2 = cauder_rollback:rollback_send(Sys1, Uid),
-      FocusLog = cauder_utils:must_focus_log(Sys2),
-      {reply, {true, FocusLog}, State#state{system = Sys2}}
-  end;
-
-handle_call(?EVAL_ROLLBACK(rec, Uid), _From, #state{system = Sys0} = State) ->
-  case cauder_rollback:can_rollback_receive(Sys0, Uid) of
-    false ->
-      {reply, {false, false}, State};
-    true ->
-      Sys1 = cauder_utils:clear_log(Sys0),
-      Sys2 = cauder_rollback:rollback_receive(Sys1, Uid),
-      FocusLog = cauder_utils:must_focus_log(Sys2),
-      {reply, {true, FocusLog}, State#state{system = Sys2}}
-  end;
-
-handle_call(?EVAL_ROLLBACK(var, Name), _From, #state{system = Sys0} = State) ->
-  case cauder_rollback:can_rollback_variable(Sys0, Name) of
-    false ->
-      {reply, {false, false}, State};
-    true ->
-      Sys1 = cauder_utils:clear_log(Sys0),
-      Sys2 = cauder_rollback:rollback_variable(Sys1, Name),
-      FocusLog = cauder_utils:must_focus_log(Sys2),
-      {reply, {true, FocusLog}, State#state{system = Sys2}}
-  end;
-
-%%%=============================================================================
-
-handle_call({get, {entry_points, Module}}, _From, State) ->
+handle_call({user, {get, {entry_points, Module}}}, _From, State) ->
   Defs = ets:match_object(?APP_DB, {{Module, '_', '_', '_'}, '_'}),
   SortedDefs = lists:sort(fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end, Defs),
   % TODO Only allow to start system from an exported function?
   EntryPoints = lists:map(fun({{M, F, A, _}, _}) -> {M, F, A} end, SortedDefs),
   {reply, EntryPoints, State};
 
-handle_call({get, system}, _From, State) -> {reply, State#state.system, State};
+handle_call({user, {get, system}}, _From, State) -> {reply, State#state.system, State};
 
-handle_call({get, path}, _From, State)   -> {reply, get(path), State};
+handle_call({user, {get, path}}, _From, State)   -> {reply, ets:lookup_element(?APP_DB, path, 2), State};
 
 %%%=============================================================================
 
-handle_call({set, {binding, Pid}, {Key, NewValue}}, _From, #state{system = Sys0} = State) ->
+handle_call({user, stop}, {FromPid, _}, #state{subs = Subs} = State) ->
+  case State#state.task of
+    {_Task, Pid} -> exit(Pid, kill);
+    undefined -> ok
+  end,
+  ets:delete(?APP_DB, last_pid),
+  ets:delete(?APP_DB, last_uid),
+  ets:delete(?APP_DB, last_var),
+  [Sub ! {dbg, stop} || Sub <- Subs, Sub =/= FromPid], % TODO Add dialog when UI receives this message
+  {reply, ok, State#state{system = undefined, task = undefined}};
+
+%%%=============================================================================
+
+handle_call({user, _}, _From, #state{task = {_, _}} = State) ->
+  {reply, busy, State};
+
+%%%=============================================================================
+
+handle_call({user, {set, {binding, Pid}, {Key, NewValue}}}, _From, #state{system = Sys0} = State) ->
   PDict0 = Sys0#sys.procs,
   {ok, P0} = orddict:find(Pid, PDict0),
   Bs0 = P0#proc.env,
@@ -557,6 +524,32 @@ handle_call({set, {binding, Pid}, {Key, NewValue}}, _From, #state{system = Sys0}
   Sys1 = Sys0#sys{procs = PDict1},
 
   {reply, ok, State#state{system = Sys1}};
+
+%%%=============================================================================
+
+handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
+  % IMPORTANT: Given a task 'example', the name of the task function must be
+  % 'task_example' and its arity must be 2, where the first argument are the
+  % arguments passed by the user and the second is the current system.
+  Fun =
+    case Task of
+      load -> fun task_load/2;
+      start -> fun task_start/2;
+      step -> fun task_step/2;
+      step_over -> fun task_step_over/2;
+      step_multiple -> fun task_step_multiple/2;
+      replay_steps -> fun task_replay_steps/2;
+      replay_spawn -> fun task_replay_spawn/2;
+      replay_send -> fun task_replay_send/2;
+      replay_receive -> fun task_replay_receive/2;
+      rollback_steps -> fun task_rollback_steps/2;
+      rollback_spawn -> fun task_rollback_spawn/2;
+      rollback_send -> fun task_rollback_send/2;
+      rollback_receive -> fun task_rollback_receive/2;
+      rollback_variable -> fun task_rollback_variable/2
+    end,
+  Pid = run_task(Fun, Args, System),
+  {reply, ok, State#state{task = {Task, Pid}}};
 
 %%%=============================================================================
 
@@ -620,84 +613,339 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%=============================================================================
 
 
-%%------------------------------------------------------------------------------
-%% @doc Loads the logs for all the available processes.
+-spec run_task(Function, Arguments, System) -> TaskPid when
+  Function :: function(),
+  Arguments :: term(),
+  System :: cauder_types:system(),
+  TaskPid :: pid().
 
--spec load_logs(LogPath) -> LogDict when
-  LogPath :: file:filename(),
-  LogDict :: cauder_types:log_dict().
-
-load_logs(LogPath) ->
-  {ok, Filenames} = file:list_dir(LogPath),
-  orddict:from_list(
-    lists:filtermap(
-      fun(Filename) ->
-        case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
-          {match, [StrPid]} ->
-            Pid = list_to_integer(StrPid),
-            Log = load_log(Pid, LogPath),
-            {true, {Pid, Log}};
-          nomatch -> false
+run_task(Fun, Args, System) when is_function(Fun, 2) ->
+  spawn(
+    fun
+      () ->
+        try Fun(Args, System) of
+          {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
+        catch
+          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
         end
-      end,
-      Filenames
-    )
+    end
   ).
 
 
-%%------------------------------------------------------------------------------
-%% @doc Loads the log of the given process.
+%%%=============================================================================
 
--spec load_log(Pid, LogPath) -> Log when
-  Pid :: cauder_types:proc_id(),
+
+-spec task_load(File, System) -> {{load, File, Module}, Time, NewSystem} when
+  File :: file:filename(),
+  System :: cauder_types:system(),
+  Module :: module(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_load(File, System) ->
+  {Time, {ok, Module}} = timer:tc(cauder_load, file, [File]),
+  ets:insert(?APP_DB, {path, filename:absname(filename:dirname(File))}),
+
+  {{load, File, Module}, Time, System}.
+
+
+-spec task_start({Module, Function, Arguments}, System) -> {start, Time, NewSystem} when
+  Module :: module(),
+  Function :: atom(),
+  Arguments :: [cauder_types:af_literal()],
+  System :: undefined, % Since we are starting the system, there is no current system
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system()
+;               (LogPath, System) -> {start, Time, NewSystem} when
   LogPath :: file:filename(),
-  Log :: cauder_types:log().
+  System :: undefined, % Since we are starting the system, there is no current system
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
 
-load_log(Pid, LogPath) ->
-  File = filename:join(LogPath, "trace_" ++ integer_to_list(Pid) ++ ".log"),
-  {ok, FileHandler} = file:open(File, [read]),
-  Log = read_log(FileHandler, Pid, []),
-  file:close(FileHandler),
-  Log.
+task_start({M, F, As}, undefined) ->
+  {Time, System} =
+    timer:tc(
+      fun() ->
+        Pid = cauder_utils:fresh_pid(),
+        Proc = #proc{
+          pid   = Pid,
+          exprs = [cauder_syntax:remote_call(M, F, As)],
+          spf   = {M, F, length(As)}
+        },
+        #sys{
+          procs = orddict:from_list([{Pid, Proc}])
+        }
+      end
+    ),
+
+  {start, Time, System};
+
+task_start(LogPath, undefined) ->
+  {Time, System} =
+    timer:tc(
+      fun() ->
+        #replay{log_path = LogPath, call = {M, F, As}, main_pid = Pid} = cauder_utils:load_replay_data(LogPath),
+        Proc = #proc{
+          pid   = Pid,
+          exprs = [cauder_syntax:remote_call(M, F, As)],
+          spf   = {M, F, length(As)}
+        },
+        #sys{
+          procs = orddict:from_list([{Pid, Proc}]),
+          logs  = load_logs(LogPath)
+        }
+      end
+    ),
+
+  {start, Time, System}.
 
 
-%%------------------------------------------------------------------------------
-%% @doc Reads and parses the log from the given `IoDevice'.
+%%%=============================================================================
 
--spec read_log(IoDevice, Pid, Log1) -> Log2 when
-  IoDevice :: file:io_device(),
+
+-spec task_step({Semantics, Pid}, System) -> {{step, Semantics, Rule}, Time, NewSystem} when
+  Semantics :: cauder_types:semantics(),
   Pid :: cauder_types:proc_id(),
-  Log1 :: cauder_types:log(),
-  Log2 :: cauder_types:log().
+  System :: cauder_types:system(),
+  Rule :: cauder_types:rule(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
 
-read_log(FileHandler, Pid, Data) ->
-  case file:read_line(FileHandler) of
-    eof -> lists:reverse(Data);
-    {ok, Line} ->
-      Entry = parse_log_entry(string:chomp(Line), Pid),
-      read_log(FileHandler, Pid, [Entry | Data])
-  end.
+task_step({Sem, Pid}, Sys0) ->
+  {Time, {Rule, Sys1}} =
+    timer:tc(
+      fun() ->
+        Opts = cauder_utils:filter_options(eval_opts(Sys0), Pid),
+        {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
+        Sys1 = Sem:step(Sys0, Pid),
+        {Rule, Sys1}
+      end
+    ),
+
+  {{step, Sem, Rule}, Time, Sys1}.
 
 
-%%------------------------------------------------------------------------------
-%% @doc Parses a string as a log entry and return it.
-
--spec parse_log_entry(String, Pid) -> LogEntry when
-  String :: string(),
+-spec task_step_over({Semantics, Pid}, System) -> {{step_over, Semantics, StepsDone}, Time, NewSystem} when
+  Semantics :: cauder_types:semantics(),
   Pid :: cauder_types:proc_id(),
-  LogEntry :: cauder_types:log_entry().
+  System :: cauder_types:system(),
+  StepsDone :: non_neg_integer(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
 
-parse_log_entry(String, Pid) ->
-  case erl_scan:string(String ++ ".") of
-    {ok, Tokens, _} ->
-      case erl_parse:parse_exprs(Tokens) of
-        {ok, Exprs} ->
-          [{value, _, {Pid, Action, Id}}] = cauder_syntax:expr_list(Exprs),
-          {Action, Id};
-        _Err -> error({parse_error, String, Tokens})
-      end;
-    _Err -> error({parse_error, String})
-  end.
+task_step_over({Sem, Pid}, Sys0) ->
+  {Time, {Sys1, StepsDone}} =
+    timer:tc(
+      fun() ->
+        {#proc{exprs = Es}, _} = orddict:take(Pid, Sys0#sys.procs),
+        step_over(Sem, Sys0, Pid, Es)
+      end
+    ),
+
+  {{step_over, Sem, StepsDone}, Time, Sys1}.
+
+
+-spec task_step_multiple({Semantics, Steps}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
+  Semantics :: cauder_types:semantics(),
+  Steps :: non_neg_integer(),
+  System :: cauder_types:system(),
+  StepsDone :: non_neg_integer(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_step_multiple({Sem, Steps}, Sys0) ->
+  {Time, {Sys1, StepsDone}} =
+    timer:tc(
+      fun() ->
+        step_multiple(Sem, Sys0, Steps, 0)
+      end
+    ),
+
+  {{step_multiple, Sem, {StepsDone, Steps}}, Time, Sys1}.
+
+
+%%%=============================================================================
+
+
+-spec task_replay_steps({Pid, Steps}, System) -> {{replay_steps, {StepsDone, Steps}}, Time, NewSystem} when
+  Pid :: cauder_types:proc_id(),
+  Steps :: non_neg_integer(),
+  System :: cauder_types:system(),
+  StepsDone :: non_neg_integer(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_replay_steps({Pid, Steps}, Sys0) ->
+  {Time, {Sys1, StepsDone}} =
+    timer:tc(
+      fun() ->
+        replay_steps(Sys0, Pid, Steps, 0)
+      end
+    ),
+
+  {{replay_steps, {StepsDone, Steps}}, Time, Sys1}.
+
+
+-spec task_replay_spawn(Pid, System) -> {{replay_spawn, Pid}, Time, NewSystem} when
+  Pid :: cauder_types:proc_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_replay_spawn(Pid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_replay:can_replay_spawn(Sys0, Pid) of
+          false -> error(no_replay);
+          true -> cauder_replay:replay_spawn(Sys0, Pid)
+        end
+      end
+    ),
+
+  {{replay_spawn, Pid}, Time, Sys1}.
+
+
+-spec task_replay_send(Uid, System) -> {{replay_send, Uid}, Time, NewSystem} when
+  Uid :: cauder_types:msg_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_replay_send(Uid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_replay:can_replay_send(Sys0, Uid) of
+          false -> error(no_replay);
+          true -> cauder_replay:replay_send(Sys0, Uid)
+        end
+      end
+    ),
+
+  {{replay_send, Uid}, Time, Sys1}.
+
+
+-spec task_replay_receive(Uid, System) -> {{replay_receive, Uid}, Time, NewSystem} when
+  Uid :: cauder_types:msg_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_replay_receive(Uid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_replay:can_replay_receive(Sys0, Uid) of
+          false -> error(no_replay);
+          true -> cauder_replay:replay_receive(Sys0, Uid)
+        end
+      end
+    ),
+
+  {{replay_receive, Uid}, Time, Sys1}.
+
+
+%%%=============================================================================
+
+
+-spec task_rollback_steps({Pid, Steps}, System) -> {{rollback_steps, {StepsDone, Steps}}, Time, NewSystem} when
+  Pid :: cauder_types:proc_id(),
+  Steps :: non_neg_integer(),
+  System :: cauder_types:system(),
+  StepsDone :: non_neg_integer(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_rollback_steps({Pid, Steps}, Sys0) ->
+  {Time, {Sys1, StepsDone}} =
+    timer:tc(
+      fun() ->
+        rollback_steps(Sys0, Pid, Steps, 0)
+      end
+    ),
+
+  {{rollback_steps, {StepsDone, Steps}}, Time, Sys1}.
+
+
+-spec task_rollback_spawn(Pid, System) -> {{rollback_spawn, Pid}, Time, NewSystem} when
+  Pid :: cauder_types:proc_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_rollback_spawn(Pid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_rollback:can_rollback_spawn(Sys0, Pid) of
+          false -> error(no_rollback);
+          true -> cauder_rollback:rollback_spawn(Sys0, Pid)
+        end
+      end
+    ),
+
+  {{rollback_spawn, Pid}, Time, Sys1}.
+
+
+-spec task_rollback_send(Uid, System) -> {{rollback_send, Uid}, Time, NewSystem} when
+  Uid :: cauder_types:msg_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_rollback_send(Uid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_rollback:can_rollback_send(Sys0, Uid) of
+          false -> error(no_rollback);
+          true -> cauder_rollback:rollback_send(Sys0, Uid)
+        end
+      end
+    ),
+
+  {{rollback_send, Uid}, Time, Sys1}.
+
+
+-spec task_rollback_receive(Uid, System) -> {{rollback_receive, Uid}, Time, NewSystem} when
+  Uid :: cauder_types:msg_id(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_rollback_receive(Uid, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_rollback:can_rollback_receive(Sys0, Uid) of
+          false -> error(no_rollback);
+          true -> cauder_rollback:rollback_receive(Sys0, Uid)
+        end
+      end
+    ),
+
+  {{rollback_receive, Uid}, Time, Sys1}.
+
+
+-spec task_rollback_variable(Name, System) -> {{rollback_variable, Name}, Time, NewSystem} when
+  Name :: atom(),
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_rollback_variable(Name, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        case cauder_rollback:can_rollback_variable(Sys0, Name) of
+          false -> error(no_rollback);
+          true -> cauder_rollback:rollback_variable(Sys0, Name)
+        end
+      end
+    ),
+
+  {{rollback_variable, Name}, Time, Sys1}.
 
 
 %%%=============================================================================
@@ -782,4 +1030,87 @@ rollback_steps(Sys0, Pid, Steps, StepsDone) ->
     true ->
       Sys1 = cauder_rollback:rollback_step(Sys0, Pid),
       rollback_steps(Sys1, Pid, Steps, StepsDone + 1)
+  end.
+
+
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Loads the logs for all the available processes.
+
+-spec load_logs(LogPath) -> LogDict when
+  LogPath :: file:filename(),
+  LogDict :: cauder_types:log_dict().
+
+load_logs(LogPath) ->
+  {ok, Filenames} = file:list_dir(LogPath),
+  orddict:from_list(
+    lists:filtermap(
+      fun(Filename) ->
+        case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
+          {match, [StrPid]} ->
+            Pid = list_to_integer(StrPid),
+            Log = load_log(Pid, LogPath),
+            {true, {Pid, Log}};
+          nomatch -> false
+        end
+      end,
+      Filenames
+    )
+  ).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Loads the log of the given process.
+
+-spec load_log(Pid, LogPath) -> Log when
+  Pid :: cauder_types:proc_id(),
+  LogPath :: file:filename(),
+  Log :: cauder_types:log().
+
+load_log(Pid, LogPath) ->
+  File = filename:join(LogPath, "trace_" ++ integer_to_list(Pid) ++ ".log"),
+  {ok, FileHandler} = file:open(File, [read]),
+  Log = read_log(FileHandler, Pid, []),
+  file:close(FileHandler),
+  Log.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Reads and parses the log from the given `IoDevice'.
+
+-spec read_log(IoDevice, Pid, Log1) -> Log2 when
+  IoDevice :: file:io_device(),
+  Pid :: cauder_types:proc_id(),
+  Log1 :: cauder_types:log(),
+  Log2 :: cauder_types:log().
+
+read_log(FileHandler, Pid, Data) ->
+  case file:read_line(FileHandler) of
+    eof -> lists:reverse(Data);
+    {ok, Line} ->
+      Entry = parse_log_entry(string:chomp(Line), Pid),
+      read_log(FileHandler, Pid, [Entry | Data])
+  end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Parses a string as a log entry and return it.
+
+-spec parse_log_entry(String, Pid) -> LogEntry when
+  String :: string(),
+  Pid :: cauder_types:proc_id(),
+  LogEntry :: cauder_types:log_entry().
+
+parse_log_entry(String, Pid) ->
+  case erl_scan:string(String ++ ".") of
+    {ok, Tokens, _} ->
+      case erl_parse:parse_exprs(Tokens) of
+        {ok, Exprs} ->
+          [{value, _, {Pid, Action, Id}}] = cauder_syntax:expr_list(Exprs),
+          {Action, Id};
+        _Err -> error({parse_error, String, Tokens})
+      end;
+    _Err -> error({parse_error, String})
   end.

@@ -18,6 +18,7 @@
 -export([gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
 -export([load_replay_data/1]).
 -export([current_line/1, is_dead/1]).
+-export([is_conc_item/1]).
 
 -include("cauder.hrl").
 
@@ -40,7 +41,8 @@ fundef_lookup({M, F, A}) ->
   case ets:match_object(?APP_DB, {{M, F, A, '_'}, '_'}) of
     [{{M, F, A, Exported}, Cs}] -> {Exported, Cs};
     [] ->
-      File = filename:join(get(path), atom_to_list(M) ++ ".erl"),
+      Path = ets:lookup_element(?APP_DB, path, 2),
+      File = filename:join(Path, atom_to_list(M) ++ ".erl"),
       case filelib:is_regular(File) of
         true ->
           {ok, M} = cauder_load:file(File),
@@ -321,14 +323,7 @@ has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
 -spec fresh_pid() -> Pid when
   Pid :: cauder_types:proc_id().
 
-fresh_pid() ->
-  NewPid =
-    case get(last_pid) of
-      undefined -> 1;
-      OldPid -> OldPid + 1
-    end,
-  put(last_pid, NewPid),
-  NewPid.
+fresh_pid() -> ets:update_counter(?APP_DB, last_pid, 1, {last_pid, -1}).
 
 
 %%------------------------------------------------------------------------------
@@ -337,14 +332,7 @@ fresh_pid() ->
 -spec fresh_uid() -> Uid when
   Uid :: cauder_types:msg_id().
 
-fresh_uid() ->
-  NewUid =
-    case get(last_uid) of
-      undefined -> 0;
-      OldUid -> OldUid + 1
-    end,
-  put(last_uid, NewUid),
-  NewUid.
+fresh_uid() -> ets:update_counter(?APP_DB, last_uid, 1, {last_uid, -1}).
 
 
 %%------------------------------------------------------------------------------
@@ -356,14 +344,7 @@ fresh_uid() ->
 -spec fresh_variable_number() -> Number when
   Number :: non_neg_integer().
 
-fresh_variable_number() ->
-  NewVar =
-    case get(last_var) of
-      undefined -> 0;
-      OldVar -> OldVar + 1
-    end,
-  put(last_var, NewVar),
-  NewVar.
+fresh_variable_number() -> ets:update_counter(?APP_DB, last_var, 1, {last_var, -1}).
 
 
 %%------------------------------------------------------------------------------
@@ -558,3 +539,14 @@ current_line(#proc{exprs = [E | _]}) -> element(2, E).
 
 is_dead(#proc{exprs = [{value, _, _}], stack = []}) -> true;
 is_dead(#proc{})                                    -> false.
+
+
+-spec is_conc_item(HistoryEntry) -> IsConcurrent when
+  HistoryEntry :: cauder_types:history_entry(),
+  IsConcurrent :: boolean().
+
+is_conc_item({tau, _Bs, _Es, _Stk})         -> false;
+is_conc_item({self, _Bs, _Es, _Stk})        -> false;
+is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
+is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
+is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true.

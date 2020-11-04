@@ -67,15 +67,15 @@ create(Parent) ->
 %% @doc Updates the <i>process info</i> panel according to the given system and
 %% process.
 
--spec update(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update(System, Pid) ->
-  update_bindings(System, Pid),
-  update_stack(System, Pid),
-  update_log(System, Pid),
-  update_history(System, Pid).
+update(OldState, NewState) ->
+  update_bindings(OldState, NewState),
+  update_stack(OldState, NewState),
+  update_log(OldState, NewState),
+  update_history(OldState, NewState).
 
 
 %%%=============================================================================
@@ -115,14 +115,16 @@ create_bindings(Parent) ->
   Win.
 
 
--spec update_bindings(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_bindings(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_bindings(System, Pid) ->
+update_bindings(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+update_bindings(_, #wx_state{system = System, pid = Pid}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Bindings),
+  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Bindings), % TODO Move to state
 
   show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), Show),
 
@@ -136,7 +138,7 @@ update_bindings(System, Pid) ->
         undefined -> ok;
         #sys{procs = PDict} ->
           case Pid of
-            none -> ok;
+            undefined -> ok;
             _ ->
               {ok, #proc{env = Bs, exprs = Es}} = orddict:find(Pid, PDict),
               Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -187,14 +189,17 @@ create_stack(Parent) ->
   Win.
 
 
--spec update_stack(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_stack(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_stack(System, Pid) ->
+update_stack(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+
+update_stack(_, #wx_state{system = System, pid = Pid}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Stack),
+  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Stack), % TODO Move to state
 
   show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), Show),
 
@@ -208,7 +213,7 @@ update_stack(System, Pid) ->
         undefined -> ok;
         #sys{procs = PDict} ->
           case Pid of
-            none -> ok;
+            undefined -> ok;
             _ ->
               {ok, #proc{stack = Stk}} = orddict:find(Pid, PDict),
               Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
@@ -241,14 +246,16 @@ create_log(Parent) ->
   Win.
 
 
--spec update_log(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_log(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_log(System, Pid) ->
+update_log(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+update_log(_, #wx_state{system = System, pid = Pid}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Log),
+  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Log), % TODO Move to state
 
   show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), Show),
 
@@ -262,7 +269,7 @@ update_log(System, Pid) ->
         undefined -> ok;
         #sys{logs = Logs} ->
           case Pid of
-            none -> ok;
+            undefined -> ok;
             _ ->
               case orddict:find(Pid, Logs) of
                 error -> ok;
@@ -298,14 +305,16 @@ create_history(Parent) ->
   Win.
 
 
--spec update_history(System, Pid) -> ok when
-  System :: cauder_types:system() | undefined,
-  Pid :: cauder_types:proc_id() | none.
+-spec update_history(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_history(System, Pid) ->
+update_history(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+  ok;
+update_history(_, #wx_state{system = System, pid = Pid}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_History),
+  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_History), % TODO Move to state
 
   show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), Show),
 
@@ -319,14 +328,14 @@ update_history(System, Pid) ->
         undefined -> ok;
         #sys{procs = PDict} ->
           case Pid of
-            none -> ok;
+            undefined -> ok;
             _ ->
               {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
               MenuBar = wxFrame:getMenuBar(cauder_wx:find(?FRAME, wxFrame)),
               Hist1 =
                 case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
                   true -> Hist;
-                  false -> lists:filter(fun is_conc_item/1, Hist)
+                  false -> lists:filter(fun cauder_utils:is_conc_item/1, Hist)
                 end,
               Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
               pp_marked_text(HistoryControl, Entries)
@@ -334,16 +343,6 @@ update_history(System, Pid) ->
       end,
       wxTextCtrl:thaw(HistoryControl)
   end.
-
-
--spec is_conc_item(HistoryEntry) -> IsConcurrent when
-  HistoryEntry :: cauder_types:history_entry(),
-  IsConcurrent :: boolean().
-
-is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
-is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true;
-is_conc_item(_)                             -> false.
 
 
 %%%=============================================================================
