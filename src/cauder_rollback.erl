@@ -123,9 +123,9 @@ rollback_step(#sys{procs = PDict, roll = RollLog} = Sys0, Pid) ->
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-rollback_spawn(#sys{procs = PDict} = Sys, Pid) ->
-  {value, #proc{pid = Pid}} = cauder_utils:find_process_with_spawn(PDict, Pid),
-  rollback_until_spawn(Sys, Pid, Pid).
+rollback_spawn(#sys{procs = PDict} = Sys, SpawnPid) ->
+  {value, #proc{pid = Pid}} = cauder_utils:find_process_with_spawn(PDict, SpawnPid),
+  rollback_until_spawn(Sys, Pid, SpawnPid).
 
 
 %%------------------------------------------------------------------------------
