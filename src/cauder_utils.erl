@@ -171,9 +171,9 @@ find_process_with_spawn(PDict, Pid) ->
   Uid :: cauder_types:msg_id(),
   Process :: cauder_types:process().
 
-find_process_with_send(PDict, UID) ->
+find_process_with_send(PDict, Uid) ->
   {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{hist = H}) -> has_send(H, UID) end, Ps).
+  lists:search(fun(#proc{hist = H}) -> has_send(H, Uid) end, Ps).
 
 
 %%------------------------------------------------------------------------------
@@ -185,9 +185,9 @@ find_process_with_send(PDict, UID) ->
   Uid :: cauder_types:msg_id(),
   Process :: cauder_types:process().
 
-find_process_with_receive(PDict, UID) ->
+find_process_with_receive(PDict, Uid) ->
   {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{hist = H}) -> has_rec(H, UID) end, Ps).
+  lists:search(fun(#proc{hist = H}) -> has_rec(H, Uid) end, Ps).
 
 
 %%------------------------------------------------------------------------------

@@ -35,7 +35,7 @@ process(#proc{pid = Pid, spf = {M, F, A}} = Proc) ->
 
 log_entry({spawn, Pid})     -> "spawn(" ++ green(to_string(Pid)) ++ ")";
 log_entry({send, Uid})      -> "send(" ++ red(to_string(Uid)) ++ ")";
-log_entry({'receive', UID}) -> "rec(" ++ blue(to_string(UID)) ++ ")".
+log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")".
 
 
 %%%=============================================================================
@@ -80,12 +80,12 @@ expression(Expr) -> lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_
   Trace :: cauder_types:trace(),
   String :: string().
 
-trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = UID}) ->
-  io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), UID]);
+trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Uid}) ->
+  io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
   io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
-trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = UID}) ->
-  io_lib:format("~s receives ~p (~p)", [pid(From), Val, UID]).
+trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
+  io_lib:format("~s receives ~p (~p)", [pid(From), Val, Uid]).
 
 
 %%%=============================================================================

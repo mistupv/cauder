@@ -58,7 +58,7 @@ can_rollback_spawn(#sys{procs = PDict}, Pid) -> cauder_utils:find_process_with_s
   Uid :: cauder_types:msg_id(),
   CanRollback :: boolean().
 
-can_rollback_send(#sys{procs = PDict}, UID) -> cauder_utils:find_process_with_send(PDict, UID) =/= false.
+can_rollback_send(#sys{procs = PDict}, Uid) -> cauder_utils:find_process_with_send(PDict, Uid) =/= false.
 
 
 %%------------------------------------------------------------------------------
@@ -70,7 +70,7 @@ can_rollback_send(#sys{procs = PDict}, UID) -> cauder_utils:find_process_with_se
   Uid :: cauder_types:msg_id(),
   CanRollback :: boolean().
 
-can_rollback_receive(#sys{procs = PDict}, UID) -> cauder_utils:find_process_with_receive(PDict, UID) =/= false.
+can_rollback_receive(#sys{procs = PDict}, Uid) -> cauder_utils:find_process_with_receive(PDict, Uid) =/= false.
 
 
 %%------------------------------------------------------------------------------
@@ -104,10 +104,10 @@ rollback_step(#sys{procs = PDict, roll = RollLog} = Sys0, Pid) ->
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
       rollback_spawn(Sys, Pid, SpawnPid);
-    {send, _Bs, _E, _Stk, #msg{dest = Dest, val = Val, uid = UID}} ->
-      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Dest, Val, UID)},
+    {send, _Bs, _E, _Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
+      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Dest, Val, Uid)},
       ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
-      rollback_send(Sys, Pid, Dest, UID);
+      rollback_send(Sys, Pid, Dest, Uid);
     _ ->
       [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
       Sem:step(Sys0, Pid)
@@ -123,9 +123,9 @@ rollback_step(#sys{procs = PDict, roll = RollLog} = Sys0, Pid) ->
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-rollback_spawn(#sys{procs = PDict} = Sys, SpawnPid) ->
-  {value, #proc{pid = Pid}} = cauder_utils:find_process_with_spawn(PDict, SpawnPid),
-  rollback_until_spawn(Sys#sys{roll = []}, Pid, SpawnPid).
+rollback_spawn(#sys{procs = PDict} = Sys, Pid) ->
+  {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_spawn(PDict, Pid),
+  rollback_until_spawn(Sys#sys{roll = []}, ParentPid, Pid).
 
 
 %%------------------------------------------------------------------------------
@@ -137,9 +137,9 @@ rollback_spawn(#sys{procs = PDict} = Sys, SpawnPid) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-rollback_send(#sys{procs = PDict} = Sys, UID) ->
-  {value, #proc{pid = Pid}} = cauder_utils:find_process_with_send(PDict, UID),
-  rollback_until_send(Sys#sys{roll = []}, Pid, UID).
+rollback_send(#sys{procs = PDict} = Sys, Uid) ->
+  {value, #proc{pid = SenderPid}} = cauder_utils:find_process_with_send(PDict, Uid),
+  rollback_until_send(Sys#sys{roll = []}, SenderPid, Uid).
 
 
 %%------------------------------------------------------------------------------
@@ -151,9 +151,9 @@ rollback_send(#sys{procs = PDict} = Sys, UID) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-rollback_receive(#sys{procs = PDict} = Sys, UID) ->
-  {value, #proc{pid = Pid}} = cauder_utils:find_process_with_receive(PDict, UID),
-  rollback_until_receive(Sys#sys{roll = []}, Pid, UID).
+rollback_receive(#sys{procs = PDict} = Sys, Uid) ->
+  {value, #proc{pid = ReceiverPid}} = cauder_utils:find_process_with_receive(PDict, Uid),
+  rollback_until_receive(Sys#sys{roll = []}, ReceiverPid, Uid).
 
 
 %%------------------------------------------------------------------------------
@@ -199,12 +199,12 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-rollback_send(Sys0, Pid, DestPid, UID) ->
+rollback_send(Sys0, Pid, DestPid, Uid) ->
   Opts = options(Sys0, Pid),
   case lists:search(fun(#opt{rule = Rule}) -> Rule =:= ?RULE_SEND end, Opts) of
     false ->
       Sys1 = rollback_step(Sys0, DestPid),
-      rollback_send(Sys1, Pid, DestPid, UID);
+      rollback_send(Sys1, Pid, DestPid, Uid);
     {value, #opt{pid = Pid, sem = Sem}} ->
       Sem:step(Sys0, Pid)
   end.
@@ -251,15 +251,15 @@ rollback_until_send(#sys{procs = PDict} = Sys0, Pid, Uid) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-rollback_until_receive(#sys{procs = PDict} = Sys0, Pid, UID) ->
+rollback_until_receive(#sys{procs = PDict} = Sys0, Pid, Uid) ->
   {Proc, _} = orddict:take(Pid, PDict),
   [Hist | _] = Proc#proc.hist,
   case Hist of
-    {rec, _Bs, _Es, _Stk, #msg{uid = UID}} ->
-      rollback_after_receive(Sys0, Pid, UID);
+    {rec, _Bs, _Es, _Stk, #msg{uid = Uid}} ->
+      rollback_after_receive(Sys0, Pid, Uid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),
-      rollback_until_receive(Sys1, Pid, UID)
+      rollback_until_receive(Sys1, Pid, Uid)
   end.
 
 
@@ -269,13 +269,13 @@ rollback_until_receive(#sys{procs = PDict} = Sys0, Pid, UID) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-rollback_after_receive(Sys0, Pid, UID) ->
+rollback_after_receive(Sys0, Pid, Uid) ->
   Sys1 = rollback_step(Sys0, Pid),
   {Proc, _} = orddict:take(Pid, Sys1#sys.procs),
   [Hist | _] = Proc#proc.hist,
   case Hist of
-    {rec, _Bs, _E, _Stk, #msg{uid = UID}} ->
-      rollback_after_receive(Sys1, Pid, UID);
+    {rec, _Bs, _E, _Stk, #msg{uid = Uid}} ->
+      rollback_after_receive(Sys1, Pid, Uid);
     _ -> Sys1
   end.
 
