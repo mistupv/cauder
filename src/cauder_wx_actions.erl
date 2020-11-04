@@ -55,7 +55,8 @@ create(Frame) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc Updates the <i>actions</i> panel according to the given system.
+%% @doc Updates the <i>actions</i> panel according to the given new state, by
+%% comparing it with the given old state.
 
 -spec update(OldState, NewState) -> ok when
   OldState :: cauder_wx:state(),

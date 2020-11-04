@@ -41,8 +41,8 @@ create(Parent) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc Updates the <i>system info</i> panel according to the given system and
-%% process.
+%% @doc Updates the <i>system info</i> panel according to the given new state,
+%% by comparing it with the given old state.
 
 -spec update(OldState, NewState) -> ok when
   OldState :: cauder_wx:state(),
