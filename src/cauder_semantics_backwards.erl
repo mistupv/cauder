@@ -29,7 +29,11 @@ step(Sys, Pid) ->
   #sys{mail = Ms, logs = Logs, trace = Trace} = Sys,
   {P0, PDict0} = orddict:take(Pid, Sys#sys.procs),
   #proc{pid = Pid, hist = [CurHist | RestHist]} = P0,
-  {ok, Log} = orddict:find(Pid, Logs),
+  Log =
+    case orddict:find(Pid, Logs) of
+      {ok, L} -> L;
+      error -> []
+    end,
   case CurHist of
     {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self ->
       P = P0#proc{
