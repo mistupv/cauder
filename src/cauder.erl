@@ -97,14 +97,17 @@ unsubscribe() -> gen_server:call(?SERVER, {unsubscribe, self()}).
 %%------------------------------------------------------------------------------
 %% @doc Loads the given file (module).
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_load/2
 
--spec load_file(File) -> ok | busy when
-  File :: file:filename().
+-spec load_file(File) -> Reply when
+  File :: file:filename(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 
@@ -120,12 +123,17 @@ load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 %%
 %% @see task_start/2
 
--spec init_system(Module, Function, Arguments) -> ok | busy when
+-spec init_system(Module, Function, Arguments) -> Reply when
   Module :: module(),
   Function :: atom(),
-  Arguments :: cauder_types:af_args().
+  Arguments :: cauder_types:af_args(),
+  Reply :: ok | busy.
 
-init_system(Mod, Fun, Args) -> gen_server:call(?SERVER, {user, {start, {Mod, Fun, Args}}}).
+init_system(Mod, Fun, Args) ->
+  case gen_server:call(?SERVER, {user, {start, {Mod, Fun, Args}}}) of
+    {ok, _} -> ok;
+    busy -> busy
+  end.
 
 
 %%------------------------------------------------------------------------------
@@ -133,27 +141,35 @@ init_system(Mod, Fun, Args) -> gen_server:call(?SERVER, {user, {start, {Mod, Fun
 %% The system starts with a call to the function specified in the specified
 %% replay data.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_start/2
 
--spec init_system(LogPath) -> ok | busy when
-  LogPath :: file:filename().
+-spec init_system(LogPath) -> Reply when
+  LogPath :: file:filename(),
+  Reply :: ok | busy.
 
-init_system(Path) -> gen_server:call(?SERVER, {user, {start, Path}}).
+init_system(Path) ->
+  case gen_server:call(?SERVER, {user, {start, Path}}) of
+    {ok, _} -> ok;
+    busy -> busy
+  end.
 
 
 %%------------------------------------------------------------------------------
-%% @doc Stops the system and any running task in the server.
+%% @doc Stops the system and any running task in the server, and returns the
+%% current system.
 %%
 %% This is a synchronous action.
 %%
 %% All the subscribers excluding the one who called this function (if a
 %% subscriber) will be notified.
 
--spec stop_system() -> ok.
+-spec stop_system() -> {ok, CurrentSystem} when
+  CurrentSystem :: cauder_types:system().
 
 stop_system() -> gen_server:call(?SERVER, {user, stop}).
 
@@ -181,15 +197,18 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys) ++ cauder_semantics_bac
 %%------------------------------------------------------------------------------
 %% @doc Performs a step in the given process using the given semantics.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_step/2
 
--spec step(Semantics, Pid) -> ok | busy when
+-spec step(Semantics, Pid) -> Reply when
   Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id().
+  Pid :: cauder_types:proc_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 step(Sem, Pid) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid}}}).
 
@@ -198,17 +217,20 @@ step(Sem, Pid) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid}}}).
 %% @doc Steps over to the next line in the given process using the given
 %% semantics.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_step_over/2
 %%
 %% @todo Currently not in use.
 
--spec step_over(Semantics, Pid) -> ok | busy when
+-spec step_over(Semantics, Pid) -> Reply when
   Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id().
+  Pid :: cauder_types:proc_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}}).
 
@@ -220,15 +242,18 @@ step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}})
 %% @doc Performs the given number of steps, in any process, using the given
 %% semantics.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_step_multiple/2
 
--spec step_multiple(Semantics, Steps) -> ok | busy when
+-spec step_multiple(Semantics, Steps) -> Reply when
   Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer().
+  Steps :: pos_integer(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 step_multiple(Sem, Steps) -> gen_server:call(?SERVER, {user, {step_multiple, {Sem, Steps}}}).
 
@@ -239,15 +264,18 @@ step_multiple(Sem, Steps) -> gen_server:call(?SERVER, {user, {step_multiple, {Se
 %%------------------------------------------------------------------------------
 %% @doc Replays the given number of steps in the given process.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_replay_steps/2
 
--spec replay_steps(Pid, Steps) -> ok | busy when
+-spec replay_steps(Pid, Steps) -> Reply when
   Pid :: cauder_types:proc_id(),
-  Steps :: pos_integer().
+  Steps :: pos_integer(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid, Steps}}}).
 
@@ -255,14 +283,17 @@ replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid,
 %%------------------------------------------------------------------------------
 %% @doc Replays the spawning of the process with the given pid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_replay_spawn/2
 
--spec replay_spawn(Pid) -> ok | busy when
-  Pid :: cauder_types:proc_id().
+-spec replay_spawn(Pid) -> Reply when
+  Pid :: cauder_types:proc_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 
@@ -270,14 +301,17 @@ replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 %%------------------------------------------------------------------------------
 %% @doc Replays the sending of the message with the given uid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_replay_send/2
 
--spec replay_send(Uid) -> ok | busy when
-  Uid :: cauder_types:msg_id().
+-spec replay_send(Uid) -> Reply when
+  Uid :: cauder_types:msg_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 
@@ -285,14 +319,17 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 %%------------------------------------------------------------------------------
 %% @doc Replays the reception of the message with the given uid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_replay_receive/2
 
--spec replay_receive(Uid) -> ok | busy when
-  Uid :: cauder_types:msg_id().
+-spec replay_receive(Uid) -> Reply when
+  Uid :: cauder_types:msg_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
@@ -303,15 +340,18 @@ replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the given number of steps in the given process.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_rollback_steps/2
 
--spec rollback_steps(Pid, Steps) -> ok | busy when
+-spec rollback_steps(Pid, Steps) -> Reply when
   Pid :: cauder_types:proc_id(),
-  Steps :: pos_integer().
+  Steps :: pos_integer(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {Pid, Steps}}}).
 
@@ -319,14 +359,17 @@ rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the spawning of the process with the given pid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_rollback_spawn/2
 
--spec rollback_spawn(Pid) -> ok | busy when
-  Pid :: cauder_types:proc_id().
+-spec rollback_spawn(Pid) -> Reply when
+  Pid :: cauder_types:proc_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 
@@ -334,14 +377,17 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the sending of the message with the given uid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_rollback_send/2
 
--spec rollback_send(Uid) -> ok | busy when
-  Uid :: cauder_types:msg_id().
+-spec rollback_send(Uid) -> Reply when
+  Uid :: cauder_types:msg_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 
@@ -349,14 +395,17 @@ rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_rollback_receive/2
 
--spec rollback_receive(Uid) -> ok | busy when
-  Uid :: cauder_types:msg_id().
+-spec rollback_receive(Uid) -> Reply when
+  Uid :: cauder_types:msg_id(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 rollback_receive(Uid) -> gen_server:call(?SERVER, {user, {rollback_receive, Uid}}).
 
@@ -364,14 +413,17 @@ rollback_receive(Uid) -> gen_server:call(?SERVER, {user, {rollback_receive, Uid}
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the binding of the variable with the given name.
 %%
-%% This is an asynchronous action: this functions returns the atom `ok' if the
-%% server accepted the task, or the atom `busy' if the server is currently
-%% executing a different task.
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
 %%
 %% @see task_rollback_variable/2
 
--spec rollback_variable(Name) -> ok | busy when
-  Name :: atom().
+-spec rollback_variable(Name) -> Reply when
+  Name :: atom(),
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
 
 rollback_variable(Name) -> gen_server:call(?SERVER, {user, {rollback_variable, Name}}).
 
@@ -420,9 +472,12 @@ get_path() -> gen_server:call(?SERVER, {user, {get, path}}).
 %% @doc Sets a new binding for the variable with the given name in the given
 %% process.
 %%
-%% This is a synchronous action.
+%% This is a synchronous action: the atom `ok' is returned if this action
+%% succeeds, however if a task is running when this function is called, this
+%% action will not be performed, to avoid consistency problems, and the atom
+%% `busy' will be returned instead.
 
--spec set_binding(Pid, {Key, Value}) -> ok when
+-spec set_binding(Pid, {Key, Value}) -> ok | busy when
   Pid :: cauder_types:proc_id(),
   Key :: atom(),
   Value :: term().
@@ -454,7 +509,7 @@ init([]) ->
   Request :: term(),
   From :: {pid(), term()},
   State :: state(),
-  Reply :: ok | busy,
+  Reply :: Reply,
   NewState :: state().
 
 
@@ -473,7 +528,7 @@ handle_call({task, {finish, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Su
       is_tuple(Value) -> element(1, Value);
       true -> Value
     end,
-  lists:foreach(fun(Sub) -> Sub ! {dbg, {finish, Value, Time}} end, Subs),
+  lists:foreach(fun(Sub) -> Sub ! {dbg, {finish, Value, Time, NewSystem}} end, Subs),
   {reply, ok, State#state{system = NewSystem, task = undefined}};
 
 handle_call({task, {fail, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
@@ -495,16 +550,16 @@ handle_call({user, {get, path}}, _From, State)   -> {reply, ets:lookup_element(?
 
 %%%=============================================================================
 
-handle_call({user, stop}, {FromPid, _}, #state{subs = Subs} = State) ->
-  case State#state.task of
-    {_Task, Pid} -> exit(Pid, kill);
+handle_call({user, stop}, {FromPid, _}, #state{subs = Subs, system = System, task = Task} = State) ->
+  case Task of
+    {_, Pid} -> exit(Pid, kill);
     undefined -> ok
   end,
   ets:delete(?APP_DB, last_pid),
   ets:delete(?APP_DB, last_uid),
   ets:delete(?APP_DB, last_var),
   [Sub ! {dbg, stop} || Sub <- Subs, Sub =/= FromPid], % TODO Add dialog when UI receives this message
-  {reply, ok, State#state{system = undefined, task = undefined}};
+  {reply, {ok, System}, State#state{system = undefined, task = undefined}};
 
 %%%=============================================================================
 
@@ -549,7 +604,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       rollback_variable -> fun task_rollback_variable/2
     end,
   Pid = run_task(Fun, Args, System),
-  {reply, ok, State#state{task = {Task, Pid}}};
+  {reply, {ok, System}, State#state{task = {Task, Pid}}};
 
 %%%=============================================================================
 
