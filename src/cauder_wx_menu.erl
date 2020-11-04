@@ -1,7 +1,7 @@
 -module(cauder_wx_menu).
 
 %% API
--export([create/1, enable/2]).
+-export([create/1, update/2]).
 
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
@@ -101,16 +101,25 @@ create(Frame) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc Enables/disables the item with the given ID.
+%% @doc Updates the menu according to the given new state, by comparing it with
+%% the given old state.
 
--spec enable(ItemId, Enable) -> ok when
-  ItemId :: integer(),
-  Enable :: boolean().
+-spec update(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-enable(ItemId, Enable) ->
+update(#wx_state{module = Module, system = System}, #wx_state{module = Module, system = System}) ->
+  ok;
+update(_, #wx_state{module = undefined}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   MenuBar = wxFrame:getMenuBar(Frame),
-  wxMenuBar:enable(MenuBar, ItemId, Enable).
+  wxMenuBar:enable(MenuBar, ?MENU_Run_Start, false),
+  wxMenuBar:enable(MenuBar, ?MENU_Run_Stop, false);
+update(_, #wx_state{system = System}) ->
+  Frame = cauder_wx:find(?FRAME, wxFrame),
+  MenuBar = wxFrame:getMenuBar(Frame),
+  wxMenuBar:enable(MenuBar, ?MENU_Run_Start, System =:= undefined),
+  wxMenuBar:enable(MenuBar, ?MENU_Run_Stop, System =/= undefined).
 
 
 %%%=============================================================================

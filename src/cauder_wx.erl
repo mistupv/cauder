@@ -227,12 +227,11 @@ handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
 %%%=============================================================================
 
 handle_event(?MENU_EVENT(?MENU_Run_Start), State) ->
-  IsStarting = start_session(State),
-  if
-    IsStarting ->
-      {noreply, State#wx_state{task = start}};
+  case start_session(State) of
     true ->
-      {noreply, State}
+      {noreply, refresh(State, State#wx_state{task = start})};
+    false ->
+      {noreply, refresh(State)}
   end;
 
 handle_event(?MENU_EVENT(?MENU_Run_Stop), State) ->
@@ -496,13 +495,11 @@ handle_info({dbg, {finish, {load, File, Module}, Time}}, #wx_state{task = load} 
   CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   cauder_wx_code:load_code(CodeCtrl, <<Src/binary, 0:8>>),
 
-  cauder_wx_menu:enable(?MENU_Run_Start, true), % TODO Create cauder_wx_menu:update/1
   cauder_wx_statusbar:load_finish(Module, Time),
 
   {noreply, refresh(State, State#wx_state{module = Module, task = undefined})};
 
 handle_info({dbg, {finish, start, Time}}, #wx_state{task = start} = State) ->
-  cauder_wx_menu:enable(?MENU_Run_Stop, true),
   cauder_wx_statusbar:init_finish(Time),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -674,9 +671,7 @@ start_session(#wx_state{module = Module}) ->
     end,
 
   if
-    Starting ->
-      cauder_wx_menu:enable(?MENU_Run_Start, false),
-      cauder_wx_statusbar:init_start();
+    Starting -> cauder_wx_statusbar:init_start();
     true -> ok
   end,
 
@@ -697,14 +692,8 @@ stop_session(#wx_state{frame = Frame} = State) ->
     false -> false;
     true ->
       ok = cauder:stop_system(),
-
       refresh(State),
-
-      cauder_wx_menu:enable(?MENU_Run_Start, true),
-      cauder_wx_menu:enable(?MENU_Run_Stop, false),
-
       cauder_wx_statusbar:stop_finish(),
-
       true
   end.
 
@@ -752,6 +741,7 @@ refresh(OldState, NewState) ->
 
   State1 = State0#wx_state{pid = cauder_wx_actions:selected_pid()},
 
+  cauder_wx_menu:update(OldState, State1),
   cauder_wx_statusbar:update_process_count(OldState#wx_state.system, State1#wx_state.system),
 
   cauder_wx_code:update(OldState, State1),
