@@ -119,52 +119,68 @@ create_bindings(Parent) ->
   OldState :: cauder_wx:state(),
   NewState :: cauder_wx:state().
 
-update_bindings(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+update_bindings(
+    #wx_state{system = System, pid = Pid, config = #config{bindings = Show, bindings_mode = Mode}},
+    #wx_state{system = System, pid = Pid, config = #config{bindings = Show, bindings_mode = Mode}}
+) ->
   ok;
-update_bindings(_, #wx_state{system = System, pid = Pid}) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Bindings), % TODO Move to state
+update_bindings(_, #wx_state{config = #config{bindings = false}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), false),
+  ok;
+update_bindings(_, #wx_state{system = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
+  wxListCtrl:deleteAllItems(cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl)),
+  ok;
+update_bindings(_, #wx_state{pid = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
+  wxListCtrl:deleteAllItems(cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl)),
+  ok;
+update_bindings(_, #wx_state{system = #sys{procs = PDict}, pid = Pid, config = #config{bindings_mode = all}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
 
-  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), Show),
+  BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
+  wxListCtrl:freeze(BindingsControl),
+  wxListCtrl:deleteAllItems(BindingsControl),
+  {ok, #proc{env = Bs}} = orddict:find(Pid, PDict),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  lists:foldl(
+    fun
+      ({Key, Val}, Row) ->
+        wxListCtrl:insertItem(BindingsControl, Row, ""),
+        wxListCtrl:setItemFont(BindingsControl, Row, Font),
+        wxListCtrl:setItem(BindingsControl, Row, 0, atom_to_list(Key)),
+        wxListCtrl:setItem(BindingsControl, Row, 1, io_lib:format("~p", [Val])),
+        wxListCtrl:setItemData(BindingsControl, Row, Row),
+        Row + 1
+    end, 0, Bs),
+  wxListCtrl:thaw(BindingsControl);
+update_bindings(_, #wx_state{system = #sys{procs = PDict}, pid = Pid, config = #config{bindings_mode = relevant}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
 
-  case Show of
-    false -> ok;
-    true ->
-      BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
-      wxListCtrl:freeze(BindingsControl),
-      wxListCtrl:deleteAllItems(BindingsControl),
-      case System of
-        undefined -> ok;
-        #sys{procs = PDict} ->
-          case Pid of
-            undefined -> ok;
-            _ ->
-              {ok, #proc{env = Bs, exprs = Es}} = orddict:find(Pid, PDict),
-              Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-
-              Bs0 = lists:zip(lists:seq(1, length(Bs)), Bs), % [{Idx, Binding}]
-              Bs1 =
-                case wxMenuBar:isChecked(MenuBar, ?MENU_View_AllBindings) of
-                  true -> Bs0;
-                  false ->
-                    Es1 = cauder_syntax:to_abstract_expr(Es),
-                    Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-                    lists:filter(fun({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys) end, Bs0)
-                end,
-              lists:foldl(
-                fun({Idx, {Key, Val}}, Row) ->
-                  wxListCtrl:insertItem(BindingsControl, Row, ""),
-                  wxListCtrl:setItemFont(BindingsControl, Row, Font),
-                  wxListCtrl:setItem(BindingsControl, Row, 0, atom_to_list(Key)),
-                  wxListCtrl:setItem(BindingsControl, Row, 1, io_lib:format("~p", [Val])),
-                  wxListCtrl:setItemData(BindingsControl, Row, Idx),
-                  Row + 1
-                end, 0, Bs1)
-          end
+  BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
+  wxListCtrl:freeze(BindingsControl),
+  wxListCtrl:deleteAllItems(BindingsControl),
+  {ok, #proc{env = Bs0, exprs = Es}} = orddict:find(Pid, PDict),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  Es1 = cauder_syntax:to_abstract_expr(Es),
+  Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+  Bs1 =
+    lists:filter(
+      fun
+        ({_Id, {Key, _Val}}) -> sets:is_element(Key, Keys)
       end,
-      wxListCtrl:thaw(BindingsControl)
-  end.
+      lists:zip(lists:seq(1, length(Bs0)), Bs0) % [{Idx, Binding}]
+    ),
+  lists:foldl(
+    fun({Idx, {Key, Val}}, Row) ->
+      wxListCtrl:insertItem(BindingsControl, Row, ""),
+      wxListCtrl:setItemFont(BindingsControl, Row, Font),
+      wxListCtrl:setItem(BindingsControl, Row, 0, atom_to_list(Key)),
+      wxListCtrl:setItem(BindingsControl, Row, 1, io_lib:format("~p", [Val])),
+      wxListCtrl:setItemData(BindingsControl, Row, Idx),
+      Row + 1
+    end, 0, Bs1),
+  wxListCtrl:thaw(BindingsControl).
 
 
 %%%=============================================================================
@@ -193,35 +209,32 @@ create_stack(Parent) ->
   OldState :: cauder_wx:state(),
   NewState :: cauder_wx:state().
 
-update_stack(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+update_stack(
+    #wx_state{system = System, pid = Pid, config = #config{stack = Show}},
+    #wx_state{system = System, pid = Pid, config = #config{stack = Show}}
+) ->
   ok;
+update_stack(_, #wx_state{config = #config{stack = false}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), false),
+  ok;
+update_stack(_, #wx_state{system = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), true),
+  wxListBox:clear(cauder_wx:find(?PROCESS_Stack_Control, wxListBox)),
+  ok;
+update_stack(_, #wx_state{pid = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), true),
+  wxListBox:clear(cauder_wx:find(?PROCESS_Stack_Control, wxListBox)),
+  ok;
+update_stack(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), true),
 
-update_stack(_, #wx_state{system = System, pid = Pid}) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Stack), % TODO Move to state
-
-  show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), Show),
-
-  case Show of
-    false -> ok;
-    true ->
-      StackControl = cauder_wx:find(?PROCESS_Stack_Control, wxListBox),
-      wxListBox:freeze(StackControl),
-      wxListBox:clear(StackControl),
-      case System of
-        undefined -> ok;
-        #sys{procs = PDict} ->
-          case Pid of
-            undefined -> ok;
-            _ ->
-              {ok, #proc{stack = Stk}} = orddict:find(Pid, PDict),
-              Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
-              lists:foreach(fun(Entry) -> wxListBox:append(StackControl, Entry) end, Entries)
-          end
-      end,
-      wxListBox:thaw(StackControl)
-  end.
+  StackControl = cauder_wx:find(?PROCESS_Stack_Control, wxListBox),
+  wxListBox:freeze(StackControl),
+  wxListBox:clear(StackControl),
+  {ok, #proc{stack = Stk}} = orddict:find(Pid, PDict),
+  Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
+  lists:foreach(fun(Entry) -> wxListBox:append(StackControl, Entry) end, Entries),
+  wxListBox:thaw(StackControl).
 
 
 %%%=============================================================================
@@ -250,37 +263,35 @@ create_log(Parent) ->
   OldState :: cauder_wx:state(),
   NewState :: cauder_wx:state().
 
-update_log(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+update_log(
+    #wx_state{system = System, pid = Pid, config = #config{log = Show}},
+    #wx_state{system = System, pid = Pid, config = #config{log = Show}}
+) ->
   ok;
-update_log(_, #wx_state{system = System, pid = Pid}) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_Log), % TODO Move to state
+update_log(_, #wx_state{config = #config{log = false}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), false),
+  ok;
+update_log(_, #wx_state{system = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
+  wxTextCtrl:clear(cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl)),
+  ok;
+update_log(_, #wx_state{pid = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
+  wxTextCtrl:clear(cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl)),
+  ok;
+update_log(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
 
-  show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), Show),
-
-  case Show of
-    false -> ok;
-    true ->
-      LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),
-      wxTextCtrl:freeze(LogControl),
-      wxTextCtrl:clear(LogControl),
-      case System of
-        undefined -> ok;
-        #sys{logs = Logs} ->
-          case Pid of
-            undefined -> ok;
-            _ ->
-              case orddict:find(Pid, Logs) of
-                error -> ok;
-                {ok, Log} ->
-                  Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_entry/1, Log))),
-                  pp_marked_text(LogControl, Entries)
-              end
-          end
-      end,
-      wxTextCtrl:thaw(LogControl)
-  end.
+  LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),
+  wxTextCtrl:freeze(LogControl),
+  wxTextCtrl:clear(LogControl),
+  case orddict:find(Pid, Logs) of
+    error -> ok;
+    {ok, Log} ->
+      Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_entry/1, Log))),
+      pp_marked_text(LogControl, Entries)
+  end,
+  wxTextCtrl:thaw(LogControl).
 
 
 %%%=============================================================================
@@ -309,40 +320,43 @@ create_history(Parent) ->
   OldState :: cauder_wx:state(),
   NewState :: cauder_wx:state().
 
-update_history(#wx_state{system = System, pid = Pid}, #wx_state{system = System, pid = Pid}) ->
+update_history(
+    #wx_state{system = System, pid = Pid, config = #config{history = Show, history_mode = Mode}},
+    #wx_state{system = System, pid = Pid, config = #config{history = Show, history_mode = Mode}}
+) ->
   ok;
-update_history(_, #wx_state{system = System, pid = Pid}) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  MenuBar = wxFrame:getMenuBar(Frame),
-  Show = wxMenuBar:isChecked(MenuBar, ?MENU_View_History), % TODO Move to state
+update_history(_, #wx_state{config = #config{history = false}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), false),
+  ok;
+update_history(_, #wx_state{system = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
+  wxTextCtrl:clear(cauder_wx:find(?PROCESS_History_Control, wxTextCtrl)),
+  ok;
+update_history(_, #wx_state{pid = undefined}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
+  wxTextCtrl:clear(cauder_wx:find(?PROCESS_History_Control, wxTextCtrl)),
+  ok;
+update_history(_, #wx_state{system = #sys{procs = PDict}, pid = Pid, config = #config{history_mode = full}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
 
-  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), Show),
+  HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
+  wxTextCtrl:freeze(HistoryControl),
+  wxTextCtrl:clear(HistoryControl),
+  {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
+  Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist))),
+  pp_marked_text(HistoryControl, Entries),
+  wxTextCtrl:thaw(HistoryControl);
+update_history(_, #wx_state{system = #sys{procs = PDict}, pid = Pid, config = #config{history_mode = concurrent}}) ->
+  show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
 
-  case Show of
-    false -> ok;
-    true ->
-      HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
-      wxTextCtrl:freeze(HistoryControl),
-      wxTextCtrl:clear(HistoryControl),
-      case System of
-        undefined -> ok;
-        #sys{procs = PDict} ->
-          case Pid of
-            undefined -> ok;
-            _ ->
-              {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
-              MenuBar = wxFrame:getMenuBar(cauder_wx:find(?FRAME, wxFrame)),
-              Hist1 =
-                case wxMenuBar:isChecked(MenuBar, ?MENU_View_FullHistory) of
-                  true -> Hist;
-                  false -> lists:filter(fun cauder_utils:is_conc_item/1, Hist)
-                end,
-              Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
-              pp_marked_text(HistoryControl, Entries)
-          end
-      end,
-      wxTextCtrl:thaw(HistoryControl)
-  end.
+  HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
+  wxTextCtrl:freeze(HistoryControl),
+  wxTextCtrl:clear(HistoryControl),
+  {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
+  Hist1 = lists:filter(fun cauder_utils:is_conc_item/1, Hist),
+  Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
+  pp_marked_text(HistoryControl, Entries),
+  wxTextCtrl:thaw(HistoryControl).
 
 
 %%%=============================================================================
@@ -353,40 +367,44 @@ update_history(_, #wx_state{system = System, pid = Pid}) ->
   Show :: boolean().
 
 show_and_resize(Panel, Show) ->
-  wxPanel:show(Panel, [{show, Show}]),
+  case wxPanel:isShown(Panel) of
+    Show -> ok;
+    _ ->
+      wxPanel:show(Panel, [{show, Show}]),
 
-  % -----
+      % -----
 
-  ParentSizer = wx:typeCast(wxWindow:getSizer(wxWindow:getParent(Panel)), wxSizer),
+      ParentSizer = wx:typeCast(wxWindow:getSizer(wxWindow:getParent(Panel)), wxSizer),
 
-  [Top, Spacer0, Bottom] = wxSizer:getChildren(ParentSizer),
+      [Top, Spacer0, Bottom] = wxSizer:getChildren(ParentSizer),
 
-  ShowTop = wxSizerItem:isShown(Top),
-  ShowBottom = wxSizerItem:isShown(Bottom),
+      ShowTop = wxSizerItem:isShown(Top),
+      ShowBottom = wxSizerItem:isShown(Bottom),
 
-  wxSizerItem:show(Spacer0, ShowTop and ShowBottom),
+      wxSizerItem:show(Spacer0, ShowTop and ShowBottom),
 
-  % -----
+      % -----
 
-  ProcessPanel = cauder_wx:find(?PROCESS_Panel, wxPanel),
-  ProcessSizer = wx:typeCast(wxPanel:getSizer(ProcessPanel), wxSizer),
+      ProcessPanel = cauder_wx:find(?PROCESS_Panel, wxPanel),
+      ProcessSizer = wx:typeCast(wxPanel:getSizer(ProcessPanel), wxSizer),
 
-  [Left, Spacer1, Right] = wxSizer:getChildren(ProcessSizer),
+      [Left, Spacer1, Right] = wxSizer:getChildren(ProcessSizer),
 
-  LeftSizer = wx:typeCast(wxWindow:getSizer(wxSizerItem:getWindow(Left)), wxSizer),
-  RightSizer = wx:typeCast(wxWindow:getSizer(wxSizerItem:getWindow(Right)), wxSizer),
+      LeftSizer = wx:typeCast(wxWindow:getSizer(wxSizerItem:getWindow(Left)), wxSizer),
+      RightSizer = wx:typeCast(wxWindow:getSizer(wxSizerItem:getWindow(Right)), wxSizer),
 
-  ShowLeft = lists:any(fun wxSizerItem:isShown/1, wxSizer:getChildren(LeftSizer)),
-  ShowRight = lists:any(fun wxSizerItem:isShown/1, wxSizer:getChildren(RightSizer)),
+      ShowLeft = lists:any(fun wxSizerItem:isShown/1, wxSizer:getChildren(LeftSizer)),
+      ShowRight = lists:any(fun wxSizerItem:isShown/1, wxSizer:getChildren(RightSizer)),
 
-  wxSizerItem:show(Left, ShowLeft),
-  wxSizerItem:show(Spacer1, ShowLeft and ShowRight),
-  wxSizerItem:show(Right, ShowRight),
+      wxSizerItem:show(Left, ShowLeft),
+      wxSizerItem:show(Spacer1, ShowLeft and ShowRight),
+      wxSizerItem:show(Right, ShowRight),
 
-  % -----
+      % -----
 
-  wxPanel:layout(ProcessPanel),
-  ok.
+      wxPanel:layout(ProcessPanel),
+      ok
+  end.
 
 
 -spec pp_marked_text(TextControl, TextList) -> ok when

@@ -1,8 +1,22 @@
+-record(config, {
+  current_expression = true :: boolean(),
+  bindings = true :: boolean(),
+  stack = true :: boolean(),
+  log = true :: boolean(),
+  history = true :: boolean(),
+  mailbox = true :: boolean(),
+  bindings_mode = relevant :: all | relevant,
+  history_mode = concurrent :: full | concurrent,
+  status_bar = true :: boolean()
+}).
+
 -record(wx_state, {
   frame :: wxFrame:wxFrame(),
   menubar :: wxMenuBar:wxMenuBar(),
   content :: wxWindow:wxWindow(),
   statusbar :: wxStatusBar:wxStatusBar(),
+
+  config = #config{} :: #config{},
 
   module :: atom() | undefined,
   position = -1 :: integer(),
@@ -17,13 +31,13 @@
 
 -define(ZOOM_MIN, -10).
 -define(ZOOM_MAX, 20).
--define(ZOOM_DEFAULT, ?ZOOM_MIN + ?FONT_SIZE_APPARENT_DEFAULT - ?FONT_SIZE_MIN).
+-define(ZOOM_DEFAULT, (?ZOOM_MIN + ?FONT_SIZE_APPARENT_DEFAULT - ?FONT_SIZE_MIN)).
 
 -define(FONT_SIZE_MIN, 7).
 % Change if you want a different initial font size
 -define(FONT_SIZE_APPARENT_DEFAULT, 9).
 % DO NOT CHANGE. This is the actual default font size taking into account zoom levels
--define(FONT_SIZE_ACTUAL_DEFAULT, ?FONT_SIZE_APPARENT_DEFAULT - (?ZOOM_DEFAULT)).
+-define(FONT_SIZE_ACTUAL_DEFAULT, (?FONT_SIZE_APPARENT_DEFAULT - ?ZOOM_DEFAULT)).
 
 -define(MAX_STEPS, 10000).
 
@@ -56,6 +70,8 @@
 
 -define(MENU_View_CurrentExpression, 1000).
 
+-define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History)).
+
 -define(MENU_View_Bindings, 1001).
 -define(MENU_View_Stack, 1002).
 -define(MENU_View_Log, 1003).
@@ -63,12 +79,12 @@
 
 -define(MENU_View_Mailbox, 1005).
 
--define(Is_Bindings_Mode(Item), Item =:= ?MENU_View_RelevantBindings orelse Item =:= ?MENU_View_AllBindings).
+-define(Is_Bindings_Mode(Item), (Item =:= ?MENU_View_RelevantBindings orelse Item =:= ?MENU_View_AllBindings)).
 
 -define(MENU_View_RelevantBindings, 1006).
 -define(MENU_View_AllBindings, 1007).
 
--define(Is_History_Mode(Item), Item =:= ?MENU_View_ConcurrentHistory orelse Item =:= ?MENU_View_FullHistory).
+-define(Is_History_Mode(Item), (Item =:= ?MENU_View_ConcurrentHistory orelse Item =:= ?MENU_View_FullHistory)).
 
 -define(MENU_View_ConcurrentHistory, 1008).
 -define(MENU_View_FullHistory, 1009).
@@ -104,19 +120,19 @@
 -define(ACTION_Manual_Step_Forward_Button, 2112).
 -define(ACTION_Manual_Step_Backward_Button, 2113).
 
--define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Step_Forward_Button) orelse (Button =:= ?ACTION_Manual_Step_Backward_Button)).
+-define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Step_Forward_Button orelse Button =:= ?ACTION_Manual_Step_Backward_Button)).
 
 -define(ACTION_Manual_StepOver, 2114).
 -define(ACTION_Manual_StepOver_Forward_Button, 2115).
 -define(ACTION_Manual_StepOver_Backward_Button, 2116).
 
--define(Is_StepOver_Button(Button), (Button =:= ?ACTION_Manual_StepOver_Forward_Button) orelse (Button =:= ?ACTION_Manual_StepOver_Backward_Button)).
+-define(Is_StepOver_Button(Button), (Button =:= ?ACTION_Manual_StepOver_Forward_Button orelse Button =:= ?ACTION_Manual_StepOver_Backward_Button)).
 
 -define(ACTION_Manual_StepInto, 2117).
 -define(ACTION_Manual_StepInto_Forward_Button, 2118).
 -define(ACTION_Manual_StepInto_Backward_Button, 2119).
 
--define(Is_StepInto_Button(Button), (Button =:= ?ACTION_Manual_StepInto_Forward_Button) orelse (Button =:= ?ACTION_Manual_StepInto_Backward_Button)).
+-define(Is_StepInto_Button(Button), (Button =:= ?ACTION_Manual_StepInto_Forward_Button orelse Button =:= ?ACTION_Manual_StepInto_Backward_Button)).
 
 %% -----
 
@@ -126,7 +142,7 @@
 -define(ACTION_Automatic_Forward_Button, 2122).
 -define(ACTION_Automatic_Backward_Button, 2123).
 
--define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button) orelse (Button =:= ?ACTION_Automatic_Backward_Button)).
+-define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)).
 
 %% -----
 

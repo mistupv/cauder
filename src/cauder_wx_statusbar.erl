@@ -1,7 +1,7 @@
 -module(cauder_wx_statusbar).
 
 %% API
--export([create/1, update_position/2, update_process_count/2, set_visibility/1]).
+-export([create/1, update/2, update_position/2]).
 %% Predefined statuses
 -export([no_process/0, no_match/0]).
 -export([load_start/1, load_finish/2]).
@@ -48,15 +48,44 @@ create(Frame) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc Updates the text in the status bar.
+%% @doc Updates the status bar according to the given new state, by comparing it
+%% with the given old state.
 
--spec update_text(Text) -> ok when
-  Text :: unicode:chardata().
+-spec update(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-update_text(Text) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  StatusBar = wxFrame:getStatusBar(Frame),
-  wxStatusBar:setStatusText(StatusBar, Text).
+update(
+    #wx_state{system = #sys{procs = PDict}, config = #config{status_bar = Show}},
+    #wx_state{system = #sys{procs = PDict}, config = #config{status_bar = Show}}
+) ->
+  ok;
+update(_, #wx_state{config = #config{status_bar = false}}) ->
+  set_visibility(false);
+update(_, #wx_state{system = undefined}) ->
+  set_visibility(true),
+
+  StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
+  wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
+update(_, #wx_state{system = #sys{procs = PDict}}) ->
+  set_visibility(true),
+
+  {Alive, Dead} =
+    orddict:fold(
+      fun
+        (_, Proc, {Alive, Dead}) ->
+          case cauder_utils:is_dead(Proc) of
+            true -> {Alive, Dead + 1};
+            false -> {Alive + 1, Dead}
+          end
+      end,
+      {0, 0},
+      PDict
+    ),
+
+  StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
+  Text = io_lib:format(" Alive ~b, Dead ~b", [Alive, Dead]),
+  wxStatusBar:setStatusText(StatusBar, Text, [{number, 2}]).
 
 
 %%------------------------------------------------------------------------------
@@ -67,39 +96,9 @@ update_text(Text) ->
   Column :: pos_integer().
 
 update_position(Line, Column) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  StatusBar = wxFrame:getStatusBar(Frame),
+  StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
   Text = io_lib:format(" Ln ~b, Col ~b", [Line, Column]),
   wxStatusBar:setStatusText(StatusBar, Text, [{number, 1}]).
-
-
-%%------------------------------------------------------------------------------
-%% @doc Updates the position shown in the status bar.
-
--spec update_process_count(OldSystem, NewSystem) -> ok when
-  OldSystem :: cauder_types:system() | undefined,
-  NewSystem :: cauder_types:system() | undefined.
-
-update_process_count(#sys{procs = PDict}, #sys{procs = PDict}) -> ok;
-update_process_count(_, #sys{procs = PDict}) ->
-  {Alive, Dead} =
-    orddict:fold(
-      fun(_, Proc, {Alive, Dead}) ->
-        case cauder_utils:is_dead(Proc) of
-          true -> {Alive, Dead + 1};
-          false -> {Alive + 1, Dead}
-        end
-      end,
-      {0, 0},
-      PDict),
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  StatusBar = wxFrame:getStatusBar(Frame),
-  Text = io_lib:format(" Alive ~b, Dead ~b", [Alive, Dead]),
-  wxStatusBar:setStatusText(StatusBar, Text, [{number, 2}]);
-update_process_count(_, undefined) ->
-  Frame = cauder_wx:find(?FRAME, wxFrame),
-  StatusBar = wxFrame:getStatusBar(Frame),
-  wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]).
 
 
 %%------------------------------------------------------------------------------
@@ -123,10 +122,10 @@ set_visibility(Visible) ->
 %%%=============================================================================
 
 
-no_process() -> update_text(?NO_PROCESS).
+no_process() -> set_text(?NO_PROCESS).
 
 
-no_match() -> update_text(?NO_MATCH).
+no_match() -> set_text(?NO_MATCH).
 
 
 %%%=============================================================================
@@ -137,7 +136,7 @@ no_match() -> update_text(?NO_MATCH).
 
 load_start(File) ->
   Status = io_lib:format(?LOAD_START, [File]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec load_finish(Module, Time) -> ok when
@@ -147,7 +146,7 @@ load_start(File) ->
 load_finish(Module, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?LOAD_FINISH, [Module, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -155,7 +154,7 @@ load_finish(Module, Time) ->
 
 -spec init_start() -> ok.
 
-init_start() -> update_text(?INIT_START).
+init_start() -> set_text(?INIT_START).
 
 
 -spec init_finish(Time) -> ok when
@@ -164,7 +163,7 @@ init_start() -> update_text(?INIT_START).
 init_finish(Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?INIT_FINISH, [TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -172,7 +171,7 @@ init_finish(Time) ->
 
 -spec stop_finish() -> ok.
 
-stop_finish() -> update_text(?STOP_FINISH).
+stop_finish() -> set_text(?STOP_FINISH).
 
 
 %%%=============================================================================
@@ -184,7 +183,7 @@ stop_finish() -> update_text(?STOP_FINISH).
 step_start(Sem) ->
   SemStr = semantics_to_string(Sem),
   Status = io_lib:format(?STEP_START, [SemStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec step_finish(Semantics, Rule, Time) -> ok when
@@ -197,7 +196,7 @@ step_finish(Sem, Rule, Time) ->
   RuleStr = rule_to_string(Rule),
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?STEP_FINISH, [SemStr, RuleStr, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec step_over_finish(Semantics, Steps, Time) -> ok when
@@ -209,7 +208,7 @@ step_over_finish(Sem, Steps, Time) ->
   SemStr = semantics_to_string(Sem),
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?STEP_OVER_FINISH, [Steps, SemStr, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec step_into_finish(Semantics, Steps, Time) -> ok when
@@ -221,7 +220,7 @@ step_into_finish(Sem, Steps, Time) ->
   SemStr = semantics_to_string(Sem),
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?STEP_INTO_FINISH, [Steps, SemStr, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
@@ -234,7 +233,7 @@ step_multiple_finish(Sem, {Done, Total}, Time) ->
   SemStr = semantics_to_string(Sem),
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?STEP_MULTIPLE_FINISH, [Done, Total, SemStr, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -242,7 +241,7 @@ step_multiple_finish(Sem, {Done, Total}, Time) ->
 
 -spec replay_steps_start() -> ok.
 
-replay_steps_start() -> update_text(?REPLAY_STEPS_START).
+replay_steps_start() -> set_text(?REPLAY_STEPS_START).
 
 
 -spec replay_steps_finish({StepsDone, StepsTotal}, Time) -> ok when
@@ -253,7 +252,7 @@ replay_steps_start() -> update_text(?REPLAY_STEPS_START).
 replay_steps_finish({Done, Total}, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?REPLAY_STEPS_FINISH, [Done, Total, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -262,7 +261,7 @@ replay_steps_finish({Done, Total}, Time) ->
 -spec replay_spawn_start(Pid) -> ok when
   Pid :: cauder_types:proc_id().
 
-replay_spawn_start(Pid) -> update_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
+replay_spawn_start(Pid) -> set_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
 
 
 -spec replay_spawn_finish(Pid, Time) -> ok when
@@ -272,12 +271,12 @@ replay_spawn_start(Pid) -> update_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])
 replay_spawn_finish(Pid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?REPLAY_SPAWN_FINISH, [Pid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec replay_spawn_fail() -> ok.
 
-replay_spawn_fail() -> update_text(?REPLAY_SPAWN_FAIL).
+replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
 
 
 %%%=============================================================================
@@ -286,7 +285,7 @@ replay_spawn_fail() -> update_text(?REPLAY_SPAWN_FAIL).
 -spec replay_send_start(Uid) -> ok when
   Uid :: cauder_types:msg_id().
 
-replay_send_start(Uid) -> update_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
+replay_send_start(Uid) -> set_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 
 
 -spec replay_send_finish(Uid, Time) -> ok when
@@ -296,12 +295,12 @@ replay_send_start(Uid) -> update_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 replay_send_finish(Uid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?REPLAY_SEND_FINISH, [Uid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec replay_send_fail() -> ok.
 
-replay_send_fail() -> update_text(?REPLAY_SEND_FAIL).
+replay_send_fail() -> set_text(?REPLAY_SEND_FAIL).
 
 
 %%%=============================================================================
@@ -310,7 +309,7 @@ replay_send_fail() -> update_text(?REPLAY_SEND_FAIL).
 -spec replay_receive_start(Uid) -> ok when
   Uid :: cauder_types:msg_id().
 
-replay_receive_start(Uid) -> update_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
+replay_receive_start(Uid) -> set_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
 
 
 -spec replay_receive_finish(Uid, Time) -> ok when
@@ -320,12 +319,12 @@ replay_receive_start(Uid) -> update_text(io_lib:format(?REPLAY_RECEIVE_START, [U
 replay_receive_finish(Uid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?REPLAY_RECEIVE_FINISH, [Uid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec replay_receive_fail() -> ok.
 
-replay_receive_fail() -> update_text(?REPLAY_RECEIVE_FAIL).
+replay_receive_fail() -> set_text(?REPLAY_RECEIVE_FAIL).
 
 
 %%%=============================================================================
@@ -333,7 +332,7 @@ replay_receive_fail() -> update_text(?REPLAY_RECEIVE_FAIL).
 
 -spec replay_full_log_start() -> ok.
 
-replay_full_log_start() -> update_text(?REPLAY_FULL_LOG_START).
+replay_full_log_start() -> set_text(?REPLAY_FULL_LOG_START).
 
 
 -spec replay_full_log_finish(Time) -> ok when
@@ -342,7 +341,7 @@ replay_full_log_start() -> update_text(?REPLAY_FULL_LOG_START).
 replay_full_log_finish(Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?REPLAY_FULL_LOG_FINISH, [TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -350,7 +349,7 @@ replay_full_log_finish(Time) ->
 
 -spec rollback_steps_start() -> ok.
 
-rollback_steps_start() -> update_text(?ROLLBACK_STEPS_START).
+rollback_steps_start() -> set_text(?ROLLBACK_STEPS_START).
 
 
 -spec rollback_steps_finish({StepsDone, StepsTotal}, Time) -> ok when
@@ -361,7 +360,7 @@ rollback_steps_start() -> update_text(?ROLLBACK_STEPS_START).
 rollback_steps_finish({Done, Total}, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?ROLLBACK_STEPS_FINISH, [Done, Total, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 %%%=============================================================================
@@ -370,7 +369,7 @@ rollback_steps_finish({Done, Total}, Time) ->
 -spec rollback_spawn_start(Pid) -> ok when
   Pid :: cauder_types:proc_id().
 
-rollback_spawn_start(Pid) -> update_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
+rollback_spawn_start(Pid) -> set_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
 
 
 -spec rollback_spawn_finish(Pid, Time) -> ok when
@@ -380,12 +379,12 @@ rollback_spawn_start(Pid) -> update_text(io_lib:format(?ROLLBACK_SPAWN_START, [P
 rollback_spawn_finish(Pid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?ROLLBACK_SPAWN_FINISH, [Pid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec rollback_spawn_fail() -> ok.
 
-rollback_spawn_fail() -> update_text(?ROLLBACK_SPAWN_FAIL).
+rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 
 
 %%%=============================================================================
@@ -394,7 +393,7 @@ rollback_spawn_fail() -> update_text(?ROLLBACK_SPAWN_FAIL).
 -spec rollback_send_start(Uid) -> ok when
   Uid :: cauder_types:msg_id().
 
-rollback_send_start(Uid) -> update_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
+rollback_send_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
 
 
 -spec rollback_send_finish(Uid, Time) -> ok when
@@ -404,12 +403,12 @@ rollback_send_start(Uid) -> update_text(io_lib:format(?ROLLBACK_SEND_START, [Uid
 rollback_send_finish(Uid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?ROLLBACK_SEND_FINISH, [Uid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec rollback_send_fail() -> ok.
 
-rollback_send_fail() -> update_text(?ROLLBACK_SEND_FAIL).
+rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 
 
 %%%=============================================================================
@@ -418,7 +417,7 @@ rollback_send_fail() -> update_text(?ROLLBACK_SEND_FAIL).
 -spec rollback_receive_start(Uid) -> ok when
   Uid :: cauder_types:msg_id().
 
-rollback_receive_start(Uid) -> update_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
+rollback_receive_start(Uid) -> set_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
 
 
 -spec rollback_receive_finish(Uid, Time) -> ok when
@@ -428,12 +427,12 @@ rollback_receive_start(Uid) -> update_text(io_lib:format(?ROLLBACK_RECEIVE_START
 rollback_receive_finish(Uid, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?ROLLBACK_RECEIVE_FINISH, [Uid, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec rollback_receive_fail() -> ok.
 
-rollback_receive_fail() -> update_text(?ROLLBACK_RECEIVE_FAIL).
+rollback_receive_fail() -> set_text(?ROLLBACK_RECEIVE_FAIL).
 
 
 %%%=============================================================================
@@ -442,7 +441,7 @@ rollback_receive_fail() -> update_text(?ROLLBACK_RECEIVE_FAIL).
 -spec rollback_variable_start(Name) -> ok when
   Name :: atom().
 
-rollback_variable_start(Name) -> update_text(io_lib:format(?ROLLBACK_VARIABLE_START, [Name])).
+rollback_variable_start(Name) -> set_text(io_lib:format(?ROLLBACK_VARIABLE_START, [Name])).
 
 
 -spec rollback_variable_finish(Name, Time) -> ok when
@@ -452,15 +451,26 @@ rollback_variable_start(Name) -> update_text(io_lib:format(?ROLLBACK_VARIABLE_ST
 rollback_variable_finish(Name, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?ROLLBACK_VARIABLE_FINISH, [Name, TimeStr]),
-  update_text(Status).
+  set_text(Status).
 
 
 -spec rollback_variable_fail() -> ok.
 
-rollback_variable_fail() -> update_text(?ROLLBACK_VARIABLE_FAIL).
+rollback_variable_fail() -> set_text(?ROLLBACK_VARIABLE_FAIL).
 
 
 %%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
+-spec set_text(Text) -> ok when
+  Text :: unicode:chardata().
+
+set_text(Text) ->
+  Frame = cauder_wx:find(?FRAME, wxFrame),
+  StatusBar = wxFrame:getStatusBar(Frame),
+  wxStatusBar:setStatusText(StatusBar, Text).
 
 
 -spec semantics_to_string(Semantics) -> String when

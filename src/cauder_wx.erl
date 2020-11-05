@@ -105,31 +105,46 @@ init([]) ->
 
   Frame = wxFrame:new(wx:null(), ?FRAME, ?APP_NAME, [{size, ?FRAME_SIZE_INIT}]),
 
-  Menubar = cauder_wx_menu:create(Frame),
+  MenuBar = cauder_wx_menu:create(Frame),
   Content = cauder_wx_areas:create(Frame),
   StatusBar = cauder_wx_statusbar:create(Frame),
 
   cauder:subscribe(),
 
-  wxMenuBar:check(Menubar, ?MENU_View_Mailbox, true),
-  wxMenuBar:check(Menubar, ?MENU_View_Log, true),
-  wxMenuBar:check(Menubar, ?MENU_View_History, true),
-  wxMenuBar:check(Menubar, ?MENU_View_Stack, true),
-  wxMenuBar:check(Menubar, ?MENU_View_Bindings, true),
-  wxMenuBar:check(Menubar, ?MENU_View_CurrentExpression, true),
-
-  wxMenuBar:check(Menubar, ?MENU_View_ConcurrentHistory, true),
-  wxMenuBar:check(Menubar, ?MENU_View_RelevantBindings, true),
-
-  wxMenuBar:check(Menubar, ?MENU_View_StatusBar, true),
-
   CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
-  cauder_wx_code:update_buttons(CodeCtrl, Menubar),
+  cauder_wx_code:update_buttons(CodeCtrl, MenuBar),
+
+  % Subscribe to UI events
 
   wxEvtHandler:connect(Frame, close_window),
   wxEvtHandler:connect(Frame, command_button_clicked),
   wxEvtHandler:connect(Frame, command_menu_selected),
   wxEvtHandler:connect(Frame, command_text_updated),
+
+  % Update menu bar
+
+  Config = cauder_wx_config:load(),
+
+  wxMenuBar:check(MenuBar, ?MENU_View_CurrentExpression, true), % Config#config.current_expression
+  wxMenuBar:check(MenuBar, ?MENU_View_Bindings, Config#config.bindings),
+  wxMenuBar:check(MenuBar, ?MENU_View_Stack, Config#config.stack),
+  wxMenuBar:check(MenuBar, ?MENU_View_Log, Config#config.log),
+  wxMenuBar:check(MenuBar, ?MENU_View_History, Config#config.history),
+  wxMenuBar:check(MenuBar, ?MENU_View_Mailbox, true), % Config#config.mailbox
+
+  case Config#config.bindings_mode of
+    all -> wxMenuBar:check(MenuBar, ?MENU_View_AllBindings, true);
+    relevant -> wxMenuBar:check(MenuBar, ?MENU_View_RelevantBindings, true)
+  end,
+
+  case Config#config.history_mode of
+    full -> wxMenuBar:check(MenuBar, ?MENU_View_FullHistory, true);
+    concurrent -> wxMenuBar:check(MenuBar, ?MENU_View_ConcurrentHistory, true)
+  end,
+
+  wxMenuBar:check(MenuBar, ?MENU_View_StatusBar, Config#config.status_bar),
+
+  % Disable action
 
   wxChoice:disable(cauder_wx:find(?ACTION_Process, wxChoice)),
   wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
@@ -137,17 +152,19 @@ init([]) ->
   wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
   wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
+  % Show window
+
   wxFrame:show(Frame),
   wxFrame:raise(Frame),
 
   State = #wx_state{
     frame     = Frame,
-    menubar   = Menubar,
+    menubar   = MenuBar,
     content   = Content,
     statusbar = StatusBar
   },
 
-  {Frame, State}.
+  {Frame, refresh(State, State#wx_state{config = Config})}.
 
 
 %%------------------------------------------------------------------------------
@@ -206,27 +223,41 @@ handle_event(?MENU_EVENT(?MENU_View_Zoom100), #wx_state{menubar = Menubar} = Sta
   cauder_wx_code:update_buttons(CodeArea, Menubar),
   {noreply, State};
 
-handle_event(?MENU_EVENT(?MENU_View_Bindings), State) ->
-  {noreply, State}; % TODO Add to state
+handle_event(?MENU_EVENT(Item, Check), #wx_state{config = Config} = State) when ?Is_Visibility_Item(Item) ->
+  Show = Check =:= 1,
+  NewConfig =
+    case Item of
+      ?MENU_View_Bindings -> Config#config{bindings = Show};
+      ?MENU_View_Stack -> Config#config{stack = Show};
+      ?MENU_View_Log -> Config#config{log = Show};
+      ?MENU_View_History -> Config#config{history = Show}
+    end,
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
 
-handle_event(?MENU_EVENT(?MENU_View_Stack), State) ->
-  {noreply, State}; % TODO Add to state
+handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_Bindings_Mode(Item) ->
+  NewConfig =
+    case Item of
+      ?MENU_View_AllBindings -> Config#config{bindings_mode = all};
+      ?MENU_View_RelevantBindings -> Config#config{bindings_mode = relevant}
+    end,
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
 
-handle_event(?MENU_EVENT(?MENU_View_Log), State) ->
-  {noreply, State}; % TODO Add to state
+handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_History_Mode(Item) ->
+  NewConfig =
+    case Item of
+      ?MENU_View_FullHistory -> Config#config{history_mode = full};
+      ?MENU_View_ConcurrentHistory -> Config#config{history_mode = concurrent}
+    end,
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
 
-handle_event(?MENU_EVENT(?MENU_View_History), State) ->
-  {noreply, State}; % TODO Add to state
-
-handle_event(?MENU_EVENT(Item), State) when ?Is_Bindings_Mode(Item) ->
-  {noreply, State}; % TODO Add to state
-
-handle_event(?MENU_EVENT(Item), State) when ?Is_History_Mode(Item) ->
-  {noreply, State}; % TODO Add to state
-
-handle_event(?MENU_EVENT(?MENU_View_StatusBar, Enabled), State) ->
-  cauder_wx_statusbar:set_visibility(Enabled =/= 0),
-  {noreply, State};
+handle_event(?MENU_EVENT(?MENU_View_StatusBar, Check), #wx_state{config = Config} = State) ->
+  Show = Check =:= 1,
+  NewConfig = Config#config{status_bar = Show},
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
 
 %%%=============================================================================
 
@@ -728,7 +759,7 @@ refresh(OldState, NewState) ->
   State = NewState#wx_state{pid = cauder_wx_actions:selected_pid()},
 
   cauder_wx_menu:update(OldState, State),
-  cauder_wx_statusbar:update_process_count(OldState#wx_state.system, State#wx_state.system),
+  cauder_wx_statusbar:update(OldState, State),
 
   cauder_wx_code:update(OldState, State),
   cauder_wx_actions:update(OldState, State),
