@@ -470,7 +470,7 @@ update_replay(_, #wx_state{system = undefined}) ->
   wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
   ok;
 update_replay(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
-  case lists:all(fun(Log) -> Log =:= [] end, orddict:to_list(Logs)) of
+  case lists:all(fun({_Key, Log}) -> Log =:= [] end, orddict:to_list(Logs)) of
     true ->
       wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel));
     false ->
