@@ -355,12 +355,13 @@ create_replay(Parent) ->
   ButtonSize = {size, {100, -1}},
 
   StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
+  CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
   CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
   % Steps
 
   Steps = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Steps),
+  wxBoxSizer:add(Content, Steps, CenterHorizontal),
 
   StepsStaticText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
   wxBoxSizer:add(Steps, StepsStaticText, CenterVertical),
@@ -382,7 +383,7 @@ create_replay(Parent) ->
   % Spawn
 
   Spawn = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Spawn),
+  wxBoxSizer:add(Content, Spawn, CenterHorizontal),
 
   SpawnStaticText = wxStaticText:new(Win, ?wxID_ANY, "PID:", StaticAlignRight),
   wxBoxSizer:add(Spawn, SpawnStaticText, CenterVertical),
@@ -404,7 +405,7 @@ create_replay(Parent) ->
   % Send
 
   Send = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Send),
+  wxBoxSizer:add(Content, Send, CenterHorizontal),
 
   SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
   wxBoxSizer:add(Send, SendStaticText, CenterVertical),
@@ -426,7 +427,7 @@ create_replay(Parent) ->
   % Receive
 
   Receive = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Receive),
+  wxBoxSizer:add(Content, Receive, CenterHorizontal),
 
   ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
   wxBoxSizer:add(Receive, ReceiveStaticText, CenterVertical),
@@ -440,6 +441,18 @@ create_replay(Parent) ->
 
   ReceiveButton = wxButton:new(Win, ?ACTION_Replay_Receive_Button, [{label, "Replay receive"}, ButtonSize]),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
+
+  % -----
+
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
+  % FullLog
+
+  FullLog = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, FullLog, CenterHorizontal),
+
+  FullLogButton = wxButton:new(Win, ?ACTION_Replay_FullLog_Button, [{label, "Replay full log"}, ButtonSize]),
+  wxBoxSizer:add(FullLog, FullLogButton, CenterVertical),
 
   Win.
 

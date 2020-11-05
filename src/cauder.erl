@@ -16,7 +16,7 @@
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
 -export([step_multiple/2]).
--export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1]).
+-export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
 -export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
@@ -334,6 +334,23 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
 
+%%------------------------------------------------------------------------------
+%% @doc Replays the full log.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_replay_full_log/2
+
+-spec replay_full_log() -> Reply when
+  Reply :: {ok, CurrentSystem} | busy,
+  CurrentSystem :: cauder_types:system().
+
+replay_full_log() -> gen_server:call(?SERVER, {user, {replay_full_log, []}}).
+
+
 %%%=============================================================================
 
 
@@ -597,6 +614,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       replay_spawn -> fun task_replay_spawn/2;
       replay_send -> fun task_replay_send/2;
       replay_receive -> fun task_replay_receive/2;
+      replay_full_log -> fun task_replay_full_log/2;
       rollback_steps -> fun task_rollback_steps/2;
       rollback_spawn -> fun task_rollback_spawn/2;
       rollback_send -> fun task_rollback_send/2;
@@ -901,6 +919,22 @@ task_replay_receive(Uid, Sys0) ->
   {{replay_receive, Uid}, Time, Sys1}.
 
 
+-spec task_replay_full_log([], System) -> {replay_full_log, Time, NewSystem} when
+  System :: cauder_types:system(),
+  Time :: non_neg_integer(),
+  NewSystem :: cauder_types:system().
+
+task_replay_full_log([], Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+        replay_full_log(Sys0)
+      end
+    ),
+
+  {replay_full_log, Time, Sys1}.
+
+
 %%%=============================================================================
 
 
@@ -1067,6 +1101,24 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
     true ->
       Sys1 = cauder_replay:replay_step(Sys0, Pid),
       replay_steps(Sys1, Pid, Steps, StepsDone + 1)
+  end.
+
+
+-spec replay_full_log(System) -> NewSystem when
+  System :: cauder_types:system(),
+  NewSystem :: cauder_types:system().
+
+replay_full_log(Sys0 = #sys{logs = Logs}) ->
+  case lists:search(fun({_, Log}) -> Log =/= [] end, orddict:to_list(Logs)) of
+    {value, {_, Log}} ->
+      Sys1 =
+        case lists:last(Log) of
+          {spawn, Pid} -> cauder_replay:replay_spawn(Sys0, Pid);
+          {send, Uid} -> cauder_replay:replay_send(Sys0, Uid);
+          {'receive', Uid} -> cauder_replay:replay_receive(Sys0, Uid)
+        end,
+      replay_full_log(Sys1);
+    false -> Sys0
   end.
 
 

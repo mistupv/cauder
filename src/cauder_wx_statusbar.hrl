@@ -32,6 +32,9 @@
 -define(REPLAY_RECEIVE_FINISH, "Replayed the reception of the message with UID ~p in ~s").
 -define(REPLAY_RECEIVE_FAIL, "Could not replay the reception of that message").
 
+-define(REPLAY_FULL_LOG_START, "Replaying the full log...").
+-define(REPLAY_FULL_LOG_FINISH, "Replayed the full log in ~s").
+
 -define(ROLLBACK_STEPS_START, "Rolling back steps...").
 -define(ROLLBACK_STEPS_FINISH, "Rolled back ~b of ~b steps in ~s").
 

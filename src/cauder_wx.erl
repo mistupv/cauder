@@ -341,6 +341,11 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
       {noreply, refresh(State, State#wx_state{system = System, task = replay_receive})}
   end;
 
+handle_event(?BUTTON_EVENT(?ACTION_Replay_FullLog_Button), State) ->
+  {ok, System} = cauder:replay_full_log(),
+  cauder_wx_statusbar:replay_full_log_start(),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_full_log})};
+
 %%%=============================================================================
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), #wx_state{pid = Pid} = State) when Pid =/= undefined ->
@@ -507,7 +512,7 @@ handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task 
 
   cauder_wx_statusbar:load_finish(Module, Time),
 
-  {noreply, refresh(State, State#wx_state{module = Module,system = System,  task = undefined})};
+  {noreply, refresh(State, State#wx_state{module = Module, system = System, task = undefined})};
 
 handle_info({dbg, {finish, start, Time, System}}, #wx_state{task = start} = State) ->
   cauder_wx_statusbar:init_finish(Time),
@@ -559,6 +564,11 @@ handle_info({dbg, {finish, {replay_receive, Uid}, Time, System}}, #wx_state{task
 handle_info({dbg, {fail, replay_receive, no_replay}}, #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
+
+
+handle_info({dbg, {finish, replay_full_log, Time, System}}, #wx_state{task = replay_full_log} = State) ->
+  cauder_wx_statusbar:replay_full_log_finish(Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 

@@ -15,6 +15,7 @@
 -export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
 -export([replay_send_start/1, replay_send_finish/2, replay_send_fail/0]).
 -export([replay_receive_start/1, replay_receive_finish/2, replay_receive_fail/0]).
+-export([replay_full_log_start/0, replay_full_log_finish/1]).
 % Rollback
 -export([rollback_steps_start/0, rollback_steps_finish/2]).
 -export([rollback_spawn_start/1, rollback_spawn_finish/2, rollback_spawn_fail/0]).
@@ -325,6 +326,23 @@ replay_receive_finish(Uid, Time) ->
 -spec replay_receive_fail() -> ok.
 
 replay_receive_fail() -> update_text(?REPLAY_RECEIVE_FAIL).
+
+
+%%%=============================================================================
+
+
+-spec replay_full_log_start() -> ok.
+
+replay_full_log_start() -> update_text(?REPLAY_FULL_LOG_START).
+
+
+-spec replay_full_log_finish(Time) -> ok when
+  Time :: non_neg_integer().
+
+replay_full_log_finish(Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?REPLAY_FULL_LOG_FINISH, [TimeStr]),
+  update_text(Status).
 
 
 %%%=============================================================================

@@ -141,6 +141,7 @@
 -define(ACTION_Replay_Spawn_Button, 2136).
 -define(ACTION_Replay_Send_Button, 2137).
 -define(ACTION_Replay_Receive_Button, 2138).
+-define(ACTION_Replay_FullLog_Button, 2139).
 
 %% -----
 
