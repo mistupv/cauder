@@ -39,6 +39,8 @@ start_session(Parent, MFAs) ->
   ManualRadio = wxRadioButton:new(Dialog, ?wxID_ANY, "Manual"),
   wxFlexGridSizer:add(Grid, ManualRadio, [{flag, ?wxALIGN_CENTER_VERTICAL}]),
 
+  wxRadioButton:setValue(ManualRadio, true),
+
   %% Manual Panel
 
   ManualPanel = wxPanel:new(Dialog),
