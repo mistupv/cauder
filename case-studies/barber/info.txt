@@ -33,7 +33,7 @@ Using the debugger
 * First, instrument the buggy code and get a trace:
 
 >>move to the main folder of the tracer (branch: simple_inst)
->>copy the source file (barber.erl) to the examples folder 
+>>copy the source file (barber.erl) to the examples folder
 
 $ make load
 > tracer:inst(barber,[{dir,"examples"}]).  // creates baber.erl in the current dir
@@ -51,22 +51,22 @@ $ ./cauder.sh
 
 >> Load in barber.erl and the logged trace in barber_results
 >> (just need to point to the folder "barber_results")
- 
+
 * A typical debugging session:
 
->> Replay process 71 (main) 100 steps
+>> Replay process 74 (main) 100 steps
     -->some processes still have a nonempty log, but this is fine
-    -->we want to see what happened with joe 
+    -->we want to see what happened with joe
 >> Rollback receive of message 1
     -->many actions undone because of causal dependencies
->> Replay 73 (shop) 1 step
+>> Replay 78 (shop) 1 step
     -->we receive new customer joe, as expected
->> Let us now look at process 73 (shop) and its log, and see if everything goes fine:
+>> Let us now look at process 78 (shop) and its log, and see if everything goes fine:
     --> it should first send "wakeup" to the barber (replay send 4): ok
     --> it should now receive "ready" from the barber (replay receive 2): ok
     --> it should now send a customer (John) to the barber (replay send 6): ok
     --> let us now go forward step by step till the next loop of barber_shop...
-        after 9 steps, we see that the next call is barber_shop(_,[John]),
+        after 6 steps, we see that the next call is barber_shop(81, [{79, 'John'}]),
         which is incorrect! (we sent John, but remove Joe from the waiting room)
 
   * Solution: change the implementation of removeCustomer for a function that
