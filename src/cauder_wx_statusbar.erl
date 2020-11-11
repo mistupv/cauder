@@ -498,4 +498,4 @@ rule_to_string(?RULE_RECEIVE) -> "Receive".
 
 time_to_string(Time) when Time < 1000      -> "<1 ms";
 time_to_string(Time) when Time < 1000 * 60 -> io_lib:format("~b ms", [Time div 1000]);
-time_to_string(Time)                       -> io_lib:format("~b s ~s ms", [Time div 1000 * 60, Time div 1000]).
+time_to_string(Time)                       -> io_lib:format("~b s ~b ms", [Time div (1000 * 60), Time div 1000]).
