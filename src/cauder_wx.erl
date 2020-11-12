@@ -334,43 +334,28 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Steps_Button), #wx_state{pid = Pid} = 
   {noreply, refresh(State, State#wx_state{system = System, task = replay_steps})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Replay_Spawn, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:replay_spawn_fail(),
-      {noreply, State};
-    {Pid, _} ->
-      {ok, System} = cauder:replay_spawn(Pid),
-      cauder_wx_statusbar:replay_spawn_start(Pid),
-      {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Replay_Spawn, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Pid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:replay_spawn(Pid),
+  cauder_wx_statusbar:replay_spawn_start(Pid),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Replay_Send, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:replay_send_fail(),
-      {noreply, State};
-    {Uid, _} ->
-      {ok, System} = cauder:replay_send(Uid),
-      cauder_wx_statusbar:replay_send_start(Uid),
-      {noreply, refresh(State, State#wx_state{system = System, task = replay_send})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Replay_Send, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Uid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:replay_send(Uid),
+  cauder_wx_statusbar:replay_send_start(Uid),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_send})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Receive_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Replay_Receive, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:replay_receive_fail(),
-      {noreply, State};
-    {Uid, _} ->
-      {ok, System} = cauder:replay_receive(Uid),
-      cauder_wx_statusbar:replay_receive_start(Uid),
-      {noreply, refresh(State, State#wx_state{system = System, task = replay_receive})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Replay_Receive, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Uid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:replay_receive(Uid),
+  cauder_wx_statusbar:replay_receive_start(Uid),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_receive})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_FullLog_Button), State) ->
   {ok, System} = cauder:replay_full_log(),
@@ -387,43 +372,28 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Steps_Button), #wx_state{pid = Pid} 
   {noreply, refresh(State, State#wx_state{system = System, task = rollback_steps})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Rollback_Spawn, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:rollback_spawn_fail(),
-      {noreply, State};
-    {Pid, _} ->
-      {ok, System} = cauder:rollback_spawn(Pid),
-      cauder_wx_statusbar:rollback_spawn_start(Pid),
-      {noreply, refresh(State, State#wx_state{system = System, task = rollback_spawn})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Rollback_Spawn, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Pid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:rollback_spawn(Pid),
+  cauder_wx_statusbar:rollback_spawn_start(Pid),
+  {noreply, refresh(State, State#wx_state{system = System, task = rollback_spawn})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Rollback_Send, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:rollback_send_fail(),
-      {noreply, State};
-    {Uid, _} ->
-      {ok, System} = cauder:rollback_send(Uid),
-      cauder_wx_statusbar:rollback_send_start(Uid),
-      {noreply, refresh(State, State#wx_state{system = System, task = rollback_send})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Uid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:rollback_send(Uid),
+  cauder_wx_statusbar:rollback_send_start(Uid),
+  {noreply, refresh(State, State#wx_state{system = System, task = rollback_send})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Receive_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Rollback_Receive, wxTextCtrl),
-  case string:to_integer(wxTextCtrl:getValue(TextCtrl)) of
-    % What if error?
-    {error, _} ->
-      cauder_wx_statusbar:rollback_receive_fail(),
-      {noreply, State};
-    {Uid, _} ->
-      {ok, System} = cauder:rollback_receive(Uid),
-      cauder_wx_statusbar:rollback_receive_start(Uid),
-      {noreply, refresh(State, State#wx_state{system = System, task = rollback_receive})}
-  end;
+  Choice = cauder_wx:find(?ACTION_Rollback_Receive, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Uid = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:rollback_receive(Uid),
+  cauder_wx_statusbar:rollback_receive_start(Uid),
+  {noreply, refresh(State, State#wx_state{system = System, task = rollback_receive})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
   TextCtrl = cauder_wx:find(?ACTION_Rollback_Variable, wxTextCtrl),

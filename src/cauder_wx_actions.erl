@@ -363,13 +363,13 @@ create_replay(Parent) ->
   Steps = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Steps, CenterHorizontal),
 
-  StepsStaticText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
-  wxBoxSizer:add(Steps, StepsStaticText, CenterVertical),
+  StepsText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
+  wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?ACTION_Replay_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
-  wxBoxSizer:add(Steps, StepsText, CenterVertical),
+  StepsSpinner = wxSpinCtrl:new(Win, [{id, ?ACTION_Replay_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
+  wxBoxSizer:add(Steps, StepsSpinner, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
@@ -385,18 +385,26 @@ create_replay(Parent) ->
   Spawn = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Spawn, CenterHorizontal),
 
-  SpawnStaticText = wxStaticText:new(Win, ?wxID_ANY, "PID:", StaticAlignRight),
-  wxBoxSizer:add(Spawn, SpawnStaticText, CenterVertical),
+  SpawnText = wxStaticText:new(Win, ?wxID_ANY, "PID:", StaticAlignRight),
+  wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
-  SpawnText = wxTextCtrl:new(Win, ?ACTION_Replay_Spawn, [InputSize]),
-  wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
+  SpawnChoice = wxChoice:new(Win, ?ACTION_Replay_Spawn, [InputSize]),
+  wxBoxSizer:add(Spawn, SpawnChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
   SpawnButton = wxButton:new(Win, ?ACTION_Replay_Spawn_Button, [{label, "Replay spawn"}, ButtonSize]),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
+
+  SpawnChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(SpawnButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(SpawnChoice, command_choice_selected, [{callback, SpawnChoiceCallback}]),
 
   % -----
 
@@ -407,18 +415,26 @@ create_replay(Parent) ->
   Send = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Send, CenterHorizontal),
 
-  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
-  wxBoxSizer:add(Send, SendStaticText, CenterVertical),
+  SendText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
+  wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
-  SendText = wxTextCtrl:new(Win, ?ACTION_Replay_Send, [InputSize]),
-  wxBoxSizer:add(Send, SendText, CenterVertical),
+  SendChoice = wxChoice:new(Win, ?ACTION_Replay_Send, [InputSize]),
+  wxBoxSizer:add(Send, SendChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
   SendButton = wxButton:new(Win, ?ACTION_Replay_Send_Button, [{label, "Replay send"}, ButtonSize]),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
+
+  SendChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(SendButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(SendChoice, command_choice_selected, [{callback, SendChoiceCallback}]),
 
   % -----
 
@@ -429,18 +445,26 @@ create_replay(Parent) ->
   Receive = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Receive, CenterHorizontal),
 
-  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
-  wxBoxSizer:add(Receive, ReceiveStaticText, CenterVertical),
+  ReceiveText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
+  wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
-  ReceiveText = wxTextCtrl:new(Win, ?ACTION_Replay_Receive, [InputSize]),
-  wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
+  ReceiveChoice = wxChoice:new(Win, ?ACTION_Replay_Receive, [InputSize]),
+  wxBoxSizer:add(Receive, ReceiveChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
   ReceiveButton = wxButton:new(Win, ?ACTION_Replay_Receive_Button, [{label, "Replay receive"}, ButtonSize]),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
+
+  ReceiveChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(ReceiveButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(ReceiveChoice, command_choice_selected, [{callback, ReceiveChoiceCallback}]),
 
   % -----
 
@@ -472,7 +496,8 @@ update_replay(_, #wx_state{system = undefined}) ->
 update_replay(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
   case lists:all(fun({_Key, Log}) -> Log =:= [] end, orddict:to_list(Logs)) of
     true ->
-      wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel));
+      wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+      ok;
     false ->
       wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
@@ -483,9 +508,40 @@ update_replay(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
         end,
 
       wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}])
-  end,
-  ok.
+      wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}]),
+
+      % TODO Improve to avoid unnecessary updates
+
+      LogEntries = lists:flatmap(fun({_, Log}) -> Log end, orddict:to_list(Logs)),
+
+      #{spawn := SpawnPids, send := SendUids, 'receive' := ReceiveUids} =
+        lists:foldl(
+          fun
+            ({K, V}, Map) -> maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map)
+          end,
+          #{spawn => ordsets:new(), send => ordsets:new(), 'receive' => ordsets:new()},
+          LogEntries
+        ),
+
+      SpawnChoice = cauder_wx:find(?ACTION_Replay_Spawn, wxChoice),
+      SendChoice = cauder_wx:find(?ACTION_Replay_Send, wxChoice),
+      ReceiveChoice = cauder_wx:find(?ACTION_Replay_Receive, wxChoice),
+
+      populate_choice(SpawnChoice, SpawnPids),
+      populate_choice(SendChoice, SendUids),
+      populate_choice(ReceiveChoice, ReceiveUids),
+
+      wxChoice:enable(SpawnChoice, [{enable, not wxChoice:isEmpty(SpawnChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Replay_Spawn_Button, wxButton)),
+
+      wxChoice:enable(SendChoice, [{enable, not wxChoice:isEmpty(SendChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Replay_Send_Button, wxButton)),
+
+      wxChoice:enable(ReceiveChoice, [{enable, not wxChoice:isEmpty(ReceiveChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Replay_Receive_Button, wxButton)),
+
+      ok
+  end.
 
 
 %%%=============================================================================
@@ -518,13 +574,13 @@ create_rollback(Parent) ->
   Steps = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Steps),
 
-  StepsStaticText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
-  wxBoxSizer:add(Steps, StepsStaticText, CenterVertical),
+  StepsText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
+  wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsText = wxSpinCtrl:new(Win, [{id, ?ACTION_Rollback_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
-  wxBoxSizer:add(Steps, StepsText, CenterVertical),
+  StepsSpinner = wxSpinCtrl:new(Win, [{id, ?ACTION_Rollback_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
+  wxBoxSizer:add(Steps, StepsSpinner, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_MEDIUM),
 
@@ -540,18 +596,26 @@ create_rollback(Parent) ->
   Spawn = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Spawn),
 
-  SpawnStaticText = wxStaticText:new(Win, ?wxID_ANY, "PID:", StaticAlignRight),
-  wxBoxSizer:add(Spawn, SpawnStaticText, CenterVertical),
+  SpawnText = wxStaticText:new(Win, ?wxID_ANY, "PID:", StaticAlignRight),
+  wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_SMALL),
 
-  SpawnText = wxTextCtrl:new(Win, ?ACTION_Rollback_Spawn, [InputSize]),
-  wxBoxSizer:add(Spawn, SpawnText, CenterVertical),
+  SpawnChoice = wxChoice:new(Win, ?ACTION_Rollback_Spawn, [InputSize]),
+  wxBoxSizer:add(Spawn, SpawnChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Spawn, ?SPACER_MEDIUM),
 
   SpawnButton = wxButton:new(Win, ?ACTION_Rollback_Spawn_Button, [{label, "Roll spawn"}, ButtonSize]),
   wxBoxSizer:add(Spawn, SpawnButton, CenterVertical),
+
+  SpawnChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(SpawnButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(SpawnChoice, command_choice_selected, [{callback, SpawnChoiceCallback}]),
 
   % -----
 
@@ -562,18 +626,26 @@ create_rollback(Parent) ->
   Send = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Send),
 
-  SendStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
-  wxBoxSizer:add(Send, SendStaticText, CenterVertical),
+  SendText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
+  wxBoxSizer:add(Send, SendText, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_SMALL),
 
-  SendText = wxTextCtrl:new(Win, ?ACTION_Rollback_Send, [InputSize]),
-  wxBoxSizer:add(Send, SendText, CenterVertical),
+  SendChoice = wxChoice:new(Win, ?ACTION_Rollback_Send, [InputSize]),
+  wxBoxSizer:add(Send, SendChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Send, ?SPACER_MEDIUM),
 
   SendButton = wxButton:new(Win, ?ACTION_Rollback_Send_Button, [{label, "Roll send"}, ButtonSize]),
   wxBoxSizer:add(Send, SendButton, CenterVertical),
+
+  SendChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(SendButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(SendChoice, command_choice_selected, [{callback, SendChoiceCallback}]),
 
   % -----
 
@@ -584,18 +656,26 @@ create_rollback(Parent) ->
   Receive = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Receive),
 
-  ReceiveStaticText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
-  wxBoxSizer:add(Receive, ReceiveStaticText, CenterVertical),
+  ReceiveText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Uid:", StaticAlignRight),
+  wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_SMALL),
 
-  ReceiveText = wxTextCtrl:new(Win, ?ACTION_Rollback_Receive, [InputSize]),
-  wxBoxSizer:add(Receive, ReceiveText, CenterVertical),
+  ReceiveChoice = wxChoice:new(Win, ?ACTION_Rollback_Receive, [InputSize]),
+  wxBoxSizer:add(Receive, ReceiveChoice, CenterVertical),
 
   wxBoxSizer:addSpacer(Receive, ?SPACER_MEDIUM),
 
   ReceiveButton = wxButton:new(Win, ?ACTION_Rollback_Receive_Button, [{label, "Roll receive"}, ButtonSize]),
   wxBoxSizer:add(Receive, ReceiveButton, CenterVertical),
+
+  ReceiveChoiceCallback =
+    fun
+      (#wx{event = #wxCommand{commandInt = Idx}}, _) ->
+        wxButton:enable(ReceiveButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  wxChoice:connect(ReceiveChoice, command_choice_selected, [{callback, ReceiveChoiceCallback}]),
 
   % -----
 
@@ -647,7 +727,8 @@ update_rollback(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
 
   case CanRollBack of
     false ->
-      wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel));
+      wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+      ok;
     true ->
       wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
@@ -655,6 +736,56 @@ update_rollback(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
       CanRollbackSteps = Hist =/= [],
 
       wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}])
-  end,
-  ok.
+      wxButton:enable(cauder_wx:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}]),
+
+      % TODO Improve to avoid unnecessary updates
+
+      HistEntries = lists:flatmap(fun({_, Proc}) -> Proc#proc.hist end, orddict:to_list(PDict)),
+
+      #{spawn := SpawnPids, send := SendUids, rec := ReceiveUids} =
+        lists:foldl(
+          fun
+            ({spawn = K, _Bs, _Es, _Stk, V}, Map) ->
+              maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
+            ({K, _Bs, _Es, _Stk, #msg{uid = V}}, Map) when K =:= send orelse K =:= rec ->
+              maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
+            (_, Map) -> Map
+          end,
+          #{spawn => ordsets:new(), send => ordsets:new(), rec => ordsets:new()},
+          HistEntries
+        ),
+
+      SpawnChoice = cauder_wx:find(?ACTION_Rollback_Spawn, wxChoice),
+      SendChoice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
+      ReceiveChoice = cauder_wx:find(?ACTION_Rollback_Receive, wxChoice),
+
+      populate_choice(SpawnChoice, SpawnPids),
+      populate_choice(SendChoice, SendUids),
+      populate_choice(ReceiveChoice, ReceiveUids),
+
+      wxChoice:enable(SpawnChoice, [{enable, not wxChoice:isEmpty(SpawnChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Rollback_Spawn_Button, wxButton)),
+
+      wxChoice:enable(SendChoice, [{enable, not wxChoice:isEmpty(SendChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Rollback_Send_Button, wxButton)),
+
+      wxChoice:enable(ReceiveChoice, [{enable, not wxChoice:isEmpty(ReceiveChoice)}]),
+      wxButton:disable(cauder_wx:find(?ACTION_Rollback_Receive_Button, wxButton)),
+
+      ok
+  end.
+
+
+%%%=============================================================================
+
+
+populate_choice(Choice, Items) ->
+  wxChoice:freeze(Choice),
+  wxChoice:clear(Choice),
+  lists:foreach(
+    fun
+      (Item) -> wxChoice:append(Choice, io_lib:format("~p", [Item]), Item)
+    end,
+    Items
+  ),
+  wxChoice:thaw(Choice).
