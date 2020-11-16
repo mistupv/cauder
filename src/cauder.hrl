@@ -1,6 +1,6 @@
 -define(APP_NAME, "CauDEr").
 -define(APP_URL, "https://github.com/mistupv/cauder-v2").
--define(APP_DB, 'cauder_database').
+-define(APP_DB, 'cauder/database').
 
 -define(ID_GAMMA, 0).
 
@@ -42,9 +42,9 @@
   % Global mailbox
   mail = [] :: [cauder_types:message()],
   % Pool of processes
-  procs :: cauder_types:process_dict(),
+  procs :: cauder_types:process_map(),
   % System log
-  logs = [] :: cauder_types:log_dict(),
+  logs = maps:new() :: cauder_types:log_map(),
   trace = [] :: [cauder_types:trace()],
   roll = []
 }).
@@ -58,7 +58,7 @@
   % Call stack
   stack = [] :: cauder_types:stack(),
   % Environment
-  env = erl_eval:new_bindings() :: cauder_types:environment(),
+  env = maps:new() :: cauder_types:environment(),
   % List of expressions
   exprs :: [cauder_types:abstract_expr()],
   % The entry point function for this process

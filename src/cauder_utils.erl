@@ -12,7 +12,6 @@
 -export([merge_bindings/2]).
 -export([stringToMFA/1, stringToExpressions/1]).
 -export([filter_options/2]).
--export([has_var/2]).
 -export([fresh_pid/0, fresh_uid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
@@ -86,22 +85,19 @@ find_message(Mail, Uid) ->
 
 
 %%------------------------------------------------------------------------------
-%% @doc Searches for the given log entry in the given log dictionary.
+%% @doc Searches for the given log entry in the given log map.
 %% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
 %% contains the given entry, or `false' if the entry is not found.
 
--spec find_item(LogDictionary, LogEntry) -> {value, Pid} | false when
-  LogDictionary :: cauder_types:log_dict(),
-  LogEntry :: cauder_types:log_entry(),
+-spec find_item(LMap, Entry) -> {value, Pid} | false when
+  LMap :: cauder_types:log_map(),
+  Entry :: cauder_types:log_entry(),
   Pid :: cauder_types:proc_id().
 
-find_item(Logs, Item) ->
-  LogEntry = lists:search(
-    fun({_, Log}) -> lists:member(Item, Log) end,
-    orddict:to_list(Logs)
-  ),
-  case LogEntry of
-    {value, {Pid, _}} -> {value, Pid};
+find_item(LMap, Entry) ->
+  Pair = lists:search(fun({_Pid, Log}) -> lists:member(Entry, Log) end, maps:to_list(LMap)),
+  case Pair of
+    {value, {Pid, _Log}} -> {value, Pid};
     false -> false
   end.
 
@@ -112,12 +108,13 @@ find_item(Logs, Item) ->
 %% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
--spec find_spawn_parent(LogDictionary, SpawnPid) -> {value, Pid} | false when
-  LogDictionary :: cauder_types:log_dict(),
+-spec find_spawn_parent(LMap, SpawnPid) -> {value, Pid} | false when
+  LMap :: cauder_types:log_map(),
   SpawnPid :: cauder_types:proc_id(),
   Pid :: cauder_types:proc_id().
 
-find_spawn_parent(Logs, Pid) -> find_item(Logs, {spawn, Pid}).
+find_spawn_parent(LMap, Pid) ->
+  find_item(LMap, {spawn, Pid}).
 
 
 %%------------------------------------------------------------------------------
@@ -126,12 +123,13 @@ find_spawn_parent(Logs, Pid) -> find_item(Logs, {spawn, Pid}).
 %% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
--spec find_msg_sender(LogDictionary, Uid) -> {value, Pid} | false when
-  LogDictionary :: cauder_types:log_dict(),
+-spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
+  LMap :: cauder_types:log_map(),
   Uid :: cauder_types:msg_id(),
   Pid :: cauder_types:proc_id().
 
-find_msg_sender(Logs, Uid) -> find_item(Logs, {send, Uid}).
+find_msg_sender(LMap, Uid) ->
+  find_item(LMap, {send, Uid}).
 
 
 %%------------------------------------------------------------------------------
@@ -140,68 +138,65 @@ find_msg_sender(Logs, Uid) -> find_item(Logs, {send, Uid}).
 %% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
--spec find_msg_receiver(LogDictionary, Uid) -> {value, Pid} | false when
-  LogDictionary :: cauder_types:log_dict(),
+-spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
+  LMap :: cauder_types:log_map(),
   Uid :: cauder_types:msg_id(),
   Pid :: cauder_types:proc_id().
 
-find_msg_receiver(Logs, Uid) -> find_item(Logs, {'receive', Uid}).
+find_msg_receiver(LMap, Uid) ->
+  find_item(LMap, {'receive', Uid}).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that spawned the process with the given pid, by
 %% looking at its history.
 
--spec find_process_with_spawn(ProcessDictionary, Pid) -> {value, Process} | false when
-  ProcessDictionary :: cauder_types:process_dict(),
+-spec find_process_with_spawn(ProcessMap, Pid) -> {value, Process} | false when
+  ProcessMap :: cauder_types:process_map(),
   Pid :: cauder_types:proc_id(),
   Process :: cauder_types:process().
 
-find_process_with_spawn(PDict, Pid) ->
-  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{hist = H}) -> has_spawn(H, Pid) end, Ps).
+find_process_with_spawn(PMap, Pid) ->
+  lists:search(fun(#proc{hist = H}) -> has_spawn(H, Pid) end, maps:values(PMap)).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that sent the message with the given uid, by
 %% looking at its history.
 
--spec find_process_with_send(ProcessDictionary, Uid) -> {value, Process} | false when
-  ProcessDictionary :: cauder_types:process_dict(),
+-spec find_process_with_send(ProcessMap, Uid) -> {value, Process} | false when
+  ProcessMap :: cauder_types:process_map(),
   Uid :: cauder_types:msg_id(),
   Process :: cauder_types:process().
 
-find_process_with_send(PDict, Uid) ->
-  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{hist = H}) -> has_send(H, Uid) end, Ps).
+find_process_with_send(PMap, Uid) ->
+  lists:search(fun(#proc{hist = H}) -> has_send(H, Uid) end, maps:values(PMap)).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that received the message with the given uid,
 %% by looking at its history.
 
--spec find_process_with_receive(ProcessDictionary, Uid) -> {value, Process} | false when
-  ProcessDictionary :: cauder_types:process_dict(),
+-spec find_process_with_receive(ProcessMap, Uid) -> {value, Process} | false when
+  ProcessMap :: cauder_types:process_map(),
   Uid :: cauder_types:msg_id(),
   Process :: cauder_types:process().
 
-find_process_with_receive(PDict, Uid) ->
-  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{hist = H}) -> has_rec(H, Uid) end, Ps).
+find_process_with_receive(PMap, Uid) ->
+  lists:search(fun(#proc{hist = H}) -> has_rec(H, Uid) end, maps:values(PMap)).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that defined the variable with the given name,
 %% by looking at its history.
 
--spec find_process_with_variable(ProcessDictionary, Name) -> {value, Process} | false when
-  ProcessDictionary :: cauder_types:process_dict(),
+-spec find_process_with_variable(ProcessMap, Name) -> {value, Process} | false when
+  ProcessMap :: cauder_types:process_map(),
   Name :: atom(),
   Process :: cauder_types:process().
 
-find_process_with_variable(PDict, Name) ->
-  {_, Ps} = lists:unzip(orddict:to_list(PDict)),
-  lists:search(fun(#proc{env = Bs}) -> has_var(Bs, Name) end, Ps).
+find_process_with_variable(PMap, Name) ->
+  lists:search(fun(#proc{env = Bs}) -> maps:is_key(Name, Bs) end, maps:values(PMap)).
 
 
 %%------------------------------------------------------------------------------
@@ -215,7 +210,14 @@ find_process_with_variable(PDict, Name) ->
   Bindings3 :: cauder_types:environment().
 
 merge_bindings(Bs1, Bs2) ->
-  orddict:merge(fun(_, V1, V2) -> V1 = V2 end, Bs1, Bs2).
+  maps:fold(
+    fun
+      (K, V, Bs) when not is_map_key(K, Bs) -> Bs#{K => V};
+      (K, V, Bs) when map_get(K, Bs) =:= V -> Bs
+    end,
+    Bs1,
+    Bs2
+  ).
 
 
 %%------------------------------------------------------------------------------
@@ -303,18 +305,6 @@ has_send([_ | RestHist], Uid)                                -> has_send(RestHis
 has_rec([], _)                                             -> false;
 has_rec([{rec, _Bs, _Es, _Stk, #msg{uid = Uid}} | _], Uid) -> true;
 has_rec([_ | RestHist], Uid)                               -> has_rec(RestHist, Uid).
-
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given collection of bindings contains a binding with
-%% the given name or not.
-
--spec has_var(Bindings, Name) -> Result when
-  Bindings :: cauder_types:environment(),
-  Name :: atom(),
-  Result :: boolean().
-
-has_var(Bs, Name) -> cauder_eval:binding(Name, Bs) =/= unbound.
 
 
 %%------------------------------------------------------------------------------

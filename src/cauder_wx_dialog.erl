@@ -152,7 +152,7 @@ start_session(Parent, MFAs) ->
   %% -----
 
   event_handler_entry_point(FunChoice, ArgsCtrl),
-  event_handler_start_mode([{ManualRadio, ManualPanel}, {ReplayRadio, ReplayPanel}]),
+  event_handler_start_mode(#{ManualRadio => ManualPanel, ReplayRadio => ReplayPanel}),
 
   wxWindow:enable(ReplayPanel, [{enable, false}]),
 
@@ -179,16 +179,16 @@ event_handler_entry_point(Choice, TextCtrl) ->
 
 event_handler_start_mode(RadioPanels) ->
   lists:foreach(
-    fun({Radio, ThisPanel}) ->
-      {ThisPanel, OtherPanels} = orddict:take(Radio, RadioPanels),
+    fun(Radio) ->
+      {ThisPanel, OtherPanels} = maps:take(Radio, RadioPanels),
       Callback =
         fun(_, _) ->
           wxWindow:enable(ThisPanel, [{enable, true}]),
-          lists:foreach(fun({_, Panel}) -> wxWindow:enable(Panel, [{enable, false}]) end, OtherPanels)
+          lists:foreach(fun({_, Panel}) -> wxWindow:enable(Panel, [{enable, false}]) end, maps:values(OtherPanels))
         end,
       wxRadioButton:connect(Radio, command_radiobutton_selected, [{callback, Callback}])
     end,
-    RadioPanels
+    maps:keys(RadioPanels)
   ).
 
 

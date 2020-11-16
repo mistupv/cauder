@@ -101,6 +101,8 @@ find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
   State :: state().
 
 init([]) ->
+  ?GUI_DB = ets:new(?GUI_DB, [set, private, named_table]),
+
   wx:new(),
 
   Frame = wxFrame:new(wx:null(), ?FRAME, ?APP_NAME, [{size, ?FRAME_SIZE_INIT}]),
@@ -410,12 +412,13 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
 %%%=============================================================================
 
 handle_event(
-    #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Index}, obj = BindingList},
-    #wx_state{frame = Frame, system = #sys{procs = PDict}, pid = Pid} = State
-) when Pid =/= undefined ->
-  {ok, #proc{env = Bs}} = orddict:find(Pid, PDict),
-  Nth = wxListCtrl:getItemData(BindingList, Index),
-  {Key, Value} = lists:nth(Nth, Bs),
+    #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Idx}},
+    #wx_state{frame = Frame, system = #sys{procs = PMap}, pid = Pid} = State
+) ->
+  #proc{env = Bs} = maps:get(Pid, PMap),
+  IdxToKey = ets:lookup_element(?GUI_DB, ?IDX_TO_KEY, 2),
+  Key = maps:get(Idx, IdxToKey),
+  Value = maps:get(Key, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
     {Key, NewValue} -> ok = cauder:set_binding(Pid, {Key, NewValue});
     cancel -> ok

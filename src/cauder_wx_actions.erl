@@ -84,12 +84,11 @@ update_process(_, #wx_state{system = undefined}) ->
   wxChoice:disable(Choice),
   wxChoice:clear(Choice),
   ok;
-update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PDict}}) ->
+update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) ->
   Choice = cauder_wx:find(?ACTION_Process, wxChoice),
   wxChoice:freeze(Choice),
   wxChoice:enable(Choice),
   wxChoice:clear(Choice),
-  {_, Procs} = lists:unzip(orddict:to_list(PDict)),
   {_, NewIdx} =
     lists:foldl(
       fun
@@ -103,7 +102,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PDict}})
           end
       end,
       {0, 0},
-      Procs
+      maps:values(PMap)
     ),
   wxChoice:setSelection(Choice, NewIdx),
   wxChoice:thaw(Choice),
@@ -493,26 +492,20 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
   wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
   ok;
-update_replay(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
-  case lists:all(fun({_Key, Log}) -> Log =:= [] end, orddict:to_list(Logs)) of
+update_replay(_, #wx_state{system = #sys{logs = LMap}, pid = Pid}) ->
+  case lists:all(fun(Log) -> Log =:= [] end, maps:values(LMap)) of
     true ->
       wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
       ok;
     false ->
       wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
-      CanReplaySteps =
-        case orddict:find(Pid, Logs) of
-          {ok, Log} -> Log =/= [];
-          error -> false
-        end,
+      CanReplaySteps = maps:get(Pid, LMap, []) =/= [],
 
       wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
       wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}]),
 
       % TODO Improve to avoid unnecessary updates
-
-      LogEntries = lists:flatmap(fun({_, Log}) -> Log end, orddict:to_list(Logs)),
 
       #{spawn := SpawnPids, send := SendUids, 'receive' := ReceiveUids} =
         lists:foldl(
@@ -520,7 +513,7 @@ update_replay(_, #wx_state{system = #sys{logs = Logs}, pid = Pid}) ->
             ({K, V}, Map) -> maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map)
           end,
           #{spawn => ordsets:new(), send => ordsets:new(), 'receive' => ordsets:new()},
-          LogEntries
+          lists:flatten(maps:values(LMap))
         ),
 
       SpawnChoice = cauder_wx:find(?ACTION_Replay_Spawn, wxChoice),
@@ -714,15 +707,13 @@ update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_rollback(_, #wx_state{system = undefined}) ->
   wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
   ok;
-update_rollback(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
-  {_, Procs} = lists:unzip(orddict:to_list(PDict)),
-
+update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
   CanRollBack =
     lists:any(
       fun
         (#proc{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist)
       end,
-      Procs
+      maps:values(PMap)
     ),
 
   case CanRollBack of
@@ -732,7 +723,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
     true ->
       wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
-      {ok, #proc{hist = Hist}} = orddict:find(Pid, PDict),
+      #proc{hist = Hist} = maps:get(Pid, PMap),
       CanRollbackSteps = Hist =/= [],
 
       wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
@@ -740,7 +731,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
 
       % TODO Improve to avoid unnecessary updates
 
-      HistEntries = lists:flatmap(fun({_, Proc}) -> Proc#proc.hist end, orddict:to_list(PDict)),
+      HistEntries = lists:flatmap(fun(Proc) -> Proc#proc.hist end, maps:values(PMap)),
 
       #{spawn := SpawnPids, send := SendUids, rec := ReceiveUids} =
         lists:foldl(

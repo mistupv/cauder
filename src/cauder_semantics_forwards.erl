@@ -30,11 +30,11 @@
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-step(Sys, Pid) ->
-  #sys{mail = Ms, logs = Logs, trace = Trace} = Sys,
-  {P0, PDict0} = orddict:take(Pid, Sys#sys.procs),
-  #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
+  {#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
+
   case Label of
     tau ->
       P = P0#proc{
@@ -44,7 +44,7 @@ step(Sys, Pid) ->
         exprs = Es
       },
       Sys#sys{
-        procs = orddict:store(Pid, P, PDict0)
+        procs = PMap#{Pid => P}
       };
     {self, VarPid} ->
       P = P0#proc{
@@ -54,11 +54,11 @@ step(Sys, Pid) ->
         exprs = cauder_syntax:replace_variable(Es, VarPid, Pid)
       },
       Sys#sys{
-        procs = orddict:store(Pid, P, PDict0)
+        procs = PMap#{Pid => P}
       };
     {spawn, VarPid, M, F, As} ->
-      case orddict:find(Pid, Logs) of
-        {ok, [LogH | LogT]} ->
+      case LMap of
+        #{Pid := [LogH | LogT]} ->
           {spawn, SpawnPid} = LogH,
           NewLog = LogT;
         _ ->
@@ -83,13 +83,13 @@ step(Sys, Pid) ->
         to   = SpawnPid
       },
       Sys#sys{
-        procs = orddict:store(SpawnPid, P2, orddict:store(Pid, P1, PDict0)),
-        logs  = orddict:store(Pid, NewLog, Logs),
+        procs = PMap#{Pid => P1, SpawnPid => P2},
+        logs  = LMap#{Pid => NewLog},
         trace = [T | Trace]
       };
     {send, Dest, Val} ->
-      case orddict:find(Pid, Logs) of
-        {ok, [LogH | LogT]} ->
+      case LMap of
+        #{Pid := [LogH | LogT]} ->
           {send, Uid} = LogH,
           NewLog = LogT;
         _ ->
@@ -117,13 +117,13 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = [M | Ms],
-        procs = orddict:store(Pid, P, PDict0),
-        logs  = orddict:store(Pid, NewLog, Logs),
+        procs = PMap#{Pid => P},
+        logs  = LMap#{Pid => NewLog},
         trace = [T | Trace]
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
-      case orddict:find(Pid, Logs) of
-        {ok, [LogH | LogT]} ->
+      case LMap of
+        #{Pid := [LogH | LogT]} ->
           {'receive', Uid} = LogH,
           {Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1} = cauder_eval:match_rec_uid(Cs, Bs, Uid, Ms),
           NewLog = LogT;
@@ -146,8 +146,8 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = Ms1,
-        procs = orddict:store(Pid, P, PDict0),
-        logs  = orddict:store(Pid, NewLog, Logs),
+        procs = PMap#{Pid => P},
+        logs  = LMap#{Pid => NewLog},
         trace = [T | Trace]
       }
   end.
@@ -160,26 +160,24 @@ step(Sys, Pid) ->
   System :: cauder_types:system(),
   Options :: [cauder_types:option()].
 
-options(#sys{mail = Mail, procs = PDict, logs = Logs}) ->
-  lists:filtermap(
+options(#sys{mail = Mail, procs = PMap, logs = LMap}) ->
+  lists:foldl(
     fun
-      ({Pid, #proc{pid = Pid, stack = Stk, env = Bs, exprs = Es}}) ->
-        Log =
-          case orddict:find(Pid, Logs) of
-            {ok, L} -> L;
-            error -> []
-          end,
+      (#proc{pid = Pid, stack = Stk, env = Bs, exprs = Es}, Opts) ->
+        Log = maps:get(Pid, LMap, []),
         case expression_option(Pid, Es, Bs, Stk, Log, Mail) of
-          ?NOT_EXP -> false;
+          ?NOT_EXP -> Opts;
           Rule ->
-            {true, #opt{
+            Opt = #opt{
               sem  = ?MODULE,
               pid  = Pid,
               rule = Rule
-            }}
+            },
+            [Opt | Opts]
         end
     end,
-    orddict:to_list(PDict)
+    [],
+    maps:values(PMap)
   ).
 
 

@@ -25,6 +25,10 @@
   pid :: cauder_types:proc_id() | undefined
 }).
 
+-define(GUI_DB, 'cauder_wx/database').
+
+-define(IDX_TO_KEY, 'bindings_index_to_key').
+
 -define(FRAME, 500).
 
 -define(FRAME_SIZE_INIT, {900, 800}).

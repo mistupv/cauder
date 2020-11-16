@@ -586,15 +586,8 @@ handle_call({user, _}, _From, #state{task = {_, _}} = State) ->
 %%%=============================================================================
 
 handle_call({user, {set, {binding, Pid}, {Key, NewValue}}}, _From, #state{system = Sys0} = State) ->
-  PDict0 = Sys0#sys.procs,
-  {ok, P0} = orddict:find(Pid, PDict0),
-  Bs0 = P0#proc.env,
-
-  Bs1 = orddict:store(Key, NewValue, Bs0),
-  P1 = P0#proc{env = Bs1},
-  PDict1 = orddict:store(Pid, P1, PDict0),
-  Sys1 = Sys0#sys{procs = PDict1},
-
+  #sys{procs = #{Pid := #proc{env = Bs} = P} = Ps} = Sys0,
+  Sys1 = Sys0#sys{procs = Ps#{Pid := P#proc{env = Bs#{Key => NewValue}}}},
   {reply, ok, State#state{system = Sys1}};
 
 %%%=============================================================================
@@ -699,7 +692,7 @@ run_task(Fun, Args, System) when is_function(Fun, 2) ->
         try Fun(Args, System) of
           {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
         catch
-          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:k -> ok %gen_server:call(?SERVER, {task, {fail, Reason}})
         end
     end
   ).
@@ -746,7 +739,7 @@ task_start({M, F, As}, undefined) ->
           spf   = {M, F, length(As)}
         },
         #sys{
-          procs = orddict:from_list([{Pid, Proc}])
+          procs = #{Pid => Proc}
         }
       end
     ),
@@ -764,7 +757,7 @@ task_start(LogPath, undefined) ->
           spf   = {M, F, length(As)}
         },
         #sys{
-          procs = orddict:from_list([{Pid, Proc}]),
+          procs = #{Pid => Proc},
           logs  = load_logs(LogPath)
         }
       end
@@ -806,11 +799,11 @@ task_step({Sem, Pid}, Sys0) ->
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_step_over({Sem, Pid}, Sys0) ->
+task_step_over({Sem, Pid}, #sys{procs = PMap} = Sys0) ->
+  #{Pid := #proc{exprs = Es}} = PMap,
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        {#proc{exprs = Es}, _} = orddict:take(Pid, Sys0#sys.procs),
         step_over(Sem, Sys0, Pid, Es)
       end
     ),
@@ -1057,7 +1050,7 @@ step_over(Sem, Sys, Pid, Es) ->
         catch
           error:{badmatch, nomatch} -> throw(nomatch)
         end,
-      {#proc{exprs = Es1}, _} = orddict:take(Pid, Sys1#sys.procs),
+      #{Pid := #proc{exprs = Es1}} = Sys1#sys.procs,
       case Sem of
         ?FWD_SEM when Es1 =:= tl(Es) -> throw({Sys1, Steps});
         ?BWD_SEM when tl(tl(Es1)) =:= Es -> throw({Sys0, Steps});
@@ -1108,18 +1101,20 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
   System :: cauder_types:system(),
   NewSystem :: cauder_types:system().
 
-replay_full_log(Sys0 = #sys{logs = Logs}) ->
-  case lists:search(fun({_, Log}) -> Log =/= [] end, orddict:to_list(Logs)) of
-    {value, {_, Log}} ->
-      Sys1 =
+replay_full_log(Sys0 = #sys{logs = LMap}) ->
+  lists:foldl(
+    fun
+      ([], Sys) -> Sys;
+      (Log, Sys) ->
         case lists:last(Log) of
-          {spawn, Pid} -> cauder_replay:replay_spawn(Sys0, Pid);
-          {send, Uid} -> cauder_replay:replay_send(Sys0, Uid);
-          {'receive', Uid} -> cauder_replay:replay_receive(Sys0, Uid)
-        end,
-      replay_full_log(Sys1);
-    false -> Sys0
-  end.
+          {spawn, Pid} -> cauder_replay:replay_spawn(Sys, Pid);
+          {send, Uid} -> cauder_replay:replay_send(Sys, Uid);
+          {'receive', Uid} -> cauder_replay:replay_receive(Sys, Uid)
+        end
+    end,
+    Sys0,
+    maps:values(LMap)
+  ).
 
 
 -spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
@@ -1146,25 +1141,24 @@ rollback_steps(Sys0, Pid, Steps, StepsDone) ->
 %%------------------------------------------------------------------------------
 %% @doc Loads the logs for all the available processes.
 
--spec load_logs(LogPath) -> LogDict when
+-spec load_logs(LogPath) -> LogMap when
   LogPath :: file:filename(),
-  LogDict :: cauder_types:log_dict().
+  LogMap :: cauder_types:log_map().
 
 load_logs(LogPath) ->
   {ok, Filenames} = file:list_dir(LogPath),
-  orddict:from_list(
-    lists:filtermap(
-      fun(Filename) ->
-        case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
-          {match, [StrPid]} ->
-            Pid = list_to_integer(StrPid),
-            Log = load_log(Pid, LogPath),
-            {true, {Pid, Log}};
-          nomatch -> false
-        end
-      end,
-      Filenames
-    )
+  lists:foldl(
+    fun(Filename, Map) ->
+      case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
+        {match, [StrPid]} ->
+          Pid = list_to_integer(StrPid),
+          Log = load_log(Pid, LogPath),
+          Map#{Pid => Log};
+        nomatch -> Map
+      end
+    end,
+    maps:new(),
+    Filenames
   ).
 
 

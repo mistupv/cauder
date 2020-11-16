@@ -174,10 +174,10 @@ update_code(_, #wx_state{pid = undefined}) ->
   unmark_line(CodeControl),
   goto_line(CodeControl, 1),
   ok;
-update_code(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
+update_code(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
   CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   unmark_line(CodeControl),
-  {ok, #proc{exprs = [E | _]}} = orddict:find(Pid, PDict),
+  #proc{exprs = [E | _]} = maps:get(Pid, PMap),
   Line = element(2, E),
   mark_line(CodeControl, Line),
   goto_line(CodeControl, Line),
@@ -218,9 +218,9 @@ update_expression(_, #wx_state{system = undefined}) ->
 update_expression(_, #wx_state{pid = undefined}) ->
   wxTextCtrl:clear(cauder_wx:find(?CODE_Expression_Control, wxTextCtrl)),
   ok;
-update_expression(_, #wx_state{system = #sys{procs = PDict}, pid = Pid}) ->
+update_expression(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
   ExpressionControl = cauder_wx:find(?CODE_Expression_Control, wxTextCtrl),
-  {ok, #proc{exprs = [Expr | _]}} = orddict:find(Pid, PDict),
+  #proc{exprs = [Expr | _]} = maps:get(Pid, PMap),
   StrExpr = cauder_pp:expression(Expr),
   wxTextCtrl:setValue(ExpressionControl, StrExpr),
   ok.

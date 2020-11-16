@@ -25,15 +25,8 @@
   Pid :: cauder_types:proc_id(),
   CanReplay :: boolean().
 
-can_replay_step(#sys{procs = PDict, logs = Logs}, Pid) ->
-  case orddict:is_key(Pid, PDict) of
-    false -> false;
-    true ->
-      case orddict:find(Pid, Logs) of
-        {ok, []} -> false;
-        {ok, _Log} -> true
-      end
-  end.
+can_replay_step(#sys{procs = PMap, logs = LMap}, Pid) when is_map_key(Pid, PMap), is_map_key(Pid, LMap), map_get(Pid, LMap) =/= [] -> true;
+can_replay_step(_, _)                                                                                                              -> false.
 
 
 %%------------------------------------------------------------------------------
@@ -45,7 +38,7 @@ can_replay_step(#sys{procs = PDict, logs = Logs}, Pid) ->
   Pid :: cauder_types:proc_id(),
   CanReplay :: boolean().
 
-can_replay_spawn(#sys{logs = Logs}, Pid) -> cauder_utils:find_spawn_parent(Logs, Pid) =/= false.
+can_replay_spawn(#sys{logs = LMap}, Pid) -> cauder_utils:find_spawn_parent(LMap, Pid) =/= false.
 
 
 %%------------------------------------------------------------------------------
@@ -57,7 +50,7 @@ can_replay_spawn(#sys{logs = Logs}, Pid) -> cauder_utils:find_spawn_parent(Logs,
   Uid :: cauder_types:msg_id(),
   CanReplay :: boolean().
 
-can_replay_send(#sys{logs = Logs}, Uid) -> cauder_utils:find_msg_sender(Logs, Uid) =/= false.
+can_replay_send(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_sender(LMap, Uid) =/= false.
 
 
 %%------------------------------------------------------------------------------
@@ -69,7 +62,7 @@ can_replay_send(#sys{logs = Logs}, Uid) -> cauder_utils:find_msg_sender(Logs, Ui
   Uid :: cauder_types:msg_id(),
   CanReplay :: boolean().
 
-can_replay_receive(#sys{logs = Logs}, Uid) -> cauder_utils:find_msg_receiver(Logs, Uid) =/= false.
+can_replay_receive(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMap, Uid) =/= false.
 
 
 %%%=============================================================================
@@ -84,14 +77,13 @@ can_replay_receive(#sys{logs = Logs}, Uid) -> cauder_utils:find_msg_receiver(Log
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-replay_step(#sys{logs = Logs} = Sys, Pid) ->
+replay_step(#sys{logs = LMap} = Sys, Pid) ->
   case options(Sys, Pid) of
     [] ->
-      {ok, Log} = orddict:find(Pid, Logs),
-      case hd(Log) of
-        {spawn, SpawnPid} -> replay_spawn(Sys, SpawnPid);
-        {send, Uid} -> replay_send(Sys, Uid);
-        {'receive', Uid} -> replay_receive(Sys, Uid)
+      case maps:get(Pid, LMap) of
+        [{spawn, SpawnPid} | _] -> replay_spawn(Sys, SpawnPid);
+        [{send, Uid} | _] -> replay_send(Sys, Uid);
+        [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
       end;
     _ -> cauder_semantics_forwards:step(Sys, Pid)
   end.
@@ -106,14 +98,11 @@ replay_step(#sys{logs = Logs} = Sys, Pid) ->
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-replay_spawn(#sys{procs = PDict, logs = Logs} = Sys, Pid) ->
-  case orddict:is_key(Pid, PDict) of
-    true -> Sys; % The process has already been spawned
-    false ->
-      case cauder_utils:find_spawn_parent(Logs, Pid) of
-        {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
-        false -> Sys
-      end
+replay_spawn(#sys{procs = PMap} = Sys, Pid) when is_map_key(Pid, PMap) -> Sys;
+replay_spawn(#sys{logs = LMap} = Sys, Pid) ->
+  case cauder_utils:find_spawn_parent(LMap, Pid) of
+    {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
+    false -> Sys
   end.
 
 
@@ -126,11 +115,11 @@ replay_spawn(#sys{procs = PDict, logs = Logs} = Sys, Pid) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-replay_send(#sys{logs = Logs, mail = Mail} = Sys, Uid) ->
+replay_send(#sys{logs = LMap, mail = Mail} = Sys, Uid) ->
   case lists:any(fun(Msg) -> Msg#msg.uid =:= Uid end, Mail) of
     true -> Sys; % The message has already been sent
     false ->
-      case cauder_utils:find_msg_sender(Logs, Uid) of
+      case cauder_utils:find_msg_sender(LMap, Uid) of
         {value, SenderPid} -> replay_until_send(Sys, SenderPid, Uid);
         false -> Sys
       end
@@ -146,8 +135,8 @@ replay_send(#sys{logs = Logs, mail = Mail} = Sys, Uid) ->
   Uid :: cauder_types:msg_id(),
   NewSystem :: cauder_types:system().
 
-replay_receive(#sys{logs = Logs} = Sys, Uid) ->
-  case cauder_utils:find_msg_receiver(Logs, Uid) of
+replay_receive(#sys{logs = LMap} = Sys, Uid) ->
+  case cauder_utils:find_msg_receiver(LMap, Uid) of
     {value, ReceiverPid} -> replay_until_receive(Sys, ReceiverPid, Uid);
     false -> Sys
   end.
@@ -165,8 +154,7 @@ replay_receive(#sys{logs = Logs} = Sys, Uid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_spawn(Sys0, ParentPid, Pid) ->
-  Sys1 = replay_spawn(Sys0, ParentPid),
-  {ok, ParentLog} = orddict:find(ParentPid, Sys1#sys.logs),
+  #sys{logs = #{ParentPid := ParentLog}} = Sys1 = replay_spawn(Sys0, ParentPid),
   case lists:member({spawn, Pid}, ParentLog) of
     false -> Sys1;
     true -> replay_until_spawn_1(Sys1, ParentPid, Pid)
@@ -180,8 +168,7 @@ replay_until_spawn(Sys0, ParentPid, Pid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_spawn_1(Sys0, ParentPid, Pid) ->
-  Sys1 = replay_step(Sys0, ParentPid),
-  {ok, ParentLog} = orddict:find(ParentPid, Sys1#sys.logs),
+  #sys{logs = #{ParentPid := ParentLog}} = Sys1 = replay_step(Sys0, ParentPid),
   case lists:member({spawn, Pid}, ParentLog) of
     false -> Sys1;
     true -> replay_until_spawn_1(Sys1, ParentPid, Pid)
@@ -195,8 +182,7 @@ replay_until_spawn_1(Sys0, ParentPid, Pid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_send(Sys0, SenderPid, Uid) ->
-  Sys1 = replay_spawn(Sys0, SenderPid),
-  {ok, SenderLog} = orddict:find(SenderPid, Sys1#sys.logs),
+  #sys{logs = #{SenderPid := SenderLog}} = Sys1 = replay_spawn(Sys0, SenderPid),
   case lists:member({send, Uid}, SenderLog) of
     false -> Sys1;
     true -> replay_until_send_1(Sys1, SenderPid, Uid)
@@ -210,8 +196,7 @@ replay_until_send(Sys0, SenderPid, Uid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_send_1(Sys0, SenderPid, Uid) ->
-  Sys1 = replay_step(Sys0, SenderPid),
-  {ok, SenderLog} = orddict:find(SenderPid, Sys1#sys.logs),
+  #sys{logs = #{SenderPid := SenderLog}} = Sys1 = replay_step(Sys0, SenderPid),
   case lists:member({send, Uid}, SenderLog) of
     false -> Sys1;
     true -> replay_until_send_1(Sys1, SenderPid, Uid)
@@ -226,8 +211,7 @@ replay_until_send_1(Sys0, SenderPid, Uid) ->
 
 replay_until_receive(Sys0, ReceiverPid, Uid) ->
   Sys1 = replay_spawn(Sys0, ReceiverPid),
-  Sys2 = replay_send(Sys1, Uid),
-  {ok, ReceiverLog} = orddict:find(ReceiverPid, Sys2#sys.logs), % TODO Review Sys1 or Sys2?
+  #sys{logs = #{ReceiverPid := ReceiverLog}} = Sys2 = replay_send(Sys1, Uid), % TODO Review Sys1 or Sys2?
   case lists:member({'receive', Uid}, ReceiverLog) of
     false -> Sys0;
     true -> replay_until_receive_1(Sys2, ReceiverPid, Uid)
@@ -241,8 +225,7 @@ replay_until_receive(Sys0, ReceiverPid, Uid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_receive_1(Sys0, ReceiverPid, Uid) ->
-  Sys1 = replay_step(Sys0, ReceiverPid),
-  {ok, ReceiverLog} = orddict:find(ReceiverPid, Sys1#sys.logs),
+  #sys{logs = #{ReceiverPid := ReceiverLog}} = Sys1 = replay_step(Sys0, ReceiverPid),
   case lists:member({'receive', Uid}, ReceiverLog) of
     false -> Sys1;
     true -> replay_until_receive_1(Sys1, ReceiverPid, Uid)

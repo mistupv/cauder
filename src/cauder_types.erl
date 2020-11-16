@@ -5,8 +5,8 @@
 -export_type([
   system/0,
   msg_id/0, message/0,
-  log_dict/0, log/0, log_entry/0,
-  process_dict/0, proc_id/0, process/0,
+  log_map/0, log/0, log_entry/0,
+  process_map/0, proc_id/0, process/0,
   history/0, history_entry/0,
   stack/0, stack_entry/0,
   environment/0, binding/0,
@@ -26,13 +26,13 @@
 -type msg_id() :: pos_integer().
 -type message() :: #msg{}.
 
--type log_dict() :: orddict:orddict(proc_id(), log()).
+-type log_map() :: #{proc_id() => log()}.
 -type log() :: [log_entry()].
 -type log_entry() :: {spawn, proc_id()}
                    | {send, msg_id()}
                    | {'receive', msg_id()}.
 
--type process_dict() :: [{proc_id(), process()}, ...].
+-type process_map() :: #{proc_id() := process()}. % Not empty
 -type proc_id() :: pos_integer().
 -type process() :: #proc{}.
 
@@ -47,7 +47,7 @@
 -type stack_entry() :: {mfa(), environment(), [abstract_expr()], af_variable()}
                      | {atom(), [abstract_expr()], af_variable()}.
 
--type environment() :: orddict:orddict(atom(), term()).
+-type environment() :: #{atom() => term()}.
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.

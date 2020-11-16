@@ -1,7 +1,7 @@
 -module(cauder_eval).
 
 %% API
--export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2, binding/2]).
+-export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
 -export([match_rec_pid/4, match_rec_uid/4]).
 -export([clause_line/3]).
 
@@ -101,7 +101,7 @@ seq(Bs, [E | Es], Stk) ->
   Result :: cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
-  {value, Value} = binding(Name, Bs),
+  Value = maps:get(Name, Bs),
   #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk};
 
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
@@ -404,7 +404,7 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
   ScopeBindings :: cauder_types:environment(),
   Body :: cauder_types:af_body().
 
-match_fun(Cs, Vs) -> match_clause([], Cs, Vs).
+match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
 -spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
@@ -531,10 +531,10 @@ match1({value, _, V}, V, Bs) ->
 match1({var, _, '_'}, _, Bs) ->
   {match, Bs};
 match1({var, _, Name}, Term, Bs) ->
-  case binding(Name, Bs) of
-    {value, Term} -> {match, Bs};
-    {value, _} -> throw(nomatch);
-    unbound -> {match, orddict:store(Name, Term, Bs)} % Add the new binding
+  case Bs of
+    #{Name := Term} -> {match, Bs};
+    #{Name := _} -> throw(nomatch);
+    _ -> {match, Bs#{Name => Term}} % Add the new binding
   end;
 match1({match, _, Pat1, Pat2}, Term, Bs0) ->
   {match, Bs1} = match1(Pat1, Term, Bs0),
@@ -635,7 +635,7 @@ is_reducible([E | Es], Bs)          -> is_reducible(E, Bs) orelse is_reducible(E
 
 is_reducible({value, _, _}, _)      -> false;
 is_reducible({var, _, '_'}, _)      -> false;
-is_reducible({var, _, Name}, Bs)    -> not cauder_utils:is_temp_variable_name(Name) andalso binding(Name, Bs) =/= unbound;
+is_reducible({var, _, Name}, Bs)    -> not cauder_utils:is_temp_variable_name(Name) andalso maps:is_key(Name, Bs);
 is_reducible({cons, _, H, T}, Bs)   -> is_reducible(H, Bs) orelse is_reducible(T, Bs);
 is_reducible({tuple, _, Es}, Bs)    -> is_reducible(Es, Bs);
 is_reducible(E, _) when is_tuple(E) -> true.
@@ -655,17 +655,6 @@ is_value({value, _, _})      -> true;
 is_value({cons, _, H, T})    -> is_value(H) andalso is_value(T);
 is_value({tuple, _, Es})     -> is_value(Es);
 is_value(E) when is_tuple(E) -> false.
-
-
-%%------------------------------------------------------------------------------
-%% @doc Returns binding for the given name if bound.
-
--spec binding(Name, Bindings) -> {value, Value} | unbound when
-  Name :: atom(),
-  Bindings :: cauder_types:environment(),
-  Value :: term().
-
-binding(Name, Bs) -> erl_eval:binding(Name, Bs).
 
 
 %%------------------------------------------------------------------------------

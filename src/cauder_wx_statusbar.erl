@@ -56,8 +56,8 @@ create(Frame) ->
   NewState :: cauder_wx:state().
 
 update(
-    #wx_state{system = #sys{procs = PDict}, config = #config{status_bar = Show}},
-    #wx_state{system = #sys{procs = PDict}, config = #config{status_bar = Show}}
+    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}},
+    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}}
 ) ->
   ok;
 update(_, #wx_state{config = #config{status_bar = false}}) ->
@@ -67,20 +67,20 @@ update(_, #wx_state{system = undefined}) ->
 
   StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
   wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
-update(_, #wx_state{system = #sys{procs = PDict}}) ->
+update(_, #wx_state{system = #sys{procs = PMap}}) ->
   set_visibility(true),
 
   {Alive, Dead} =
-    orddict:fold(
+    lists:foldl(
       fun
-        (_, Proc, {Alive, Dead}) ->
+        (Proc, {Alive, Dead}) ->
           case cauder_utils:is_dead(Proc) of
             true -> {Alive, Dead + 1};
             false -> {Alive + 1, Dead}
           end
       end,
       {0, 0},
-      PDict
+      maps:values(PMap)
     ),
 
   StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),

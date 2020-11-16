@@ -25,16 +25,10 @@
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-step(Sys, Pid) ->
-  #sys{mail = Ms, logs = Logs, trace = Trace} = Sys,
-  {P0, PDict0} = orddict:take(Pid, Sys#sys.procs),
-  #proc{pid = Pid, hist = [CurHist | RestHist]} = P0,
-  Log =
-    case orddict:find(Pid, Logs) of
-      {ok, L} -> L;
-      error -> []
-    end,
-  case CurHist of
+step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
+  {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+
+  case Entry of
     {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self ->
       P = P0#proc{
         hist  = RestHist,
@@ -44,7 +38,7 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = Ms,
-        procs = orddict:store(Pid, P, PDict0)
+        procs = PMap#{Pid => P}
       };
     {spawn, Bs, Es, Stk, Gid} ->
       P = P0#proc{
@@ -60,8 +54,8 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = Ms,
-        procs = orddict:store(Pid, P, orddict:erase(Gid, PDict0)),
-        logs  = orddict:store(Pid, [{spawn, Gid} | Log], Logs),
+        procs = maps:remove(Gid, PMap#{Pid => P}),
+        logs  = maps:update_with(Pid, fun(Log) -> [{spawn, Gid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
     {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
@@ -81,8 +75,8 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = OldMsgs,
-        procs = orddict:store(Pid, P, PDict0),
-        logs  = orddict:store(Pid, [{send, Uid} | Log], Logs),
+        procs = PMap#{Pid => P},
+        logs  = maps:update_with(Pid, fun(Log) -> [{send, Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
     {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, uid = Uid}} ->
@@ -100,8 +94,8 @@ step(Sys, Pid) ->
       },
       Sys#sys{
         mail  = [M | Ms],
-        procs = orddict:store(Pid, P, PDict0),
-        logs  = orddict:store(Pid, [{'receive', Uid} | Log], Logs),
+        procs = PMap#{Pid => P},
+        logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       }
   end.
@@ -114,16 +108,17 @@ step(Sys, Pid) ->
   System :: cauder_types:system(),
   Options :: [cauder_types:option()].
 
-options(Sys = #sys{procs = PDict0}) ->
-  lists:filtermap(
-    fun({_, #proc{pid = Pid}}) ->
-      {P, PDict1} = orddict:take(Pid, PDict0),
-      case process_option(Sys#sys{procs = PDict1}, P) of
-        ?NULL_OPT -> false;
-        Opt -> {true, Opt}
-      end
+options(#sys{procs = PMap} = Sys) ->
+  maps:fold(
+    fun
+      (Pid, Proc, Opts) ->
+        case process_option(Sys#sys{procs = maps:without([Pid], PMap)}, Proc) of
+          ?NULL_OPT -> Opts;
+          Opt -> [Opt | Opts]
+        end
     end,
-    PDict0
+    [],
+    PMap
   ).
 
 
@@ -141,29 +136,22 @@ options(Sys = #sys{procs = PDict0}) ->
   Process :: cauder_types:process(),
   Option :: cauder_types:option() | ?NULL_OPT.
 
-process_option(#sys{mail = Mail, procs = PDict}, #proc{pid = Pid, hist = Hist}) ->
-  Rule =
-    case Hist of
-      [] -> ?NULL_RULE;
-      [CurHist | _] ->
-        case CurHist of
-          {tau, _Bs, _Es, _Stk} -> ?RULE_SEQ;
-          {self, _Bs, _Es, _Stk} -> ?RULE_SELF;
-          {spawn, _Bs, _Es, _Stk, SpawnPid} ->
-            {SpawnProc, _} = orddict:take(SpawnPid, PDict),
-            case SpawnProc#proc.hist of
-              [] -> ?RULE_SPAWN;
-              _ -> ?NULL_RULE
-            end;
-          {send, _Bs, _Es, _Stk, #msg{uid = Uid}} ->
-            case cauder_utils:find_message(Mail, Uid) of
-              false -> ?NULL_RULE;
-              {value, _} -> ?RULE_SEND
-            end;
-          {rec, _Bs, _Es, _Stk, _Msg} -> ?RULE_RECEIVE
-        end
-    end,
-  case Rule of
-    ?NULL_RULE -> ?NULL_OPT;
-    OtherRule -> #opt{sem = ?MODULE, pid = Pid, rule = OtherRule}
-  end.
+process_option(_, #proc{hist = []}) ->
+  ?NULL_OPT;
+process_option(_, #proc{pid = Pid, hist = [{tau, _Bs, _Es, _Stk} | _]}) ->
+  #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
+process_option(_, #proc{pid = Pid, hist = [{self, _Bs, _Es, _Stk} | _]}) ->
+  #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
+process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, SpawnPid} | _]}) ->
+  #proc{hist = Hist} = maps:get(SpawnPid, PMap),
+  case Hist of
+    [] -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
+    _ -> ?NULL_OPT
+  end;
+process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #msg{uid = Uid}} | _]}) ->
+  case cauder_utils:find_message(Mail, Uid) of
+    {value, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
+    false -> ?NULL_OPT
+  end;
+process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg} | _]}) ->
+  #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.
