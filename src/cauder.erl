@@ -692,7 +692,7 @@ run_task(Fun, Args, System) when is_function(Fun, 2) ->
         try Fun(Args, System) of
           {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
         catch
-          error:k -> ok %gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
         end
     end
   ).
