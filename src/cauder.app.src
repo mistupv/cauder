@@ -1,0 +1,38 @@
+{application, cauder,
+  [
+    {description, "A Causal-Consistent Reversible Debugger for Erlang"},
+    {vsn, "0.1.0"},
+    {registered, [cauder]},
+    {mod, {cauder_app, []}},
+    {applications, [kernel, stdlib, wx]},
+    {env, []},
+    {modules, [
+      cauder,
+      cauder_app,
+      cauder_eval,
+      cauder_load,
+      cauder_pp,
+      cauder_replay,
+      cauder_rollback,
+      cauder_semantics_backwards,
+      cauder_semantics_forwards,
+      cauder_sup,
+      cauder_syntax,
+      cauder_types,
+      cauder_utils,
+      cauder_wx,
+      cauder_wx_actions,
+      cauder_wx_areas,
+      cauder_wx_code,
+      cauder_wx_config,
+      cauder_wx_dialog,
+      cauder_wx_menu,
+      cauder_wx_process,
+      cauder_wx_statusbar,
+      cauder_wx_system
+    ]},
+    {licenses, ["MIT"]},
+    {links, [
+      {"GitHub", "https://github.com/mistupv/cauder-v2"}
+    ]}
+  ]}.
