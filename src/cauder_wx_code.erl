@@ -245,18 +245,6 @@ load_code(CodeCtrl, Code) ->
   wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec unload_code(CodeControl) -> ok when
-  CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl().
-
-unload_code(CodeCtrl) ->
-  wxStyledTextCtrl:freeze(CodeCtrl),
-  wxStyledTextCtrl:setReadOnly(CodeCtrl, false),
-  wxStyledTextCtrl:setTextRaw(CodeCtrl, <<0:8>>),
-  wxStyledTextCtrl:setMarginWidth(CodeCtrl, 0, 0),
-  wxStyledTextCtrl:setReadOnly(CodeCtrl, true),
-  wxStyledTextCtrl:thaw(CodeCtrl).
-
-
 -spec mark_line(CodeControl, Line) -> ok when
   CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
   Line :: pos_integer().
