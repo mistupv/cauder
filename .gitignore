@@ -1,13 +1,14 @@
 # Erlang
 *.beam
 erl_crash.dump
-/docs
-/ebin
+ebin/
+bin/
 
-# IntelliJ
-/out
-.idea/**/workspace.xml
+# Rebar
+rebar3
+rebar3.cmd
+rebar.lock
+_build/
 
 # Other
 .DS_Store
-cauder.sh
