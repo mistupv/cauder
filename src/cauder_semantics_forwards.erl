@@ -57,14 +57,13 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         procs = PMap#{Pid => P}
       };
     {spawn, VarPid, M, F, As} ->
-      case LMap of
-        #{Pid := [LogH | LogT]} ->
-          {spawn, SpawnPid} = LogH,
-          NewLog = LogT;
-        _ ->
-          SpawnPid = cauder_utils:fresh_pid(),
-          NewLog = []
-      end,
+      {SpawnPid, NewLog} =
+        case LMap of
+          #{Pid := [{spawn, LogPid} | RestLog]} ->
+            {LogPid, RestLog};
+          _ ->
+            {cauder_utils:fresh_pid(), []}
+        end,
 
       P1 = P0#proc{
         hist  = [{spawn, Bs0, Es0, Stk0, SpawnPid} | Hist],
@@ -88,14 +87,13 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         trace = [T | Trace]
       };
     {send, Dest, Val} ->
-      case LMap of
-        #{Pid := [LogH | LogT]} ->
-          {send, Uid} = LogH,
-          NewLog = LogT;
-        _ ->
-          Uid = cauder_utils:fresh_uid(),
-          NewLog = []
-      end,
+      {Uid, NewLog} =
+        case LMap of
+          #{Pid := [{send, LogUid} | RestLog]} ->
+            {LogUid, RestLog};
+          _ ->
+            {cauder_utils:fresh_uid(), []}
+        end,
 
       M = #msg{
         dest = Dest,
@@ -122,15 +120,13 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         trace = [T | Trace]
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
-      case LMap of
-        #{Pid := [LogH | LogT]} ->
-          {'receive', Uid} = LogH,
-          {Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1} = cauder_eval:match_rec_uid(Cs, Bs, Uid, Ms),
-          NewLog = LogT;
-        _ ->
-          {Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1} = cauder_eval:match_rec_pid(Cs, Bs, Pid, Ms),
-          NewLog = []
-      end,
+      {{Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1}, NewLog} =
+        case LMap of
+          #{Pid := [{'receive', LogUid} | RestLog]} ->
+            {cauder_eval:match_rec_uid(Cs, Bs, LogUid, Ms), RestLog};
+          _ ->
+            {cauder_eval:match_rec_pid(Cs, Bs, Pid, Ms), []}
+        end,
 
       P = P0#proc{
         hist  = [{rec, Bs0, Es0, Stk0, M} | Hist],

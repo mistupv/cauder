@@ -4,45 +4,91 @@ A Causal-Consistent Reversible Debugger for Erlang
 
 ![CauDEr screenshot](screenshot.png)
 
-## Requirements
 
-- Erlang/OTP >= 23.1
+## Dependencies
+
+* **Erlang/OTP** ≥ 23.0
+* **Rebar3** (Optional)
+* **Make**
+
 
 ## Building
 
-You can compile CauDEr by running the command: `make`
+You can use the following `make` tasks to build CauDEr:
+
+* Create _escript_: `make` (or `make escriptize`)
+* Compile only: `make compile`
+* Build documentation: `make edoc`
+* Run dialyzer: `make dialyzer`
+* Cleanup: `make clean`
+
 
 ## Running
 
-CauDEr has two components the debugger itself and a GUI.
-These two can be run independently of each other.
+You can run CauDEr in multiple ways:
 
-### Erlang shell
+### Using the Erlang shell
 
-You can use the Erlang shell to start the debugger and GUI servers.
+Using `rebar3 shell` will start a shell with all the required dependencies.
+
+There are multiples ways to run CauDEr:
+
+#### Like an _escript_
+
+Calling the function `cauder:main/0` will start CauDEr like the _escript_.
 
 ```
-Eshell V11.1  (abort with ^G)
+Eshell V11.0  (abort with ^G)
+1> cauder:main().
+ok
+```
+
+ℹ️ This function will wait for the GUI to close before returning, which means the shell will be blocked.
+
+#### Like an application
+
+```
+Eshell V11.0  (abort with ^G)
+1> application:start(wx), application:start(cauder).
+ok
+```
+
+ℹ️ To stop CauDEr you can use `application:stop(cauder)`, but it is not necessary if you just close the window.
+
+#### Manually
+
+##### Debugger only
+
+To start the debugger only you can call the following function:
+
+```
+Eshell V11.0  (abort with ^G)
+1> cauder:start(). % Starting the debugger
+{ok,<0.80.0>}
+```
+
+##### Debugger and GUI
+
+To start the debugger and the GUI you will need to call the following functions in order:
+
+```
+Eshell V11.0  (abort with ^G)
 1> cauder:start(). % Starting the debugger
 {ok,<0.80.0>}
 2> cauder_wx:start(). % Starting the GUI
 {ok,<0.82.0>,{wx_ref,35,wxFrame,<0.82.0>}}
 ```
 
-However, starting the GUI server will also start the debugger if it is not running yet.
-In that case you can get PID of the debugger by calling `whereis(cauder).`
+⚠️ If you try to start the GUI without previously starting the debugger, it will fail with the following error: `{error,{not_started,cauder}}`
 
+
+#### Using the _escript_
+
+Simply run the `cauder` binary generated in the `bin` folder:
+
+```shell script
+./bin/cauder
 ```
-Eshell V11.1  (abort with ^G)
-1> cauder_wx:start(). % Starting the GUI and the debugger
-{ok,<0.81.0>,{wx_ref,35,wxFrame,<0.81.0>}}
-2> whereis(cauder). % Getting the debugger PID
-<0.80.0>
-```
-
-### Shell script
-
-Alternatively, you can execute the script `cauder.sh`, that was generated during compilation, to start CauDEr
 
 ## Usage
 

@@ -10,7 +10,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start/0, start_link/0, stop/0]).
+-export([main/0, main/1, start/0, start_link/0, stop/0]).
 -export([subscribe/0, unsubscribe/0]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
@@ -40,6 +40,17 @@
 %%%=============================================================================
 %%% API
 %%%=============================================================================
+
+
+main() -> main([]).
+
+main([]) ->
+  application:load(cauder),
+  {ok, _} = cauder:start_link(),
+  case cauder_wx:start_link() of
+    {ok, _, WxObject} -> cauder_wx:wait_forever(WxObject);
+    Error -> cauder_wx:show_error(Error)
+  end.
 
 
 %%------------------------------------------------------------------------------

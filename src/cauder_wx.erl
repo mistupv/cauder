@@ -3,7 +3,8 @@
 -behaviour(wx_object).
 
 %% API
--export([start/0, start_link/0, stop/1, find/2]).
+-export([start/0, start_link/0, stop/1, wait_forever/1, find/2]).
+-export([show_error/1]).
 
 %% wx_object callbacks
 -export([init/1, handle_event/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -38,12 +39,13 @@
 
 start() ->
   case whereis(cauder) of
-    undefined -> cauder:start();
-    _ -> ok
-  end,
-  case wx_object:start({local, ?SERVER}, ?MODULE, [], []) of
-    {error, _} = E -> E;
-    WxObject -> {ok, wx_object:get_pid(WxObject), WxObject}
+    undefined ->
+      {error, {not_started, cauder}};
+    _ ->
+      case wx_object:start({local, ?SERVER}, ?MODULE, [], []) of
+        {error, _} = Error -> Error;
+        Window -> {ok, wx_object:get_pid(Window), Window}
+      end
   end.
 
 
@@ -57,12 +59,13 @@ start() ->
 
 start_link() ->
   case whereis(cauder) of
-    undefined -> cauder:start_link();
-    _ -> ok
-  end,
-  case wx_object:start_link({local, ?SERVER}, ?MODULE, [], []) of
-    {error, _} = E -> E;
-    WxObject -> {ok, wx_object:get_pid(WxObject), WxObject}
+    undefined ->
+      {error, {not_started, cauder}};
+    _ ->
+      case wx_object:start_link({local, ?SERVER}, ?MODULE, [], []) of
+        {error, _} = Error -> Error;
+        Window -> {ok, wx_object:get_pid(Window), Window}
+      end
   end.
 
 
@@ -76,6 +79,17 @@ stop(WxObject) -> wx_object:stop(WxObject).
 
 
 %%------------------------------------------------------------------------------
+%% @doc Waits until the UI is closed.
+
+-spec wait_forever(WxObject) -> ok when
+  WxObject :: wxWindow:wxWindow().
+
+wait_forever(WxObject) ->
+  catch wx_object:call(WxObject, noreply),
+  ok.
+
+
+%%------------------------------------------------------------------------------
 %% @doc Find the first window with the given `Id' and casts it to the given
 %% `Type'.
 
@@ -85,6 +99,26 @@ stop(WxObject) -> wx_object:stop(WxObject).
   Window :: wx:wx_object().
 
 find(Id, Type) -> wx:typeCast(wxWindow:findWindowById(Id), Type).
+
+
+%%%=============================================================================
+
+
+-spec show_error(Error) -> ok when
+  Error :: any().
+
+show_error(Error) ->
+  wx:new(),
+  Message = io_lib:format("There was an error: ~p", [Error]),
+  Options = [{caption, "CauDer: Error"}, {style, ?wxICON_ERROR}],
+  Dialog = wxMessageDialog:new(wx:null(), Message, Options),
+  try
+    wxMessageDialog:showModal(Dialog)
+  after
+    wxMessageDialog:destroy(Dialog),
+    wx:destroy()
+  end,
+  ok.
 
 
 %%%=============================================================================
@@ -202,7 +236,7 @@ handle_event(?MENU_EVENT(?MENU_File_Open), #wx_state{frame = Frame} = State) ->
 
 handle_event(?MENU_EVENT(?MENU_File_Exit), State) ->
   %% TODO Add confirmation dialog?
-  {stop, normal, State};
+  stop_cauder(State);
 
 handle_event(?MENU_EVENT(?MENU_View_ZoomIn), #wx_state{menubar = Menubar} = State) ->
   CodeArea = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
@@ -463,7 +497,7 @@ handle_event(#wx{event = #wxDropFiles{files = Files}}, #wx_state{frame = Frame} 
 
 handle_event(#wx{event = #wxClose{}}, State) ->
 %% TODO Add confirmation dialog?
-  {stop, normal, State};
+  stop_cauder(State);
 
 %%%=============================================================================
 
@@ -475,12 +509,15 @@ handle_event(Event, State) ->
 %%------------------------------------------------------------------------------
 %% @private
 
--spec handle_call(Request, From, State) -> {reply, Reply, NewState} | {stop, Reply, NewState} when
+-spec handle_call(Request, From, State) -> {reply, Reply, NewState} | {noreply, NewState} when
   Request :: term(),
   From :: {pid(), term()},
   State :: state(),
   Reply :: term(),
   NewState :: state().
+
+handle_call(noreply, _From, State) ->
+  {noreply, State};
 
 handle_call(Request, _From, State) ->
   io:format("Unhandled Call:~n~p~n", [Request]),
@@ -637,10 +674,7 @@ handle_info(Info, State) ->
 terminate(_Reason, #wx_state{frame = Frame}) ->
   wxFrame:destroy(Frame),
   wx:destroy(),
-  case whereis(cauder) of
-    undefined -> ok;
-    _ -> cauder:stop()
-  end,
+  cauder:stop(),
   ok.
 
 
@@ -760,3 +794,39 @@ button_to_semantics(?ACTION_Manual_StepOver_Backward_Button) -> ?BWD_SEM;
 %%button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
 button_to_semantics(?ACTION_Automatic_Forward_Button)        -> ?FWD_SEM;
 button_to_semantics(?ACTION_Automatic_Backward_Button)       -> ?BWD_SEM.
+
+
+%%%=============================================================================
+
+
+%%--------------------------------------------------------------------
+%% @doc Stops CauDEr in a proper way.
+
+-spec stop_cauder(State) -> {stop, normal, NewState} | {noreply, NewState} when
+  State :: state(),
+  NewState :: state().
+
+stop_cauder(State) ->
+  case stop_mode() of
+    normal -> {stop, normal, State};
+    init -> init:stop(), {noreply, State};
+    {application, Name} -> application:stop(Name), {noreply, State}
+  end.
+
+
+%%--------------------------------------------------------------------
+%% @doc Decider the proper way to stop CauDEr.
+
+-spec stop_mode() -> normal | init | {application, atom()}.
+
+stop_mode() ->
+  case application:get_application() of
+    undefined -> normal;
+    {ok, App} ->
+      Started = proplists:get_value(started, application:info(), []),
+      case proplists:get_value(App, Started) of
+        undefined -> normal;
+        permanent -> init;
+        _ -> {application, App}
+      end
+  end.
