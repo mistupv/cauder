@@ -584,7 +584,7 @@ handle_info({dbg, {finish, {replay_spawn, Pid}, Time, System}}, #wx_state{task =
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_spawn, no_replay}}, #wx_state{task = replay_spawn} = State) ->
+handle_info({dbg, {fail, replay_spawn, no_replay, _Stacktrace}}, #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -593,7 +593,7 @@ handle_info({dbg, {finish, {replay_send, Uid}, Time, System}}, #wx_state{task = 
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_send, no_replay}}, #wx_state{task = replay_send} = State) ->
+handle_info({dbg, {fail, replay_send, no_replay, _Stacktrace}}, #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -602,7 +602,7 @@ handle_info({dbg, {finish, {replay_receive, Uid}, Time, System}}, #wx_state{task
   cauder_wx_statusbar:replay_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_receive, no_replay}}, #wx_state{task = replay_receive} = State) ->
+handle_info({dbg, {fail, replay_receive, no_replay, _Stacktrace}}, #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -622,7 +622,7 @@ handle_info({dbg, {finish, {rollback_spawn, Pid}, Time, System}}, #wx_state{task
   cauder_wx_statusbar:rollback_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_spawn, no_rollback}}, #wx_state{task = rollback_spawn} = State) ->
+handle_info({dbg, {fail, rollback_spawn, no_rollback, _Stacktrace}}, #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -631,7 +631,7 @@ handle_info({dbg, {finish, {rollback_send, Uid}, Time, System}}, #wx_state{task 
   cauder_wx_statusbar:rollback_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_send, no_rollback}}, #wx_state{task = rollback_send} = State) ->
+handle_info({dbg, {fail, rollback_send, no_rollback, _Stacktrace}}, #wx_state{task = rollback_send} = State) ->
   cauder_wx_statusbar:rollback_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -640,7 +640,7 @@ handle_info({dbg, {finish, {rollback_receive, Uid}, Time, System}}, #wx_state{ta
   cauder_wx_statusbar:rollback_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_receive, no_rollback}}, #wx_state{task = rollback_receive} = State) ->
+handle_info({dbg, {fail, rollback_receive, no_rollback, _Stacktrace}}, #wx_state{task = rollback_receive} = State) ->
   cauder_wx_statusbar:rollback_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
@@ -649,7 +649,7 @@ handle_info({dbg, {finish, {rollback_variable, Name}, Time, System}}, #wx_state{
   cauder_wx_statusbar:rollback_variable_finish(Name, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_variable, no_rollback}}, #wx_state{task = rollback_variable} = State) ->
+handle_info({dbg, {fail, rollback_variable, no_rollback, _Stacktrace}}, #wx_state{task = rollback_variable} = State) ->
   cauder_wx_statusbar:rollback_variable_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 

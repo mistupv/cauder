@@ -60,7 +60,7 @@
   % Environment
   env = maps:new() :: cauder_types:environment(),
   % List of expressions
-  exprs :: [cauder_types:abstract_expr()],
+  exprs :: [cauder_types:abstract_expr(), ...],
   % The entry point function for this process
   spf :: mfa()
 }).

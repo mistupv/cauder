@@ -549,18 +549,19 @@ handle_call({unsubscribe, Sub}, _From, #state{subs = Subs} = State) ->
 
 %%%=============================================================================
 
-handle_call({task, {finish, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
+% TODO Remove task name from "Value"
+handle_call({task, {finish, Value, _, NewSystem} = Msg}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
   % Check finished task matches running task
   Task =
     if
       is_tuple(Value) -> element(1, Value);
       true -> Value
     end,
-  lists:foreach(fun(Sub) -> Sub ! {dbg, {finish, Value, Time, NewSystem}} end, Subs),
+  reply_all(Msg, Subs),
   {reply, ok, State#state{system = NewSystem, task = undefined}};
 
-handle_call({task, {fail, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
-  lists:foreach(fun(Sub) -> Sub ! {dbg, {fail, Task, Reason}} end, Subs),
+handle_call({task, {fail, Reason, Stacktrace}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
+  reply_all({fail, Task, Reason, Stacktrace}, Subs),
   {reply, ok, State#state{task = undefined}};
 
 %%%=============================================================================
@@ -703,7 +704,7 @@ run_task(Fun, Args, System) when is_function(Fun, 2) ->
         try Fun(Args, System) of
           {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
         catch
-          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:Reason:Stacktrace -> gen_server:call(?SERVER, {task, {fail, Reason, Stacktrace}})
         end
     end
   ).
@@ -810,12 +811,11 @@ task_step({Sem, Pid}, Sys0) ->
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_step_over({Sem, Pid}, #sys{procs = PMap} = Sys0) ->
-  #{Pid := #proc{exprs = Es}} = PMap,
+task_step_over({Sem, Pid}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        step_over(Sem, Sys0, Pid, Es)
+        step_over(Sem, Sys0, Pid)
       end
     ),
 
@@ -1044,32 +1044,105 @@ task_rollback_variable(Name, Sys0) ->
 %%%=============================================================================
 
 
--spec step_over(Semantics, System, Pid, Expressions) -> {NewSystem, StepsDone} | nomatch when
+-spec reply_all(Message, Subscribers) -> ok when
+  Message :: term(),
+  Subscribers :: [pid()].
+
+reply_all(Msg, Subs) ->
+  lists:foreach(fun(Sub) -> Sub ! {dbg, Msg} end, Subs).
+
+
+%%%=============================================================================
+
+
+-spec step_over(Semantics, System, Pid) -> {NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  Expressions :: [cauder_types:abstract_expr()],
   NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-step_over(Sem, Sys, Pid, Es) ->
-  RecStep =
-    fun Name(Sys0, Steps) ->
-      Sys1 =
-        try
-          Sem:step(Sys0, Pid)
-        catch
-          error:{badmatch, nomatch} -> throw(nomatch)
-        end,
-      #{Pid := #proc{exprs = Es1}} = Sys1#sys.procs,
-      case Sem of
-        ?FWD_SEM when Es1 =:= tl(Es) -> throw({Sys1, Steps});
-        ?BWD_SEM when tl(tl(Es1)) =:= Es -> throw({Sys0, Steps});
-        _ -> continue
-      end,
-      Name(Sys1, Steps + 1)
+step_over(Sem, Sys, Pid) ->
+  P = maps:get(Pid, Sys#sys.procs),
+  Fun =
+    fun Step(Sys0, Steps) ->
+      case Sem:step(Sys0, Pid) of
+%%        suspend ->
+%%          #sys{procs = #{Pid := P} = Ps} = Sys0,
+%%          Sys1 =
+%%            case Sem of
+%%              ?FWD_SEM -> Sys0#sys{procs = Ps#{Pid => P#proc{suspend_info = {step_over, Sem, tl(Es)}}}};
+%%              ?BWD_SEM -> erlang:error(not_implemented)
+%%            end,
+%%          throw({Sys1, Steps});
+        Sys1 ->
+          P0 = maps:get(Pid, Sys0#sys.procs),
+          P1 = maps:get(Pid, Sys1#sys.procs),
+          case Sem of
+            ?FWD_SEM ->
+              case {P, P1} of
+                % Fwd Step Over: Standard
+                {#proc{stack = Stk, exprs = [_ | Es]},
+                 #proc{stack = Stk, exprs = Es}} ->
+                  throw({Sys1, Steps + 1});
+                % Fwd Step Over: Enter block
+                {#proc{stack = Stk, exprs = [_ | Es]},
+                 #proc{stack = [{_, [_ | Es], _} | Stk]}} ->
+                  throw({Sys1, Steps + 1});
+                % Fwd Step Over: Exit block
+                {#proc{stack = [{_, [_ | Es], _} | Stk]},
+                 #proc{stack = Stk, exprs = Es}} ->
+                  throw({Sys1, Steps + 1});
+                {#proc{},
+                 #proc{}} ->
+                  continue
+              end;
+            ?BWD_SEM ->
+              case {P, P0, P1} of
+                % Bwd Step Over: Standard
+                {#proc{stack = Stk, exprs = [_ | Es]},
+                 #proc{stack = Stk, exprs = [_, _ | Es]},
+                 #proc{stack = Stk, exprs = [_, _, _ | Es]}} ->
+                  throw({Sys0, Steps});
+                % Bwd Step Over: To first expression in block/function
+                {#proc{stack = [Entry | Stk], exprs = [_ | Es]},
+                 #proc{stack = [Entry | Stk], exprs = [_, _ | Es]},
+                 #proc{stack = Stk}} ->
+                  throw({Sys0, Steps});
+                % Bwd Step Over: Enter block with one expression
+                {#proc{stack = Stk, exprs = Es},
+                 #proc{stack = [{_, [_ | Es], _} | Stk]},
+                 #proc{stack = Stk, exprs = [_ | Es]}} ->
+                  throw({Sys0, Steps});
+                % Bwd Step Over: Enter block with more than one expression
+                {#proc{stack = Stk, exprs = Es},
+                 #proc{stack = [{_, [_ | Es], _} | Stk], exprs = BlockEs},
+                 #proc{stack = [{_, [_ | Es], _} | Stk], exprs = [_ | BlockEs]}} ->
+                  throw({Sys0, Steps});
+                % Bwd Step Over: Exit block
+                {#proc{stack = [{_, [_ | Es], _} | Stk]},
+                 #proc{stack = Stk, exprs = [_ | Es]},
+                 #proc{stack = Stk, exprs = [_, _ | Es]}} ->
+                  throw({Sys0, Steps});
+                % Bwd Step Over: Exit block to first expression in block/function
+                {#proc{stack = [{_, [_ | Es], _}, Entry | Stk]},
+                 #proc{stack = [Entry | Stk], exprs = [_ | Es]},
+                 #proc{stack = Stk}} ->
+                  throw({Sys0, Steps});
+                {#proc{},
+                 #proc{},
+                 #proc{}} ->
+                  continue
+              end
+          end,
+          Step(Sys1, Steps + 1)
+      end
     end,
-  catch RecStep(Sys, 0).
+  try
+    Fun(Sys, 0)
+  catch
+    throw:{#sys{}, N} = Ret when is_integer(N) -> Ret
+  end.
 
 
 -spec step_multiple(Semantics, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when

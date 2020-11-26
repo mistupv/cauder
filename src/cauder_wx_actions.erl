@@ -189,8 +189,6 @@ create_manual(Parent) ->
   StepOverFwd = wxButton:new(StepOver, ?ACTION_Manual_StepOver_Forward_Button, [{label, "Forward"}]),
   wxBoxSizer:add(StepOverSizer, StepOverFwd),
 
-  wxPanel:hide(StepOver), % Temporarily hidden
-
   % -----
 
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
@@ -247,9 +245,28 @@ update_manual(_, #wx_state{system = System, pid = Pid}) ->
       CanStepBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
 
       wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}])
+      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}]),
+
+      #sys{procs = #{Pid := Proc}} = System,
+
+      io:format("Hist: ~p\n", [Proc#proc.hist]),
+
+      CanStepOverFwd = CanStepFwd andalso can_step_over_fwd(Proc),
+      CanStepOverBwd = CanStepBwd andalso can_step_over_bwd(Proc),
+
+      wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Forward_Button, wxButton), [{enable, CanStepOverFwd}]),
+      wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Backward_Button, wxButton), [{enable, CanStepOverBwd}])
   end,
   ok.
+
+
+can_step_over_fwd(#proc{exprs = [_, _ | _]}) -> true;
+can_step_over_fwd(#proc{})                   -> false.
+
+
+can_step_over_bwd(#proc{hist = [{_, _, [_ | Es], Stk} | _], stack = Stk, exprs = Es})    -> true;
+can_step_over_bwd(#proc{hist = [{_, _, [_ | Es], Stk, _} | _], stack = Stk, exprs = Es}) -> true;
+can_step_over_bwd(#proc{})                                                               -> false.
 
 
 %%%=============================================================================
