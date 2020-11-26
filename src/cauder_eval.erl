@@ -63,15 +63,14 @@ seq(Bs, [E | Es], Stk) ->
     false ->
       case Es of
         [] ->
-          Line = element(2, E),
           case Stk of
             % Call entry
             [{{_M, _F, _A}, Bs1, Es1, Var} | Stk1] ->
-              Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
+              Es2 = cauder_syntax:replace_variable(Es1, Var, concrete(E)),
               #result{env = Bs1, exprs = Es2, stack = Stk1};
             % Block entry
             [{_Type, Es1, Var} | Stk1] ->
-              Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
+              Es2 = cauder_syntax:replace_variable(Es1, Var, concrete(E)),
               #result{env = Bs, exprs = Es2, stack = Stk1}
           end;
         _ ->
@@ -317,7 +316,7 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
       end
   end;
 
-expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
+expr(Bs0, E = {match, Line, Lhs, Rhs}, Stk) ->
   case is_reducible(Lhs, Bs0) of
     true -> eval_and_update({Bs0, Lhs, Stk}, {3, E});
     false ->
@@ -325,7 +324,7 @@ expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
         true -> eval_and_update({Bs0, Rhs, Stk}, {4, E});
         false ->
           case match(Bs0, [Lhs], [Rhs]) of
-            {match, Bs} -> #result{env = Bs, exprs = [Rhs], stack = Stk};
+            {match, Bs} -> #result{env = Bs, exprs = [setelement(2, Rhs, Line)], stack = Stk};
             nomatch -> error({badmatch, concrete(Rhs)})
           end
       end
@@ -618,7 +617,7 @@ abstract(Value) -> {value, 0, Value}.
   Term :: term().
 
 concrete({value, _, Value})                       -> Value;
-concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
+concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T]. % TODO Is this case necessary?
 
 
 %%------------------------------------------------------------------------------
