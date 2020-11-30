@@ -184,7 +184,7 @@ event_handler_start_mode(RadioPanels) ->
       Callback =
         fun(_, _) ->
           wxWindow:enable(ThisPanel, [{enable, true}]),
-          lists:foreach(fun({_, Panel}) -> wxWindow:enable(Panel, [{enable, false}]) end, maps:values(OtherPanels))
+          lists:foreach(fun(Panel) -> wxWindow:enable(Panel, [{enable, false}]) end, maps:values(OtherPanels))
         end,
       wxRadioButton:connect(Radio, command_radiobutton_selected, [{callback, Callback}])
     end,
