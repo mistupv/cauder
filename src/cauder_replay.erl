@@ -5,8 +5,8 @@
 
 -module(cauder_replay).
 
--export([can_replay_step/2, can_replay_spawn/2, can_replay_send/2, can_replay_receive/2]).
--export([replay_step/2, replay_spawn/2, replay_send/2, replay_receive/2]).
+-export([can_replay_step/2, can_replay_spawn/2, can_replay_send/2, can_replay_receive/2, can_replay_full/1]).
+-export([replay_step/2, replay_spawn/2, replay_send/2, replay_receive/2, replay_full/1]).
 
 -include("cauder.hrl").
 
@@ -65,6 +65,18 @@ can_replay_send(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_sender(LMap, Ui
 can_replay_receive(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMap, Uid) =/= false.
 
 
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the process with the given pid can replay a step in the
+%% given system, or not.
+
+-spec can_replay_full(System) -> CanReplay when
+  System :: cauder_types:system(),
+  CanReplay :: boolean().
+
+can_replay_full(#sys{logs = LMap})  ->
+  lists:any(fun(Log) -> Log =/= [] end, maps:values(LMap)).
+
+
 %%%=============================================================================
 
 
@@ -78,14 +90,14 @@ can_replay_receive(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMa
   NewSystem :: cauder_types:system().
 
 replay_step(#sys{logs = LMap} = Sys, Pid) ->
-  case options(Sys, Pid) of
-    [] ->
+  case cauder_semantics_forwards:can_step(Sys, Pid) of
+    false ->
       case maps:get(Pid, LMap) of
         [{spawn, SpawnPid} | _] -> replay_spawn(Sys, SpawnPid);
         [{send, Uid} | _] -> replay_send(Sys, Uid);
         [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
       end;
-    _ -> cauder_semantics_forwards:step(Sys, Pid)
+    true -> cauder_semantics_forwards:step(Sys, Pid)
   end.
 
 
@@ -140,6 +152,29 @@ replay_receive(#sys{logs = LMap} = Sys, Uid) ->
     {value, ReceiverPid} -> replay_until_receive(Sys, ReceiverPid, Uid);
     false -> Sys
   end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Replays the entire log of each process, in the given system.
+
+-spec replay_full(System) -> NewSystem when
+  System :: cauder_types:system(),
+  NewSystem :: cauder_types:system().
+
+replay_full( #sys{logs = LMap}=Sys0) ->
+  lists:foldl(
+    fun
+      ([], Sys) -> Sys;
+      (Log, Sys) ->
+        case lists:last(Log) of
+          {spawn, Pid} -> cauder_replay:replay_spawn(Sys, Pid);
+          {send, Uid} -> cauder_replay:replay_send(Sys, Uid);
+          {'receive', Uid} -> cauder_replay:replay_receive(Sys, Uid)
+        end
+    end,
+    Sys0,
+    maps:values(LMap)
+  ).
 
 
 %%%=============================================================================
@@ -230,16 +265,3 @@ replay_until_receive_1(Sys0, ReceiverPid, Uid) ->
     false -> Sys1;
     true -> replay_until_receive_1(Sys1, ReceiverPid, Uid)
   end.
-
-
-%%%=============================================================================
-
-
--spec options(System, Pid) -> Options when
-  System :: cauder_types:system(),
-  Pid :: cauder_types:proc_id(),
-  Options :: [cauder_types:option()].
-
-options(Sys, Pid) ->
-  Opts = cauder_semantics_forwards:options(Sys),
-  cauder_utils:filter_options(Opts, Pid).

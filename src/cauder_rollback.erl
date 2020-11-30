@@ -302,5 +302,4 @@ rollback_until_variable(#sys{procs = PMap} = Sys0, Pid, Name) ->
   Options :: [cauder_types:option()].
 
 options(Sys, Pid) ->
-  Opts = cauder_semantics_backwards:options(Sys),
-  cauder_utils:filter_options(Opts, Pid).
+  lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder_semantics_backwards:options(Sys)).

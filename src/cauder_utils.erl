@@ -11,7 +11,6 @@
 -export([find_process_with_spawn/2, find_process_with_send/2, find_process_with_receive/2, find_process_with_variable/2]).
 -export([merge_bindings/2]).
 -export([stringToMFA/1, stringToExpressions/1]).
--export([filter_options/2]).
 -export([fresh_pid/0, fresh_uid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
@@ -250,19 +249,6 @@ stringToExpressions(String) ->
       end;
     _ -> error
   end.
-
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a new list containing only the options whose pid, matches the
-%% given pid.
-
--spec filter_options(Options1, Pid) -> Options2 when
-  Options1 :: [cauder_types:option()],
-  Pid :: cauder_types:proc_id(),
-  Options2 :: [cauder_types:option()].
-
-filter_options(Options, Pid) ->
-  lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options).
 
 
 %%------------------------------------------------------------------------------

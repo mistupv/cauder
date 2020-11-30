@@ -619,7 +619,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       replay_spawn -> fun task_replay_spawn/2;
       replay_send -> fun task_replay_send/2;
       replay_receive -> fun task_replay_receive/2;
-      replay_full_log -> fun task_replay_full_log/2;
+      replay_full_log -> fun task_replay_full/2;
       rollback_steps -> fun task_rollback_steps/2;
       rollback_spawn -> fun task_rollback_spawn/2;
       rollback_send -> fun task_rollback_send/2;
@@ -793,10 +793,14 @@ task_step({Sem, Pid}, Sys0) ->
   {Time, {Rule, Sys1}} =
     timer:tc(
       fun() ->
-        Opts = cauder_utils:filter_options(eval_opts(Sys0), Pid),
-        {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
-        Sys1 = Sem:step(Sys0, Pid),
-        {Rule, Sys1}
+        case Sem:can_step(Sys0, Pid) of
+          false -> error(no_step);
+          true ->
+            Opts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, eval_opts(Sys0)),
+            {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
+            Sys1 = Sem:step(Sys0, Pid),
+            {Rule, Sys1}
+        end
       end
     ),
 
@@ -815,7 +819,10 @@ task_step_over({Sem, Pid}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        step_over(Sem, Sys0, Pid)
+        case Sem:can_step_over(Sys0, Pid) of
+          false -> error(no_step);
+          true -> Sem:step_over(Sys0, Pid)
+        end
       end
     ),
 
@@ -834,7 +841,10 @@ task_step_multiple({Sem, Steps}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        step_multiple(Sem, Sys0, Steps, 0)
+        case Sem:can_step_multiple(Sys0) of
+          false -> error(no_step);
+          true -> step_multiple(Sem, Sys0, Steps, 0)
+        end
       end
     ),
 
@@ -856,7 +866,10 @@ task_replay_steps({Pid, Steps}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        replay_steps(Sys0, Pid, Steps, 0)
+        case cauder_replay:can_replay_step(Sys0, Pid) of
+          false -> error(no_replay);
+          true -> replay_steps(Sys0, Pid, Steps, 0)
+        end
       end
     ),
 
@@ -923,16 +936,19 @@ task_replay_receive(Uid, Sys0) ->
   {{replay_receive, Uid}, Time, Sys1}.
 
 
--spec task_replay_full_log([], System) -> {replay_full_log, Time, NewSystem} when
+-spec task_replay_full([], System) -> {replay_full_log, Time, NewSystem} when
   System :: cauder_types:system(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_replay_full_log([], Sys0) ->
+task_replay_full([], Sys0) ->
   {Time, Sys1} =
     timer:tc(
       fun() ->
-        replay_full_log(Sys0)
+        case cauder_replay:can_replay_full(Sys0) of
+          false -> error(no_replay);
+          true -> cauder_replay:replay_full(Sys0)
+        end
       end
     ),
 
@@ -954,7 +970,10 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        rollback_steps(Sys0, Pid, Steps, 0)
+        case cauder_rollback:can_rollback_step(Sys0, Pid) of
+          false -> error(no_rollback);
+          true -> rollback_steps(Sys0, Pid, Steps, 0)
+        end
       end
     ),
 
@@ -1055,94 +1074,7 @@ reply_all(Msg, Subs) ->
 %%%=============================================================================
 
 
--spec step_over(Semantics, System, Pid) -> {NewSystem, StepsDone} when
-  Semantics :: cauder_types:semantics(),
-  System :: cauder_types:system(),
-  Pid :: cauder_types:proc_id(),
-  NewSystem :: cauder_types:system(),
-  StepsDone :: non_neg_integer().
 
-step_over(Sem, Sys, Pid) ->
-  P = maps:get(Pid, Sys#sys.procs),
-  Fun =
-    fun Step(Sys0, Steps) ->
-      case Sem:step(Sys0, Pid) of
-%%        suspend ->
-%%          #sys{procs = #{Pid := P} = Ps} = Sys0,
-%%          Sys1 =
-%%            case Sem of
-%%              ?FWD_SEM -> Sys0#sys{procs = Ps#{Pid => P#proc{suspend_info = {step_over, Sem, tl(Es)}}}};
-%%              ?BWD_SEM -> erlang:error(not_implemented)
-%%            end,
-%%          throw({Sys1, Steps});
-        Sys1 ->
-          P0 = maps:get(Pid, Sys0#sys.procs),
-          P1 = maps:get(Pid, Sys1#sys.procs),
-          case Sem of
-            ?FWD_SEM ->
-              case {P, P1} of
-                % Fwd Step Over: Standard
-                {#proc{stack = Stk, exprs = [_ | Es]},
-                 #proc{stack = Stk, exprs = Es}} ->
-                  throw({Sys1, Steps + 1});
-                % Fwd Step Over: Enter block
-                {#proc{stack = Stk, exprs = [_ | Es]},
-                 #proc{stack = [{_, [_ | Es], _} | Stk]}} ->
-                  throw({Sys1, Steps + 1});
-                % Fwd Step Over: Exit block
-                {#proc{stack = [{_, [_ | Es], _} | Stk]},
-                 #proc{stack = Stk, exprs = Es}} ->
-                  throw({Sys1, Steps + 1});
-                {#proc{},
-                 #proc{}} ->
-                  continue
-              end;
-            ?BWD_SEM ->
-              case {P, P0, P1} of
-                % Bwd Step Over: Standard
-                {#proc{stack = Stk, exprs = [_ | Es]},
-                 #proc{stack = Stk, exprs = [_, _ | Es]},
-                 #proc{stack = Stk, exprs = [_, _, _ | Es]}} ->
-                  throw({Sys0, Steps});
-                % Bwd Step Over: To first expression in block/function
-                {#proc{stack = [Entry | Stk], exprs = [_ | Es]},
-                 #proc{stack = [Entry | Stk], exprs = [_, _ | Es]},
-                 #proc{stack = Stk}} ->
-                  throw({Sys0, Steps});
-                % Bwd Step Over: Enter block with one expression
-                {#proc{stack = Stk, exprs = Es},
-                 #proc{stack = [{_, [_ | Es], _} | Stk]},
-                 #proc{stack = Stk, exprs = [_ | Es]}} ->
-                  throw({Sys0, Steps});
-                % Bwd Step Over: Enter block with more than one expression
-                {#proc{stack = Stk, exprs = Es},
-                 #proc{stack = [{_, [_ | Es], _} | Stk], exprs = BlockEs},
-                 #proc{stack = [{_, [_ | Es], _} | Stk], exprs = [_ | BlockEs]}} ->
-                  throw({Sys0, Steps});
-                % Bwd Step Over: Exit block
-                {#proc{stack = [{_, [_ | Es], _} | Stk]},
-                 #proc{stack = Stk, exprs = [_ | Es]},
-                 #proc{stack = Stk, exprs = [_, _ | Es]}} ->
-                  throw({Sys0, Steps});
-                % Bwd Step Over: Exit block to first expression in block/function
-                {#proc{stack = [{_, [_ | Es], _}, Entry | Stk]},
-                 #proc{stack = [Entry | Stk], exprs = [_ | Es]},
-                 #proc{stack = Stk}} ->
-                  throw({Sys0, Steps});
-                {#proc{},
-                 #proc{},
-                 #proc{}} ->
-                  continue
-              end
-          end,
-          Step(Sys1, Steps + 1)
-      end
-    end,
-  try
-    Fun(Sys, 0)
-  catch
-    throw:{#sys{}, N} = Ret when is_integer(N) -> Ret
-  end.
 
 
 -spec step_multiple(Semantics, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
@@ -1179,26 +1111,6 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
       Sys1 = cauder_replay:replay_step(Sys0, Pid),
       replay_steps(Sys1, Pid, Steps, StepsDone + 1)
   end.
-
-
--spec replay_full_log(System) -> NewSystem when
-  System :: cauder_types:system(),
-  NewSystem :: cauder_types:system().
-
-replay_full_log(Sys0 = #sys{logs = LMap}) ->
-  lists:foldl(
-    fun
-      ([], Sys) -> Sys;
-      (Log, Sys) ->
-        case lists:last(Log) of
-          {spawn, Pid} -> cauder_replay:replay_spawn(Sys, Pid);
-          {send, Uid} -> cauder_replay:replay_send(Sys, Uid);
-          {'receive', Uid} -> cauder_replay:replay_receive(Sys, Uid)
-        end
-    end,
-    Sys0,
-    maps:values(LMap)
-  ).
 
 
 -spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when

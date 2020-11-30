@@ -232,41 +232,16 @@ update_manual(_, #wx_state{pid = undefined}) ->
 update_manual(_, #wx_state{system = System, pid = Pid}) ->
   wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
-  ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
-  ManualStep = cauder_wx:find(?ACTION_Manual_Step, wxPanel),
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Forward_Button, wxButton),
+                  [{enable, cauder_semantics_forwards:can_step(System, Pid)}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton),
+                  [{enable, cauder_semantics_backwards:can_step(System, Pid)}]),
 
-  case ProcOpts of
-    [] ->
-      wxPanel:disable(ManualStep);
-    _ ->
-      wxPanel:enable(ManualStep),
-
-      CanStepFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
-      CanStepBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
-
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}]),
-
-      #sys{procs = #{Pid := Proc}} = System,
-
-      io:format("Hist: ~p\n", [Proc#proc.hist]),
-
-      CanStepOverFwd = CanStepFwd andalso can_step_over_fwd(Proc),
-      CanStepOverBwd = CanStepBwd andalso can_step_over_bwd(Proc),
-
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Forward_Button, wxButton), [{enable, CanStepOverFwd}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Backward_Button, wxButton), [{enable, CanStepOverBwd}])
-  end,
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Forward_Button, wxButton),
+                  [{enable, cauder_semantics_forwards:can_step_over(System, Pid)}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_StepOver_Backward_Button, wxButton),
+                  [{enable, cauder_semantics_backwards:can_step_over(System, Pid)}]),
   ok.
-
-
-can_step_over_fwd(#proc{exprs = [_, _ | _]}) -> true;
-can_step_over_fwd(#proc{})                   -> false.
-
-
-can_step_over_bwd(#proc{hist = [{_, _, [_ | Es], Stk} | _], stack = Stk, exprs = Es})    -> true;
-can_step_over_bwd(#proc{hist = [{_, _, [_ | Es], Stk, _} | _], stack = Stk, exprs = Es}) -> true;
-can_step_over_bwd(#proc{})                                                               -> false.
 
 
 %%%=============================================================================
