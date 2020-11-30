@@ -59,7 +59,7 @@
 -type result() :: #result{}.
 
 -type label() :: tau
-               | {spawn, af_variable(), function()}
+               | {spawn, af_variable(), af_literal()} % The last term is the "fun"
                | {spawn, af_variable(), module(), atom(), [term()]}
                | {self, af_variable()}
                | {send, proc_id(), term()}

@@ -197,7 +197,7 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     true -> eval_and_update({Bs, Fun, Stk}, {3, E});
     false ->
       Var = cauder_utils:temp_variable(Line),
-      Label = {spawn, Var, concrete(Fun)},
+      Label = {spawn, Var, Fun},
       #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
   end;
 
@@ -511,9 +511,12 @@ clause_line(Bs0, [{'clause', Line, Ps, G, _} | Cs], Vs) ->
 
 match(Bs, [], [])    -> {match, Bs};
 match(Bs0, [Pat | Ps0], [{value, _, Val} | Vs0]) when length(Ps0) == length(Vs0) ->
-  case catch match1(Pat, Val, Bs0) of
-    {match, Bs} -> match(Bs, Ps0, Vs0);
-    nomatch -> nomatch
+  try
+    match1(Pat, Val, Bs0)
+  of
+    {match, Bs} -> match(Bs, Ps0, Vs0)
+  catch
+    throw:nomatch -> nomatch
   end;
 match(_Bs, _Ps, _Vs) -> nomatch.
 
