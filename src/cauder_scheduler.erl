@@ -15,6 +15,28 @@
 -type scheduler_fun() :: fun((proc_queue(), change()) -> {cauder_types:proc_id(), proc_queue()}).
 
 
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the scheduler function `SchedulerFun' associated with the given
+%% `Key' if it matches an available scheduler.
+
+-spec get(Key) -> SchedulerFun when
+  Key :: atom(),
+  SchedulerFun :: scheduler_fun().
+
+get(Key) ->
+  maps:get(Key, schedulers()).
+
+
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+
 %%------------------------------------------------------------------------------
 %% @private
 %% @doc Returns a map containing all the available schedulers.
@@ -32,16 +54,9 @@ schedulers() ->
   }.
 
 
-%%------------------------------------------------------------------------------
-%% @doc Returns the scheduler function `SchedulerFun' associated with the given
-%% `Key' if it matches an available scheduler.
-
--spec get(Key) -> SchedulerFun when
-  Key :: atom(),
-  SchedulerFun :: scheduler_fun().
-
-get(Key) ->
-  maps:get(Key, schedulers()).
+%%%=============================================================================
+%%% Scheduling implementations
+%%%=============================================================================
 
 
 %%------------------------------------------------------------------------------
