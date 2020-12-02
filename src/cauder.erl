@@ -704,7 +704,7 @@ run_task(Fun, Args, System) when is_function(Fun, 2) ->
         try Fun(Args, System) of
           {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
         catch
-          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:x -> gen_server:call(?SERVER, {task, {fail, x}})
         end
     end
   ).
@@ -1082,23 +1082,37 @@ step_over(Sem, Sys, Pid, Es) ->
   NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-step_multiple(Sem, Scheduler, Sys0, Steps) ->
+step_multiple(Sem, Scheduler, Sys, Steps) ->
   try
+    SchedFun = cauder_scheduler:get(Scheduler),
     lists:foldl(
-      fun(Step, {Sys, PrevPids}) ->
-        NewPids = lists:map(fun(Opt) -> Opt#opt.pid end, Sem:options(Sys)),
-        case NewPids of
-          [] -> throw({Sys, Step});
-          NewPids ->
-            SchedFun = cauder_scheduler:get(Scheduler),
-            StepFun = fun(Pid) -> Sem:step(Sys, Pid) end,
-            SchedFun(PrevPids, NewPids, StepFun)
+      fun(Step, {Sys0, Set0, Queue0}) ->
+        Set1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Sem:options(Sys0)),
+        case sets:is_empty(Set1) of
+          true -> throw({Sys0, Step});
+          false ->
+            Change =
+              case {sets:size(Set0), sets:size(Set1)} of
+                {Size, Size} ->
+                  none;
+                {0, _} ->
+                  {init, sets:to_list(Set1)};
+                {Size0, Size1} when Size0 < Size1 ->
+                  [ChangePid] = sets:to_list(sets:subtract(Set1, Set0)),
+                  {add, ChangePid};
+                {Size0, Size1} when Size0 > Size1 ->
+                  [ChangePid] = sets:to_list(sets:subtract(Set0, Set1)),
+                  {remove, ChangePid}
+              end,
+            {Pid, Queue1} = SchedFun(Queue0, Change),
+            Sys1 = Sem:step(Sys0, Pid),
+            {Sys1, Set1, Queue1}
         end
       end,
-      {Sys0, []},
+      {Sys, sets:new(), queue:new()},
       lists:seq(0, Steps - 1))
   of
-    {Sys1, _} -> {Sys1, Steps}
+    {Sys1, _, _} -> {Sys1, Steps}
   catch
     throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
   end.
