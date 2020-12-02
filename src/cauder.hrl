@@ -1,3 +1,7 @@
+%%%=============================================================================
+%%% App Information
+%%%=============================================================================
+
 -define(APP_NAME, "CauDEr").
 -define(APP_URL, "https://github.com/mistupv/cauder-v2").
 -define(APP_DB, 'cauder/database').
@@ -11,10 +15,20 @@
 -define(TO_STRING(X), "").
 -endif.
 
-%% Name of the module that defines the forwards semantics.
+
+%%%=============================================================================
+%%% Semantics
+%%%=============================================================================
+
+% Name of the module that defines the forwards semantics.
 -define(FWD_SEM, cauder_semantics_forwards).
-%% Name of the module that defines the backwards semantics.
+% Name of the module that defines the backwards semantics.
 -define(BWD_SEM, cauder_semantics_backwards).
+
+
+%%%=============================================================================
+%%% Rules
+%%%=============================================================================
 
 -define(RULE_SEQ,      seq).
 -define(RULE_SELF,     self).
@@ -22,15 +36,27 @@
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').
 
-
-
-
 -define(NOT_EXP,    not_exp).
 -define(NULL_OPT,   null_opt).
 
 
+%%%=============================================================================
+%%% Schedulers
+%%%=============================================================================
+
+-define(SCHEDULER_ROUND_ROBIN, round_robin).
+
+
+%%%=============================================================================
+%%% Other
+%%%=============================================================================
+
 -define(CAUDER_GREEN, {34,139,34}).
 
+
+%%%=============================================================================
+%%% Records
+%%%=============================================================================
 
 % System
 -record(sys, {
