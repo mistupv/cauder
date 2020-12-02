@@ -50,7 +50,8 @@ get(Key) ->
 
 schedulers() ->
   #{
-    ?SCHEDULER_ROUND_ROBIN => fun scheduler_round_robin/2
+    ?SCHEDULER_ROUND_ROBIN => fun scheduler_round_robin/2,
+    ?SCHEDULER_FCFS => fun scheduler_fcfs/2
   }.
 
 
@@ -87,3 +88,30 @@ scheduler_round_robin(Q0, {remove, OldPid}) ->
   {{value, Pid}, Q2} = queue:out(Q1),
   Q3 = queue:in(Pid, Q2),
   {Pid, Q3}.
+
+
+%%------------------------------------------------------------------------------
+%% @doc First come, first served scheduling implementation.
+
+-spec scheduler_fcfs(Queue, Change) -> {Pid, NewQueue} when
+  Queue :: proc_queue(),
+  Change :: change(),
+  Pid :: cauder_types:proc_id(),
+  NewQueue :: proc_queue().
+
+scheduler_fcfs(Q0, none) ->
+  {value, Pid} = queue:peek(Q0),
+  {Pid, Q0};
+scheduler_fcfs(Q0, {init, Ps}) ->
+  Q1 = lists:foldl(fun queue:in/2, Q0, Ps),
+  {value, Pid} = queue:peek(Q1),
+  {Pid, Q1};
+scheduler_fcfs(Q0, {add, NewPid}) ->
+  {value, Pid} = queue:peek(Q0),
+  Q1 = queue:in(NewPid, Q0),
+  {Pid, Q1};
+scheduler_fcfs(Q0, {remove, OldPid}) ->
+  % The removed Pid must be the first one in the queue, the last one that was given "cpu time"
+  {{value, OldPid}, Q1} = queue:out(Q0),
+  {value, Pid} = queue:peek(Q1),
+  {Pid, Q1}.

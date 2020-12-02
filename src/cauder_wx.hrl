@@ -217,6 +217,7 @@
 %% -------------------- Scheduler strings -------------------- %%
 
 -define(SCHEDULER_RoundRobin_Name, "Round-robin").
+-define(SCHEDULER_FCFS_Name, "First come, first served").
 
 %% -------------------- Help strings -------------------- %%
 

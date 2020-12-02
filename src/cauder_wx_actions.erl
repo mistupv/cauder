@@ -309,7 +309,8 @@ create_automatic(Parent) ->
 
   SchedulerItems =
     [
-      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_ROUND_ROBIN}
+      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_ROUND_ROBIN},
+      {?SCHEDULER_FCFS_Name, ?SCHEDULER_FCFS}
     ],
 
   populate_choice(SchedulerChoice, SchedulerItems),
