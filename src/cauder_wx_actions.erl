@@ -271,7 +271,7 @@ create_automatic(Parent) ->
   Content = wxBoxSizer:new(?wxVERTICAL),
   wxBoxSizer:add(SizerH, Content, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
-  InputSize = {size, {125, -1}},
+  InputSize = {size, {150, -1}},
 
   StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
   CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
