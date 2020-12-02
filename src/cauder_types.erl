@@ -10,7 +10,10 @@
   history/0, history_entry/0,
   stack/0, stack_entry/0,
   environment/0, binding/0,
-  option/0, semantics/0, rule/0,
+  option/0,
+  semantics/0,
+  scheduler/0,
+  rule/0,
   trace/0,
   result/0, label/0
 ]).
@@ -51,13 +54,16 @@
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.
+
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
+
+-type scheduler() :: ?SCHEDULER_ROUND_ROBIN.
+
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
 
 -type trace() :: #trace{}.
 
 -type result() :: #result{}.
-
 -type label() :: tau
                | {spawn, af_variable(), function()}
                | {spawn, af_variable(), module(), atom(), [term()]}
