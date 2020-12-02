@@ -2,7 +2,6 @@
 -define(APP_URL, "https://github.com/mistupv/cauder-v2").
 -define(APP_DB, 'cauder/database').
 
--define(ID_GAMMA, 0).
 
 -ifdef(debug).
 -define(LOG(X), io:format("{~p,~p}: ~p~n", [?MODULE, ?LINE, X])).
@@ -24,15 +23,11 @@
 -define(RULE_RECEIVE, 'receive').
 
 
--define(REPLAY_DATA,  200).
 
 
 -define(NOT_EXP,    not_exp).
--define(NULL_RULE,  null_rule).
 -define(NULL_OPT,   null_opt).
 
--define(SCHED_RANDOM,      random).
--define(SCHED_PRIO_RANDOM, prio_random).
 
 -define(CAUDER_GREEN, {34,139,34}).
 
