@@ -143,8 +143,9 @@
 -define(ACTION_Automatic, 2120).
 
 -define(ACTION_Automatic_Steps, 2121).
--define(ACTION_Automatic_Forward_Button, 2122).
--define(ACTION_Automatic_Backward_Button, 2123).
+-define(ACTION_Automatic_Scheduler, 2122).
+-define(ACTION_Automatic_Forward_Button, 2123).
+-define(ACTION_Automatic_Backward_Button, 2124).
 
 -define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)).
 
@@ -212,6 +213,11 @@
 
 -define(STATUS_BAR, 2400).
 
+
+%% -------------------- Scheduler strings -------------------- %%
+
+-define(SCHEDULER_RoundRobin_Name, "Round-robin").
+-define(SCHEDULER_FCFS_Name, "First come, first served").
 
 %% -------------------- Help strings -------------------- %%
 

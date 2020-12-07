@@ -263,20 +263,52 @@ create_automatic(Parent) ->
   Content = wxBoxSizer:new(?wxVERTICAL),
   wxBoxSizer:add(SizerH, Content, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
-  CenterVertical = [{flag, ?wxALIGN_CENTER}],
+  InputSize = {size, {150, -1}},
+
+  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
+  CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
+  CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
   % Steps
 
   Steps = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Steps, [{flag, ?wxEXPAND}]),
+  wxBoxSizer:add(Content, Steps, CenterHorizontal),
 
-  StepsStaticText = wxStaticText:new(Win, ?wxID_ANY, "Steps:"),
-  wxBoxSizer:add(Steps, StepsStaticText, CenterVertical),
+  StepsText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
+  wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
   wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  StepsSpin = wxSpinCtrl:new(Win, [{id, ?ACTION_Automatic_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}]),
+  StepsSpin = wxSpinCtrl:new(Win, [{id, ?ACTION_Automatic_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
   wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  % -----
+
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
+  % Scheduler
+
+  Scheduler = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, Scheduler, CenterHorizontal),
+
+  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Scheduler:", StaticAlignRight),
+  wxBoxSizer:add(Scheduler, SchedulerText, CenterVertical),
+
+  wxBoxSizer:addSpacer(Scheduler, ?SPACER_SMALL),
+
+  SchedulerChoice = wxChoice:new(Win, ?ACTION_Automatic_Scheduler, [InputSize]),
+  wxBoxSizer:add(Scheduler, SchedulerChoice, CenterVertical),
+
+  SchedulerItems =
+    [
+      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_ROUND_ROBIN},
+      {?SCHEDULER_FCFS_Name, ?SCHEDULER_FCFS}
+    ],
+
+  populate_choice(SchedulerChoice, SchedulerItems),
+
+  wxChoice:setSelection(SchedulerChoice, 0),
+  wxChoice:enable(SchedulerChoice, [{enable, length(SchedulerItems) > 1}]),
 
   % -----
 
@@ -285,7 +317,7 @@ create_automatic(Parent) ->
   % Buttons
 
   Buttons = wxBoxSizer:new(?wxHORIZONTAL),
-  wxBoxSizer:add(Content, Buttons, [{flag, ?wxEXPAND}]),
+  wxBoxSizer:add(Content, Buttons, CenterHorizontal),
 
   BwdButton = wxButton:new(Win, ?ACTION_Automatic_Backward_Button, [{label, "Backward"}]),
   wxBoxSizer:add(Buttons, BwdButton, CenterVertical),
@@ -762,11 +794,16 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
 %%%=============================================================================
 
 
+-spec populate_choice(Choice, Items) -> ok when
+  Choice :: wxChoice: wxChoice(),
+  Items :: [term() | {string(), term()}].
+
 populate_choice(Choice, Items) ->
   wxChoice:freeze(Choice),
   wxChoice:clear(Choice),
   lists:foreach(
     fun
+      ({Item, ClientData}) -> wxChoice:append(Choice, Item, ClientData);
       (Item) -> wxChoice:append(Choice, io_lib:format("~p", [Item]), Item)
     end,
     Items

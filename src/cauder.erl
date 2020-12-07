@@ -15,7 +15,7 @@
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
--export([step_multiple/2]).
+-export([step_multiple/3]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
 -export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
@@ -260,13 +260,14 @@ step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}})
 %%
 %% @see task_step_multiple/2
 
--spec step_multiple(Semantics, Steps) -> Reply when
+-spec step_multiple(Semantics, Steps, Scheduler) -> Reply when
   Semantics :: cauder_types:semantics(),
   Steps :: pos_integer(),
+  Scheduler :: cauder_types:scheduler(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
-step_multiple(Sem, Steps) -> gen_server:call(?SERVER, {user, {step_multiple, {Sem, Steps}}}).
+step_multiple(Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step_multiple, {Sem, Steps, Scheduler}}}).
 
 
 %%%=============================================================================
@@ -829,21 +830,22 @@ task_step_over({Sem, Pid}, Sys0) ->
   {{step_over, Sem, StepsDone}, Time, Sys1}.
 
 
--spec task_step_multiple({Semantics, Steps}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
+-spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
   Semantics :: cauder_types:semantics(),
   Steps :: non_neg_integer(),
+  Scheduler :: cauder_types:scheduler(),
   System :: cauder_types:system(),
   StepsDone :: non_neg_integer(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_step_multiple({Sem, Steps}, Sys0) ->
+task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
         case Sem:can_step_multiple(Sys0) of
           false -> error(no_step);
-          true -> step_multiple(Sem, Sys0, Steps, 0)
+          true -> step_multiple(Sem, Scheduler, Sys0, Steps)
         end
       end
     ),
@@ -1077,21 +1079,47 @@ reply_all(Msg, Subs) ->
 
 
 
--spec step_multiple(Semantics, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
+-spec step_multiple(Semantics, Scheduler, System, Steps) -> {NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
+  Scheduler :: cauder_types:scheduler(),
   System :: cauder_types:system(),
   Steps :: pos_integer(),
-  StepsDone :: non_neg_integer(),
   NewSystem :: cauder_types:system(),
-  NewStepsDone :: non_neg_integer().
+  StepsDone :: non_neg_integer().
 
-step_multiple(_, Sys, Steps, Steps) -> {Sys, Steps};
-step_multiple(Sem, Sys, Steps, StepsDone) ->
-  case Sem:options(Sys) of
-    [] -> {Sys, StepsDone};
-    [#opt{pid = Pid, sem = Sem} | _] ->
-      {ok, #sys{} = Sys1} = Sem:step(Sys, Pid),
-      step_multiple(Sem, Sys1, Steps, StepsDone + 1)
+step_multiple(Sem, Scheduler, Sys, Steps) ->
+  try
+    SchedFun = cauder_scheduler:get(Scheduler),
+    lists:foldl(
+      fun(Step, {Sys0, Set0, Queue0}) ->
+        Set1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Sem:options(Sys0)),
+        case sets:is_empty(Set1) of
+          true -> throw({Sys0, Step});
+          false ->
+            Change =
+              case {sets:size(Set0), sets:size(Set1)} of
+                {Size, Size} ->
+                  none;
+                {0, _} ->
+                  {init, sets:to_list(Set1)};
+                {Size0, Size1} when Size0 < Size1 ->
+                  [ChangePid] = sets:to_list(sets:subtract(Set1, Set0)),
+                  {add, ChangePid};
+                {Size0, Size1} when Size0 > Size1 ->
+                  [ChangePid] = sets:to_list(sets:subtract(Set0, Set1)),
+                  {remove, ChangePid}
+              end,
+            {Pid, Queue1} = SchedFun(Queue0, Change),
+            {ok, #sys{} = Sys1} = Sem:step(Sys0, Pid),
+            {Sys1, Set1, Queue1}
+        end
+      end,
+      {Sys, sets:new(), queue:new()},
+      lists:seq(0, Steps - 1))
+  of
+    {Sys1, _, _} -> {Sys1, Steps}
+  catch
+    throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
   end.
 
 

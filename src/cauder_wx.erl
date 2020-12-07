@@ -356,7 +356,9 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
   Spinner = cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
-  {ok, System} = cauder:step_multiple(Sem, Steps),
+  Choice = cauder_wx:find(?ACTION_Automatic_Scheduler, wxChoice),
+  Scheduler = wxChoice:getClientData(Choice, wxChoice:getSelection(Choice)),
+  {ok, System} = cauder:step_multiple(Sem, Steps, Scheduler),
   cauder_wx_statusbar:step_start(Sem),
   {noreply, refresh(State, State#wx_state{system = System, task = step_multiple})};
 
