@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Main" type="ErlangApplicationRunConfiguration" factoryName="Erlang Application" show_console_on_std_err="false" show_console_on_std_out="false">
+    <module name="cauder-v2" />
+    <option name="allowRunningInParallel" value="false" />
+    <option name="debugOptions">
+      <ErlangDebugOptions>
+        <option name="autoUpdateModulesNotToInterpret" value="true" />
+        <option name="modulesNotToInterpret">
+          <set />
+        </option>
+      </ErlangDebugOptions>
+    </option>
+    <option name="erlFlags" value="" />
+    <option name="moduleAndFunction" value="cauder main" />
+    <option name="params" value="" />
+    <option name="selectedOptions">
+      <list />
+    </option>
+    <option name="useTestCodePath" value="false" />
+    <option name="workDirectory" value="$PROJECT_DIR$/_build/default/lib/cauder/ebin" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
