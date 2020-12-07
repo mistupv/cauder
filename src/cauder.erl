@@ -798,7 +798,7 @@ task_step({Sem, Pid}, Sys0) ->
           true ->
             Opts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, eval_opts(Sys0)),
             {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
-            Sys1 = Sem:step(Sys0, Pid),
+            {ok, #sys{} = Sys1} = Sem:step(Sys0, Pid),
             {Rule, Sys1}
         end
       end
@@ -1090,7 +1090,7 @@ step_multiple(Sem, Sys, Steps, StepsDone) ->
   case Sem:options(Sys) of
     [] -> {Sys, StepsDone};
     [#opt{pid = Pid, sem = Sem} | _] ->
-      Sys1 = Sem:step(Sys, Pid),
+      {ok, #sys{} = Sys1} = Sem:step(Sys, Pid),
       step_multiple(Sem, Sys1, Steps, StepsDone + 1)
   end.
 

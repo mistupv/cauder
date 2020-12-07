@@ -406,7 +406,7 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | no_messages when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
@@ -419,7 +419,7 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 match_rec_pid(Cs, Bs, Pid, Mail) -> match_rec_pid(Cs, Bs, Pid, Mail, []).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, RemainingMail, CheckedMail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, RemainingMail, CheckedMail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | no_messages when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
@@ -430,7 +430,7 @@ match_rec_pid(Cs, Bs, Pid, Mail) -> match_rec_pid(Cs, Bs, Pid, Mail, []).
   MatchedMessage :: cauder_types:message(),
   NewMail :: [cauder_types:message()].
 
-match_rec_pid(_, _, _, [], _) -> nomatch;
+match_rec_pid(_, _, _, [], _) -> no_messages;
 match_rec_pid(Cs, Bs0, Pid, [Msg | Mail], Checked) ->
   case Msg of
     #msg{dest = Pid, val = Val} ->

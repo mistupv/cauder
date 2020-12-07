@@ -72,7 +72,7 @@ can_step_multiple(System) -> options(System) =/= [].
 %% @doc Performs a single backwards step in the process with the given Pid in
 %% the given System.
 
--spec step(System, Pid) -> NewSystem when
+-spec step(System, Pid) -> {ok, NewSystem} when
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
@@ -88,10 +88,10 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         env   = Bs,
         exprs = Es
       },
-      Sys#sys{
+      {ok, Sys#sys{
         mail  = Ms,
         procs = PMap#{Pid => P}
-      };
+      }};
     {spawn, Bs, Es, Stk, Gid} ->
       P = P0#proc{
         hist  = RestHist,
@@ -104,12 +104,12 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         from = Pid,
         to   = Gid
       },
-      Sys#sys{
+      {ok, Sys#sys{
         mail  = Ms,
         procs = maps:remove(Gid, PMap#{Pid => P}),
         logs  = maps:update_with(Pid, fun(Log) -> [{spawn, Gid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
-      };
+      }};
     {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
       {_Msg, OldMsgs} = cauder_utils:take_message(Ms, Uid),
       P = P0#proc{
@@ -125,12 +125,12 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         val  = Val,
         time = Uid
       },
-      Sys#sys{
+      {ok, Sys#sys{
         mail  = OldMsgs,
         procs = PMap#{Pid => P},
         logs  = maps:update_with(Pid, fun(Log) -> [{send, Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
-      };
+      }};
     {rec, Bs, Es, Stk, M = #msg{dest = Pid, val = Val, uid = Uid}} ->
       P = P0#proc{
         hist  = RestHist,
@@ -144,12 +144,12 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         val  = Val,
         time = Uid
       },
-      Sys#sys{
+      {ok, Sys#sys{
         mail  = [M | Ms],
         procs = PMap#{Pid => P},
         logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
-      }
+      }}
   end.
 
 
@@ -169,7 +169,7 @@ step_over(Sys, Pid) ->
     fun Step(Sys0, Steps) ->
       case step(Sys0, Pid) of
         % TODO
-        Sys1 ->
+        {ok, Sys1} ->
           P0 = maps:get(Pid, Sys0#sys.procs),
           P1 = maps:get(Pid, Sys1#sys.procs),
           case {P, P0, P1} of

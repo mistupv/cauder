@@ -73,7 +73,7 @@ can_replay_receive(#sys{logs = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMa
   System :: cauder_types:system(),
   CanReplay :: boolean().
 
-can_replay_full(#sys{logs = LMap})  ->
+can_replay_full(#sys{logs = LMap}) ->
   lists:any(fun(Log) -> Log =/= [] end, maps:values(LMap)).
 
 
@@ -97,7 +97,9 @@ replay_step(#sys{logs = LMap} = Sys, Pid) ->
         [{send, Uid} | _] -> replay_send(Sys, Uid);
         [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
       end;
-    true -> cauder_semantics_forwards:step(Sys, Pid)
+    true ->
+      {ok, #sys{} = Sys1} = cauder_semantics_forwards:step(Sys, Pid),
+      Sys1
   end.
 
 
@@ -161,7 +163,7 @@ replay_receive(#sys{logs = LMap} = Sys, Uid) ->
   System :: cauder_types:system(),
   NewSystem :: cauder_types:system().
 
-replay_full( #sys{logs = LMap}=Sys0) ->
+replay_full(#sys{logs = LMap} = Sys0) ->
   lists:foldl(
     fun
       ([], Sys) -> Sys;

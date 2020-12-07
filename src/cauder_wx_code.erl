@@ -55,8 +55,10 @@
                  {?wxSTC_ERLANG_MODULES, {64, 102, 244}},
                  {?wxSTC_ERLANG_MODULES_ATT, {64, 102, 244}}]).
 
--define(LINE_MARKER, 0).
--define(LINE_BACKGROUND, 1).
+-define(ACTIVE_LINE_MARKER, 0).
+-define(ACTIVE_LINE_BACKGROUND, 1).
+-define(SUSPEND_LINE_MARKER, 2).
+-define(SUSPEND_LINE_BACKGROUND, 3).
 
 
 %%%=============================================================================
@@ -135,10 +137,14 @@ create_code(Parent) ->
   wxStyledTextCtrl:setMarginType(CodeControl, 0, ?wxSTC_MARGIN_NUMBER),
   wxStyledTextCtrl:setSelectionMode(CodeControl, ?wxSTC_SEL_LINES),
 
-  %% Current Line
-  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
-  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
-  wxStyledTextCtrl:markerDefine(CodeControl, ?LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
+  %% Line Markers
+  wxStyledTextCtrl:markerDefine(CodeControl, ?ACTIVE_LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {20, 170, 20}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?ACTIVE_LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {200, 255, 200}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?ACTIVE_LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {200, 255, 200}}]),
+
+  wxStyledTextCtrl:markerDefine(CodeControl, ?SUSPEND_LINE_MARKER, ?wxSTC_MARK_ARROW, [{foreground, {200, 200, 20}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?SUSPEND_LINE_MARKER, ?wxSTC_MARK_ARROW, [{background, {255, 255, 140}}]),
+  wxStyledTextCtrl:markerDefine(CodeControl, ?SUSPEND_LINE_BACKGROUND, ?wxSTC_MARK_BACKGROUND, [{background, {255, 255, 140}}]),
 
   %% Scrolling
   Policy = ?wxSTC_CARET_SLOP bor ?wxSTC_CARET_JUMPS bor ?wxSTC_CARET_EVEN,
@@ -177,9 +183,14 @@ update_code(_, #wx_state{pid = undefined}) ->
 update_code(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
   CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
   unmark_line(CodeControl),
-  #proc{exprs = [E | _]} = maps:get(Pid, PMap),
+  #proc{exprs = [E | _], suspend = SuspendInfo} = maps:get(Pid, PMap),
   Line = element(2, E),
-  mark_line(CodeControl, Line),
+  Mode =
+    case SuspendInfo of
+      undefined -> active;
+      _ -> suspend
+    end,
+  mark_line(CodeControl, Line, Mode),
   goto_line(CodeControl, Line),
   ok.
 
@@ -245,14 +256,21 @@ load_code(CodeCtrl, Code) ->
   wxStyledTextCtrl:thaw(CodeCtrl).
 
 
--spec mark_line(CodeControl, Line) -> ok when
+-spec mark_line(CodeControl, Line, Mode) -> ok when
   CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
-  Line :: pos_integer().
+  Line :: pos_integer(),
+  Mode :: active | suspend.
 
-mark_line(CodeCtrl, Line) ->
-  put(line, Line),
-  wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_MARKER),
-  wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?LINE_BACKGROUND),
+mark_line(CodeCtrl, Line, Mode) ->
+  put(line, {Line, Mode}),
+  case Mode of
+    active ->
+      wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?ACTIVE_LINE_MARKER),
+      wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?ACTIVE_LINE_BACKGROUND);
+    suspend ->
+      wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?SUSPEND_LINE_MARKER),
+      wxStyledTextCtrl:markerAdd(CodeCtrl, Line - 1, ?SUSPEND_LINE_BACKGROUND)
+  end,
   ok.
 
 
@@ -262,9 +280,12 @@ mark_line(CodeCtrl, Line) ->
 unmark_line(CodeCtrl) ->
   case get(line) of
     undefined -> ok;
-    Line ->
-      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_MARKER),
-      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?LINE_BACKGROUND)
+    {Line, active} ->
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?ACTIVE_LINE_MARKER),
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?ACTIVE_LINE_BACKGROUND);
+    {Line, suspend} ->
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?SUSPEND_LINE_MARKER),
+      wxStyledTextCtrl:markerDelete(CodeCtrl, Line - 1, ?SUSPEND_LINE_BACKGROUND)
   end,
   erase(line),
   ok.

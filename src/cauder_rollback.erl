@@ -106,8 +106,9 @@ rollback_step(#sys{procs = PMap, roll = RollLog} = Sys0, Pid) ->
       ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
       rollback_send(Sys, Pid, Dest, Uid);
     _ ->
-      [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
-      Sem:step(Sys0, Pid)
+      [#opt{pid = Pid, sem = ?BWD_SEM} | _] = options(Sys0, Pid),
+      {ok, #sys{} = Sys1} = cauder_semantics_backwards:step(Sys0, Pid),
+      Sys1
   end.
 
 
@@ -184,8 +185,9 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
     false ->
       Sys1 = rollback_step(Sys0, SpawnPid),
       rollback_spawn(Sys1, Pid, SpawnPid);
-    {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+    {value, #opt{pid = Pid, sem = ?BWD_SEM}} ->
+      {ok, #sys{} = Sys1} = cauder_semantics_backwards:step(Sys0, Pid),
+      Sys1
   end.
 
 
@@ -202,8 +204,9 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
     false ->
       Sys1 = rollback_step(Sys0, DestPid),
       rollback_send(Sys1, Pid, DestPid, Uid);
-    {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+    {value, #opt{pid = Pid, sem = ?BWD_SEM}} ->
+      {ok, #sys{} = Sys1} = cauder_semantics_backwards:step(Sys0, Pid),
+      Sys1
   end.
 
 

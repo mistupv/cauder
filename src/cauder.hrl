@@ -61,6 +61,8 @@
   env = maps:new() :: cauder_types:environment(),
   % List of expressions
   exprs :: [cauder_types:abstract_expr(), ...],
+  % Execution suspension info
+  suspend :: undefined | {step_over, cauder_types:semantics(), cauder_types:process()},
   % The entry point function for this process
   spf :: mfa()
 }).
