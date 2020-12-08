@@ -770,7 +770,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
           fun
             ({spawn = K, _Bs, _Es, _Stk, V}, Map) ->
               maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
-            ({K, _Bs, _Es, _Stk, #msg{uid = V}}, Map) when K =:= send orelse K =:= rec ->
+            ({K, _Bs, _Es, _Stk, #message{uid = V}}, Map) when K =:= send orelse K =:= rec ->
               maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
             (_, Map) -> Map
           end,

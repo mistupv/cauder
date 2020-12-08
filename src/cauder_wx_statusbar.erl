@@ -283,13 +283,13 @@ replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
 
 
 -spec replay_send_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 replay_send_start(Uid) -> set_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 
 
 -spec replay_send_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 replay_send_finish(Uid, Time) ->
@@ -307,13 +307,13 @@ replay_send_fail() -> set_text(?REPLAY_SEND_FAIL).
 
 
 -spec replay_receive_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 replay_receive_start(Uid) -> set_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
 
 
 -spec replay_receive_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 replay_receive_finish(Uid, Time) ->
@@ -391,13 +391,13 @@ rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 
 
 -spec rollback_send_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 rollback_send_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
 
 
 -spec rollback_send_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 rollback_send_finish(Uid, Time) ->
@@ -415,13 +415,13 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 
 
 -spec rollback_receive_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 rollback_receive_start(Uid) -> set_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
 
 
 -spec rollback_receive_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 rollback_receive_finish(Uid, Time) ->

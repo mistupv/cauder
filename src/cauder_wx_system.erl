@@ -75,7 +75,7 @@ create_mail(Parent) ->
   Item = wxListItem:new(),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
 
-  wxListItem:setText(Item, "Dest."),
+  wxListItem:setText(Item, "UID"),
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 0, Item),
 
@@ -83,7 +83,7 @@ create_mail(Parent) ->
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 1, Item),
 
-  wxListItem:setText(Item, "UID"),
+  wxListItem:setText(Item, "Dest."),
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 2, Item),
 
@@ -113,14 +113,14 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}}) ->
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   lists:foldl(
-    fun(#msg{dest = Dest, val = Value, uid = Uid}, Row) ->
+    fun(#message{uid = Uid, value = Value, dest = Dest}, Row) ->
       wxListCtrl:insertItem(MailArea, Row, ""),
       wxListCtrl:setItemFont(MailArea, Row, Font),
-      wxListCtrl:setItem(MailArea, Row, 0, integer_to_list(Dest)),
-      wxListCtrl:setItem(MailArea, Row, 1, io_lib:format("~p", [Value])),
-      wxListCtrl:setItem(MailArea, Row, 2, integer_to_list(Uid)),
+      wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
+      wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
+      wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Dest)),
       Row + 1
-    end, 0, Mail),
+    end, 0, cauder_mailbox:to_list(Mail)),
   wxListCtrl:thaw(MailArea),
   ok.
 

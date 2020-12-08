@@ -30,7 +30,7 @@
   Pid :: cauder_types:proc_id(),
   NewSystem :: cauder_types:system().
 
-step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
+step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
   {#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
 
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
@@ -56,7 +56,7 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       Sys#sys{
         procs = PMap#{Pid => P}
       };
-    {spawn, VarPid, M, F, As} ->
+    {spawn, VarPid, Msg, F, As} ->
       {SpawnPid, NewLog} =
         case LMap of
           #{Pid := [{spawn, LogPid} | RestLog]} ->
@@ -73,8 +73,8 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       },
       P2 = #proc{
         pid   = SpawnPid,
-        exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
-        spf   = {M, F, length(As)}
+        exprs = [cauder_syntax:remote_call(Msg, F, lists:map(fun cauder_eval:abstract/1, As))],
+        spf   = {Msg, F, length(As)}
       },
       T = #trace{
         type = ?RULE_SPAWN,
@@ -86,22 +86,17 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         logs  = LMap#{Pid => NewLog},
         trace = [T | Trace]
       };
-    {send, Dest, Val} ->
-      {Uid, NewLog} =
+    {send, Dest, Value} ->
+      {Msg, Log} =
         case LMap of
-          #{Pid := [{send, LogUid} | RestLog]} ->
-            {LogUid, RestLog};
+          #{Pid := [{send, Uid} | RestLog]} ->
+            {#message{uid = Uid, value = Value, dest = Dest}, RestLog};
           _ ->
-            {cauder_utils:fresh_uid(), []}
+            {#message{value = Value, dest = Dest}, []}
         end,
 
-      M = #msg{
-        dest = Dest,
-        val  = Val,
-        uid  = Uid
-      },
       P = P0#proc{
-        hist  = [{send, Bs0, Es0, Stk0, M} | Hist],
+        hist  = [{send, Bs0, Es0, Stk0, Msg} | Hist],
         stack = Stk,
         env   = Bs,
         exprs = Es
@@ -110,26 +105,26 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         type = ?RULE_SEND,
         from = Pid,
         to   = Dest,
-        val  = Val,
-        time = Uid
+        val  = Value,
+        time = Msg#message.uid
       },
       Sys#sys{
-        mail  = [M | Ms],
+        mail  = cauder_mailbox:add(Msg, Mail),
         procs = PMap#{Pid => P},
-        logs  = LMap#{Pid => NewLog},
+        logs  = LMap#{Pid => Log},
         trace = [T | Trace]
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
-      {{Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1}, NewLog} =
+      {{Bs1, Es1, Msg, Mail1}, NewLog} =
         case LMap of
           #{Pid := [{'receive', LogUid} | RestLog]} ->
-            {cauder_eval:match_rec_uid(Cs, Bs, LogUid, Ms), RestLog};
+            {cauder_eval:match_rec_uid(Cs, Bs, LogUid, Mail), RestLog};
           _ ->
-            {cauder_eval:match_rec_pid(Cs, Bs, Pid, Ms), []}
+            {cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail), []}
         end,
 
       P = P0#proc{
-        hist  = [{rec, Bs0, Es0, Stk0, M} | Hist],
+        hist  = [{rec, Bs0, Es0, Stk0, Msg} | Hist],
         stack = Stk,
         env   = cauder_utils:merge_bindings(Bs, Bs1),
         exprs = Es1
@@ -137,11 +132,11 @@ step(#sys{mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       T = #trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val  = Val,
-        time = Uid
+        val  = Msg#message.value,
+        time = Msg#message.uid
       },
       Sys#sys{
-        mail  = Ms1,
+        mail  = Mail1,
         procs = PMap#{Pid => P},
         logs  = LMap#{Pid => NewLog},
         trace = [T | Trace]
@@ -194,7 +189,7 @@ options(#sys{mail = Mail, procs = PMap, logs = LMap}) ->
   Environment :: cauder_types:environment(),
   Stack :: cauder_types:stack(),
   Log :: cauder_types:log(),
-  Mail :: [cauder_types:message()],
+  Mail :: cauder_mailbox:mailbox(),
   Rule :: cauder_types:rule() | ?NOT_EXP.
 
 expression_option(Pid, E, Bs, Stk, Log, Mail) when not is_list(E) ->
