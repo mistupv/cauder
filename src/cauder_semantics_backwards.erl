@@ -149,7 +149,7 @@ process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _S
     _ -> ?NULL_OPT
   end;
 process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _]}) ->
-  case cauder_mailbox:keymember(Uid, Mail) of
+  case cauder_mailbox:uid_member(Uid, Mail) of
     true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
     false -> ?NULL_OPT
   end;

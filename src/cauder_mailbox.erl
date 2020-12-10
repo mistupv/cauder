@@ -2,13 +2,13 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/2, delete/2, get/2, keymember/2, keytake/2, to_list/1]).
+-export([new/0, add/2, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
 -export_type([mailbox/0, uid/0, message/0]).
 
 -include("cauder.hrl").
 
--opaque mailbox() :: #{cauder_types:proc_id() => queue:queue(message())}.
+-opaque mailbox() :: {[uid()], #{cauder_types:proc_id() => queue:queue(message())}}.
 -opaque uid() :: pos_integer().
 -type message() :: #message{}.
 
@@ -33,7 +33,7 @@ uid() ->
 -spec new() -> mailbox().
 
 new() ->
-  maps:new().
+  {[], maps:new()}.
 
 
 %%------------------------------------------------------------------------------
@@ -44,9 +44,15 @@ new() ->
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add(#message{dest = Dest} = Message, Mailbox) ->
-  Append = fun(Queue) -> queue:in(Message, Queue) end,
-  maps:update_with(Dest, Append, queue:from_list([Message]), Mailbox).
+add(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
+  case lists:member(Uid, Uids) of
+    true ->
+      error({existing_uid, Uid}, [Message, Mailbox]);
+    false ->
+      QueueIn = fun(Queue) -> queue:in(Message, Queue) end,
+      Map1 = maps:update_with(Dest, QueueIn, queue:from_list([Message]), Map0),
+      {[Uid | Uids], Map1}
+  end.
 
 
 %%------------------------------------------------------------------------------
@@ -57,47 +63,45 @@ add(#message{dest = Dest} = Message, Mailbox) ->
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-delete(#message{dest = Dest} = Message, Mailbox) ->
-  NotEquals = fun(Msg) -> Msg =/= Message end,
-  QueueFilter = fun(Queue) -> queue:filter(NotEquals, Queue) end,
-  Mailbox2 = maps:update_with(Dest, QueueFilter, Mailbox),
-  case queue:is_empty(maps:get(Dest, Mailbox2)) of
-    true -> maps:remove(Dest, Mailbox2);
-    false -> Mailbox2
+delete(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
+  case lists:member(Uid, Uids) of
+    false -> Mailbox;
+    true ->
+      Queue = maps:get(Dest, Map0),
+      NewQueue = queue:filter(fun(Msg) -> Msg =/= Message end, Queue),
+      Map1 =
+        case queue:is_empty(NewQueue) of
+          true ->
+            maps:remove(Dest, Map0);
+          false ->
+            Map0#{Dest := NewQueue}
+        end,
+      {lists:delete(Uid, Uids), Map1}
   end.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec get(Pid, Mailbox) -> Queue | false when
+-spec pid_get(Pid, Mailbox) -> Queue | false when
   Pid :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
   Queue :: queue:queue(message()).
 
-get(Destination, Mailbox) ->
-  maps:get(Destination, Mailbox, queue:new()).
+pid_get(Pid, {_, Map}) ->
+  maps:get(Pid, Map, queue:new()).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns `true' if there is a message in `Mailbox' whose uid compares
 %% equal to `Uid', otherwise `false'.
 
--spec keymember(Uid, Mailbox) -> boolean() when
+-spec uid_member(Uid, Mailbox) -> boolean() when
   Uid :: uid(),
   Mailbox :: mailbox().
 
-keymember(Uid, Mailbox) ->
-  MatchUid = fun(Msg) -> Msg#message.uid =:= Uid end,
-  QueueAny = fun({R, F}) -> lists:any(MatchUid, R) orelse lists:any(MatchUid, F) end,
-  MapIterate =
-    fun F(I) ->
-      case maps:next(I) of
-        {_, V, I2} -> QueueAny(V) orelse F(I2);
-        none -> false
-      end
-    end,
-  MapIterate(maps:iterator(Mailbox)).
+uid_member(Uid, {Uids, _}) ->
+  lists:member(Uid, Uids).
 
 
 %%------------------------------------------------------------------------------
@@ -106,37 +110,45 @@ keymember(Uid, Mailbox) ->
 %% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where the `Message'
 %% has been removed.
 
--spec keytake(Uid, Mailbox1) -> {value, Message, Mailbox2} | false when
+-spec uid_take(Uid, Mailbox1) -> {value, Message, Mailbox2} | false when
   Uid :: uid(),
   Mailbox1 :: mailbox(),
   Message :: message(),
   Mailbox2 :: mailbox().
 
-keytake(Uid, Mailbox) ->
-  MatchUid = fun(Msg) -> Msg#message.uid =:= Uid end,
-  MapIterate =
-    fun Fun(I0) ->
-      case maps:next(I0) of
-        {K, {R0, F0}, I1} ->
-          case take_first(MatchUid, R0) of
-            {value, Msg, R1} ->
-              throw({K, Msg, {R1, F0}});
-            false ->
-              case take_first(MatchUid, F0) of
-                {value, Msg, F1} ->
-                  throw({K, Msg, {R0, F1}});
-                false ->
-                  Fun(I1)
-              end
-          end;
-        none -> false
+uid_take(Uid, {Uids, Map}) ->
+  case lists:delete(Uid, Uids) of
+    Uids -> false;
+    NewUids ->
+      MatchUid =
+        fun
+          (Msg) -> Msg#message.uid =:= Uid
+        end,
+      MapIterate =
+        fun
+          Fun(I0) ->
+            case maps:next(I0) of
+              {K, {R0, F0}, I1} ->
+                case take_first(MatchUid, R0) of
+                  {value, Msg, R1} ->
+                    throw({K, Msg, {R1, F0}});
+                  false ->
+                    case take_first(MatchUid, F0) of
+                      {value, Msg, F1} ->
+                        throw({K, Msg, {R0, F1}});
+                      false ->
+                        Fun(I1)
+                    end
+                end;
+              none -> false
+            end
+        end,
+      try
+        MapIterate(maps:iterator(Map))
+      catch
+        throw:{Key, Message, Queue} ->
+          {value, Message, {NewUids, maps:put(Key, Queue, Map)}}
       end
-    end,
-  try
-    MapIterate(maps:iterator(Mailbox))
-  catch
-    throw:{Key, Message, Queue} ->
-      {value, Message, maps:put(Key, Queue, Mailbox)}
   end.
 
 
@@ -148,10 +160,18 @@ keytake(Uid, Mailbox) ->
   Mailbox :: mailbox(),
   Message :: message().
 
-to_list(Mailbox) ->
-  CompareUid = fun(#message{uid = Uid1}, #message{uid = Uid2}) -> Uid1 =< Uid2 end,
-  Messages = lists:flatmap(fun queue:to_list/1, maps:values(Mailbox)),
-  lists:sort(CompareUid, Messages).
+to_list({Uids, Map0}) ->
+  Map =
+    lists:foldl(
+      fun(Queue, Map1) ->
+        lists:foldl(
+          fun(Msg, Map2) ->
+            maps:put(Msg#message.uid, Msg, Map2)
+          end,
+          Map1, queue:to_list(Queue))
+      end,
+      #{}, maps:values(Map0)),
+  lists:map(fun(Uid) -> maps:get(Uid, Map) end, lists:reverse(Uids)).
 
 
 %%%=============================================================================

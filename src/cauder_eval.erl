@@ -418,7 +418,7 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
   NewMail :: cauder_mailbox:mailbox().
 
 match_rec_pid(Cs, Bs, Pid, Mail) ->
-  case cauder_mailbox:get(Pid, Mail) of
+  case cauder_mailbox:pid_get(Pid, Mail) of
     false -> nomatch;
     MessageQueue ->
       case match_rec(Cs, Bs, queue:to_list(MessageQueue)) of
@@ -456,7 +456,7 @@ match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
   NewMail :: cauder_mailbox:mailbox().
 
 match_rec_uid(Cs, Bs0, Uid, Mail0) ->
-  case cauder_mailbox:keytake(Uid, Mail0) of
+  case cauder_mailbox:uid_take(Uid, Mail0) of
     false -> nomatch;
     {value, #message{value = Value} = Msg, Mail1} ->
       case match_clause(Bs0, Cs, [abstract(Value)]) of

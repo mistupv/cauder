@@ -116,7 +116,7 @@ replay_spawn(#sys{logs = LMap} = Sys, Pid) ->
   NewSystem :: cauder_types:system().
 
 replay_send(#sys{logs = LMap, mail = Mail} = Sys, Uid) ->
-  case cauder_mailbox:keymember(Uid, Mail) of
+  case cauder_mailbox:uid_member(Uid, Mail) of
     true -> Sys; % The message has already been sent
     false ->
       case cauder_utils:find_msg_sender(LMap, Uid) of
