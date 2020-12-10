@@ -169,8 +169,8 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
   #proc{env = Bs0, exprs = Es} = maps:get(Pid, PMap),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   Es1 = cauder_syntax:to_abstract_expr(Es),
-  Keys = ordsets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-  Bs1 = maps:without(ordsets:to_list(Keys), Bs0),
+  Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+  Bs1 = maps:with(sets:to_list(Keys), Bs0),
   IdxToKey =
     maps:fold(
       fun
