@@ -419,9 +419,9 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 match_rec_pid(Cs, Bs, Pid, Mail) ->
   case cauder_mailbox:pid_get(Pid, Mail) of
-    false -> nomatch;
-    MessageQueue ->
-      case match_rec(Cs, Bs, queue:to_list(MessageQueue)) of
+    [] -> nomatch;
+    Messages ->
+      case match_rec(Cs, Bs, Messages) of
         nomatch -> nomatch;
         {Bs1, Body, Message} ->
           {Bs1, Body, Message, cauder_mailbox:delete(Message, Mail)}

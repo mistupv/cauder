@@ -66,16 +66,16 @@ pid_get_test_() ->
 
   Mail = add(M6, add(M5, add(M4, add(M3, add(M2, add(M1, new())))))),
 
-  Queue0 = pid_get(0, Mail),
-  Queue1 = pid_get(1, Mail),
-  Queue2 = pid_get(2, Mail),
-  Queue3 = pid_get(3, Mail),
+  List0 = pid_get(0, Mail),
+  List1 = pid_get(1, Mail),
+  List2 = pid_get(2, Mail),
+  List3 = pid_get(3, Mail),
 
   [
-    ?_assertEqual([M1, M3, M6], queue:to_list(Queue0)),
-    ?_assertEqual([M2, M4], queue:to_list(Queue1)),
-    ?_assertEqual([M5], queue:to_list(Queue2)),
-    ?_assertEqual([], queue:to_list(Queue3))
+    ?_assertEqual([M1, M3, M6], List0),
+    ?_assertEqual([M2, M4], List1),
+    ?_assertEqual([M5], List2),
+    ?_assertEqual([], List3)
   ].
 
 

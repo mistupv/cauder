@@ -83,13 +83,16 @@ delete(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec pid_get(Pid, Mailbox) -> Queue | false when
+-spec pid_get(Pid, Mailbox) -> Messages when
   Pid :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
-  Queue :: queue:queue(message()).
+  Messages :: [message()].
 
 pid_get(Pid, {_, Map}) ->
-  maps:get(Pid, Map, queue:new()).
+  case maps:find(Pid, Map) of
+    {ok, Queue} -> queue:to_list(Queue);
+    error -> []
+  end.
 
 
 %%------------------------------------------------------------------------------
