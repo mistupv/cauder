@@ -166,7 +166,7 @@ init([]) ->
   wxMenuBar:check(MenuBar, ?MENU_View_Stack, Config#config.stack),
   wxMenuBar:check(MenuBar, ?MENU_View_Log, Config#config.log),
   wxMenuBar:check(MenuBar, ?MENU_View_History, Config#config.history),
-  wxMenuBar:check(MenuBar, ?MENU_View_Mailbox, true), % Config#config.mailbox
+  wxMenuBar:check(MenuBar, ?MENU_View_Mailbox, Config#config.mailbox),
 
   case Config#config.bindings_mode of
     all -> wxMenuBar:check(MenuBar, ?MENU_View_AllBindings, true);
@@ -176,6 +176,11 @@ init([]) ->
   case Config#config.history_mode of
     full -> wxMenuBar:check(MenuBar, ?MENU_View_FullHistory, true);
     concurrent -> wxMenuBar:check(MenuBar, ?MENU_View_ConcurrentHistory, true)
+  end,
+
+  case Config#config.mailbox_mode of
+    all -> wxMenuBar:check(MenuBar, ?MENU_View_AllMessages, true);
+    process -> wxMenuBar:check(MenuBar, ?MENU_View_ProcessMessages, true)
   end,
 
   wxMenuBar:check(MenuBar, ?MENU_View_StatusBar, Config#config.status_bar),
@@ -266,7 +271,8 @@ handle_event(?MENU_EVENT(Item, Check), #wx_state{config = Config} = State) when 
       ?MENU_View_Bindings -> Config#config{bindings = Show};
       ?MENU_View_Stack -> Config#config{stack = Show};
       ?MENU_View_Log -> Config#config{log = Show};
-      ?MENU_View_History -> Config#config{history = Show}
+      ?MENU_View_History -> Config#config{history = Show};
+      ?MENU_View_Mailbox -> Config#config{mailbox = Show}
     end,
   cauder_wx_config:save(NewConfig),
   {noreply, refresh(State, State#wx_state{config = NewConfig})};
@@ -285,6 +291,15 @@ handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_His
     case Item of
       ?MENU_View_FullHistory -> Config#config{history_mode = full};
       ?MENU_View_ConcurrentHistory -> Config#config{history_mode = concurrent}
+    end,
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
+
+handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_Message_Mode(Item) ->
+  NewConfig =
+    case Item of
+      ?MENU_View_AllMessages -> Config#config{mailbox_mode = all};
+      ?MENU_View_ProcessMessages -> Config#config{mailbox_mode = process}
     end,
   cauder_wx_config:save(NewConfig),
   {noreply, refresh(State, State#wx_state{config = NewConfig})};

@@ -54,7 +54,7 @@ config_dir() -> filename:basedir(user_config, ?APP_NAME).
   Config :: config(),
   CheckedConfig :: config().
 
-config_check(#config{bindings_mode = BindingMode, history_mode = HistoryMode} = Config) when
+config_check(#config{bindings_mode = BindingMode, history_mode = HistoryMode, mailbox_mode = MailboxMode} = Config) when
   is_boolean(Config#config.current_expression),
   is_boolean(Config#config.bindings),
   is_boolean(Config#config.stack),
@@ -63,6 +63,7 @@ config_check(#config{bindings_mode = BindingMode, history_mode = HistoryMode} = 
   is_boolean(Config#config.mailbox),
   is_atom(BindingMode), BindingMode =:= all orelse BindingMode =:= relevant,
   is_atom(HistoryMode), HistoryMode =:= full orelse HistoryMode =:= concurrent,
+  is_atom(MailboxMode), MailboxMode =:= all orelse MailboxMode =:= process,
   is_boolean(Config#config.status_bar) ->
   Config;
 

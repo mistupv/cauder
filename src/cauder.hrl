@@ -62,7 +62,7 @@
 % System
 -record(sys, {
   % Global mailbox
-  mail = [] :: [cauder_types:message()],
+  mail = cauder_mailbox:new() :: cauder_mailbox:mailbox(),
   % Pool of processes
   procs :: cauder_types:process_map(),
   % System log
@@ -88,13 +88,13 @@
 }).
 
 %% Message
--record(msg, {
-  % Target process identifier
-  dest :: cauder_types:proc_id(),
-  % Message
-  val :: term(),
+-record(message, {
   % UID
-  uid :: cauder_types:msg_id()
+  uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
+  % Message
+  value :: term(),
+  % Destination
+  dest :: cauder_types:proc_id()
 }).
 
 % Option
@@ -113,7 +113,7 @@
   from :: cauder_types:proc_id(),
   to :: undefined | cauder_types:proc_id(),
   val :: undefined | term(),
-  time :: undefined | cauder_types:msg_id()
+  time :: undefined | cauder_mailbox:uid()
 }).
 
 % Replay info

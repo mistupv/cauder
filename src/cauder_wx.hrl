@@ -7,6 +7,7 @@
   mailbox = true :: boolean(),
   bindings_mode = relevant :: all | relevant,
   history_mode = concurrent :: full | concurrent,
+  mailbox_mode = process :: all | process,
   status_bar = true :: boolean()
 }).
 
@@ -74,7 +75,7 @@
 
 -define(MENU_View_CurrentExpression, 1000).
 
--define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History)).
+-define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History orelse Item =:= ?MENU_View_Mailbox)).
 
 -define(MENU_View_Bindings, 1001).
 -define(MENU_View_Stack, 1002).
@@ -93,16 +94,21 @@
 -define(MENU_View_ConcurrentHistory, 1008).
 -define(MENU_View_FullHistory, 1009).
 
--define(MENU_View_StatusBar, 1010).
+-define(Is_Message_Mode(Item), (Item =:= ?MENU_View_ProcessMessages orelse Item =:= ?MENU_View_AllMessages)).
+
+-define(MENU_View_ProcessMessages, 1010).
+-define(MENU_View_AllMessages, 1011).
+
+-define(MENU_View_StatusBar, 1012).
 
 %% -----
 
--define(MENU_Run_Start, 1011).
--define(MENU_Run_Stop, 1012).
+-define(MENU_Run_Start, 1100).
+-define(MENU_Run_Stop, 1101).
 
 %% -----
 
--define(MENU_Help_ViewHelp, 1013).
+-define(MENU_Help_ViewHelp, 1200).
 
 -define(MENU_Help_About, ?wxID_ABOUT).
 
@@ -182,7 +188,10 @@
 
 %% ----- System Info Panel ----- %%
 
--define(SYSTEM_Mail, 2200).
+-define(SYSTEM_Panel, 2200).
+
+-define(SYSTEM_Mail_Panel, 2201).
+-define(SYSTEM_Mail_Control, 2202).
 
 -define(SYSTEM_Notebook, 2210).
 -define(SYSTEM_Notebook_Trace, 0).
@@ -242,6 +251,9 @@
 
 -define(HELP_View_ConcurrentHistory, "Show only concurrent history").
 -define(HELP_View_FullHistory, "Show complete history").
+
+-define(HELP_View_ProcessMessages, "Show only current process messages").
+-define(HELP_View_AllMessages, "Show all messages").
 
 -define(HELP_View_StatusBar, "Show or hide status bar").
 

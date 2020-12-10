@@ -407,58 +407,60 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, Body, Message, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
-  Mail :: [cauder_types:message()],
+  Mail :: cauder_mailbox:mailbox(),
   NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message(),
+  NewMail :: cauder_mailbox:mailbox().
 
-match_rec_pid(Cs, Bs, Pid, Mail) -> match_rec_pid(Cs, Bs, Pid, Mail, []).
-
-
--spec match_rec_pid(Clauses, Bindings, RecipientPid, RemainingMail, CheckedMail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
-  Clauses :: cauder_types:af_clause_seq(),
-  Bindings :: cauder_types:environment(),
-  RecipientPid :: cauder_types:proc_id(),
-  RemainingMail :: [cauder_types:message()],
-  CheckedMail :: [cauder_types:message()],
-  NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
-
-match_rec_pid(_, _, _, [], _) -> nomatch;
-match_rec_pid(Cs, Bs0, Pid, [Msg | Mail], Checked) ->
-  case Msg of
-    #msg{dest = Pid, val = Val} ->
-      case match_clause(Bs0, Cs, [abstract(Val)]) of
-        {match, Bs, Body} -> {Bs, Body, Msg, lists:reverse(Checked, Mail)};
-        nomatch -> match_rec_pid(Cs, Bs0, Pid, Mail, [Msg | Checked])
-      end;
-    _ -> match_rec_pid(Cs, Bs0, Pid, Mail, [Msg | Checked])
+match_rec_pid(Cs, Bs, Pid, Mail) ->
+  case cauder_mailbox:pid_get(Pid, Mail) of
+    [] -> nomatch;
+    Messages ->
+      case match_rec(Cs, Bs, Messages) of
+        nomatch -> nomatch;
+        {Bs1, Body, Message} ->
+          {Bs1, Body, Message, cauder_mailbox:delete(Message, Mail)}
+      end
   end.
 
 
--spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec(Clauses, Bindings, Messages) -> {NewBindings, Body, Message} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
-  Uid :: cauder_types:msg_id(),
-  Mail :: [cauder_types:message()],
+  Messages :: [cauder_mailbox:message()],
   NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message().
 
-match_rec_uid(Cs, Bs0, Uid, Mail) ->
-  case cauder_utils:find_message(Mail, Uid) of
+match_rec(_, _, []) -> nomatch;
+match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
+  case match_clause(Bs0, Cs, [abstract(Value)]) of
+    {match, Bs, Body} -> {Bs, Body, Msg};
+    nomatch -> match_rec(Cs, Bs0, Rest)
+  end.
+
+
+-spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, Body, Message, NewMail} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  Bindings :: cauder_types:environment(),
+  Uid :: cauder_mailbox:uid(),
+  Mail :: cauder_mailbox:mailbox(),
+  NewBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message(),
+  NewMail :: cauder_mailbox:mailbox().
+
+match_rec_uid(Cs, Bs0, Uid, Mail0) ->
+  case cauder_mailbox:uid_take(Uid, Mail0) of
     false -> nomatch;
-    {value, Msg} ->
-      case match_clause(Bs0, Cs, [abstract(Msg#msg.val)]) of
-        {match, Bs, Body} -> {Bs, Body, Msg, lists:delete(Msg, Mail)};
+    {value, #message{value = Value} = Msg, Mail1} ->
+      case match_clause(Bs0, Cs, [abstract(Value)]) of
+        {match, Bs, Body} -> {Bs, Body, Msg, Mail1};
         nomatch -> nomatch
       end
   end.

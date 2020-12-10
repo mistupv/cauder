@@ -321,7 +321,7 @@ replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 %% @see task_replay_send/2
 
 -spec replay_send(Uid) -> Reply when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
@@ -339,7 +339,7 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 %% @see task_replay_receive/2
 
 -spec replay_receive(Uid) -> Reply when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
@@ -414,7 +414,7 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 %% @see task_rollback_send/2
 
 -spec rollback_send(Uid) -> Reply when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
@@ -432,7 +432,7 @@ rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 %% @see task_rollback_receive/2
 
 -spec rollback_receive(Uid) -> Reply when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
@@ -886,7 +886,7 @@ task_replay_spawn(Pid, Sys0) ->
 
 
 -spec task_replay_send(Uid, System) -> {{replay_send, Uid}, Time, NewSystem} when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   System :: cauder_types:system(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
@@ -906,7 +906,7 @@ task_replay_send(Uid, Sys0) ->
 
 
 -spec task_replay_receive(Uid, System) -> {{replay_receive, Uid}, Time, NewSystem} when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   System :: cauder_types:system(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
@@ -984,7 +984,7 @@ task_rollback_spawn(Pid, Sys0) ->
 
 
 -spec task_rollback_send(Uid, System) -> {{rollback_send, Uid}, Time, NewSystem} when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   System :: cauder_types:system(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
@@ -1004,7 +1004,7 @@ task_rollback_send(Uid, Sys0) ->
 
 
 -spec task_rollback_receive(Uid, System) -> {{rollback_receive, Uid}, Time, NewSystem} when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   System :: cauder_types:system(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().

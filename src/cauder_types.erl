@@ -4,7 +4,6 @@
 
 -export_type([
   system/0,
-  msg_id/0, message/0,
   log_map/0, log/0, log_entry/0,
   process_map/0, proc_id/0, process/0,
   history/0, history_entry/0,
@@ -26,14 +25,11 @@
 
 -type system() :: #sys{}.
 
--type msg_id() :: pos_integer().
--type message() :: #msg{}.
-
 -type log_map() :: #{proc_id() => log()}.
 -type log() :: [log_entry()].
 -type log_entry() :: {spawn, proc_id()}
-                   | {send, msg_id()}
-                   | {'receive', msg_id()}.
+                   | {send, cauder_mailbox:uid()}
+                   | {'receive', cauder_mailbox:uid()}.
 
 -type process_map() :: #{proc_id() := process()}. % Not empty
 -type proc_id() :: pos_integer().
@@ -43,8 +39,8 @@
 -type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
                        | {self, environment(), [abstract_expr()], stack()}
                        | {spawn, environment(), [abstract_expr()], stack(), proc_id()}
-                       | {send, environment(), [abstract_expr()], stack(), message()}
-                       | {rec, environment(), [abstract_expr()], stack(), message()}.
+                       | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
+                       | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}.
 
 -type stack() :: [stack_entry()].
 -type stack_entry() :: {mfa(), environment(), [abstract_expr()], af_variable()}
