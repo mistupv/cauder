@@ -2,13 +2,13 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/2, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
+-export([new/0, add/2, add_r/2, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
 -export_type([mailbox/0, uid/0, message/0]).
 
 -include("cauder.hrl").
 
--opaque mailbox() :: {[uid()], #{cauder_types:proc_id() => queue:queue(message())}}.
+-opaque mailbox() :: {queue:queue(uid()), #{cauder_types:proc_id() => queue:queue(message())}}.
 -opaque uid() :: pos_integer().
 -type message() :: #message{}.
 
@@ -33,11 +33,12 @@ uid() ->
 -spec new() -> mailbox().
 
 new() ->
-  {[], maps:new()}.
+  {queue:new(), maps:new()}.
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' inserted.
+%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
+%% the rear.
 
 -spec add(Message, Mailbox1) -> Mailbox2 when
   Message :: message(),
@@ -45,13 +46,32 @@ new() ->
   Mailbox2 :: mailbox().
 
 add(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
-  case lists:member(Uid, Uids) of
+  case queue:member(Uid, Uids) of
     true ->
       error({existing_uid, Uid}, [Message, Mailbox]);
     false ->
       QueueIn = fun(Queue) -> queue:in(Message, Queue) end,
       Map1 = maps:update_with(Dest, QueueIn, queue:from_list([Message]), Map0),
-      {[Uid | Uids], Map1}
+      {queue:in(Uid, Uids), Map1}
+  end.
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
+%% the front.
+
+-spec add_r(Message, Mailbox1) -> Mailbox2 when
+  Message :: message(),
+  Mailbox1 :: mailbox(),
+  Mailbox2 :: mailbox().
+
+add_r(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
+  case queue:member(Uid, Uids) of
+    true ->
+      error({existing_uid, Uid}, [Message, Mailbox]);
+    false ->
+      QueueIn = fun(Queue) -> queue:in_r(Message, Queue) end,
+      Map1 = maps:update_with(Dest, QueueIn, queue:from_list([Message]), Map0),
+      {queue:in_r(Uid, Uids), Map1}
   end.
 
 
@@ -64,11 +84,11 @@ add(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
   Mailbox2 :: mailbox().
 
 delete(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
-  case lists:member(Uid, Uids) of
+  case queue:member(Uid, Uids) of
     false -> Mailbox;
     true ->
       Queue = maps:get(Dest, Map0),
-      NewQueue = queue:filter(fun(Msg) -> Msg =/= Message end, Queue),
+      NewQueue = queue_delete(Message, Queue),
       Map1 =
         case queue:is_empty(NewQueue) of
           true ->
@@ -76,7 +96,7 @@ delete(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
           false ->
             Map0#{Dest := NewQueue}
         end,
-      {lists:delete(Uid, Uids), Map1}
+      {queue_delete(Uid, Uids), Map1}
   end.
 
 
@@ -104,7 +124,7 @@ pid_get(Pid, {_, Map}) ->
   Mailbox :: mailbox().
 
 uid_member(Uid, {Uids, _}) ->
-  lists:member(Uid, Uids).
+  queue:member(Uid, Uids).
 
 
 %%------------------------------------------------------------------------------
@@ -120,7 +140,7 @@ uid_member(Uid, {Uids, _}) ->
   Mailbox2 :: mailbox().
 
 uid_take(Uid, {Uids, Map}) ->
-  case lists:delete(Uid, Uids) of
+  case queue_delete(Uid, Uids) of
     Uids -> false;
     NewUids ->
       MatchUid =
@@ -174,12 +194,26 @@ to_list({Uids, Map0}) ->
           Map1, queue:to_list(Queue))
       end,
       #{}, maps:values(Map0)),
-  lists:map(fun(Uid) -> maps:get(Uid, Map) end, lists:reverse(Uids)).
+  lists:map(fun(Uid) -> maps:get(Uid, Map) end, queue:to_list(Uids)).
 
 
 %%%=============================================================================
 %%% Utils
 %%%=============================================================================
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a copy of `Queue1' where the first element matching `Item' is
+%% deleted, if there is such an element.
+
+-spec queue_delete(Item, Queue1) -> Queue2 when
+  Item :: T,
+  Queue1 :: queue:queue(T),
+  Queue2 :: queue:queue(T),
+  T :: term().
+
+queue_delete(Item, Queue) ->
+  queue:from_list(lists:delete(Item, queue:to_list(Queue))).
 
 
 %%------------------------------------------------------------------------------
