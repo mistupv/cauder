@@ -93,7 +93,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         time = Uid
       },
       Sys#sys{
-        mail  = cauder_mailbox:add(M, Mail),
+        mail  = cauder_mailbox:add_r(M, Mail),
         procs = PMap#{Pid => P},
         logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
