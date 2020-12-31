@@ -1,0 +1,6 @@
+call "meViolation:main()"
+comp "examples/meViolation.erl" 77362
+main_pid 93
+tracing timeout
+result <9109.100.0>
+exec 100001554
