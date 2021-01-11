@@ -253,7 +253,7 @@ rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _Es, _Stk, #message{uid = Uid}} ->
+    {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _, _} ->
       rollback_after_receive(Sys0, Pid, Uid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),
@@ -271,7 +271,7 @@ rollback_after_receive(Sys0, Pid, Uid) ->
   #sys{procs = PMap} = Sys1 = rollback_step(Sys0, Pid),
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _E, _Stk, #message{uid = Uid}} ->
+    {rec, _Bs, _E, _Stk, #message{uid = Uid}, _, _} ->
       rollback_after_receive(Sys1, Pid, Uid);
     _ -> Sys1
   end.

@@ -59,7 +59,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         trace = lists:delete(T, Trace)
       };
     {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
-      OldMail = cauder_mailbox:delete(Msg, Mail),
+      {_, OldMail} = cauder_mailbox:delete(Msg, Mail),
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -79,7 +79,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         logs  = maps:update_with(Pid, fun(Log) -> [{send, Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
-    {rec, Bs, Es, Stk, M = #message{dest = Pid, value = Val, uid = Uid}} ->
+    {rec, Bs, Es, Stk, M = #message{dest = Pid, value = Val, uid = Uid}, Src, QPos} ->
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -93,7 +93,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         time = Uid
       },
       Sys#sys{
-        mail  = cauder_mailbox:add_r(M, Mail),
+        mail  = cauder_mailbox:add_r(M, Src, QPos, Mail),
         procs = PMap#{Pid => P},
         logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
@@ -153,5 +153,5 @@ process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk
     true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
     false -> ?NULL_OPT
   end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg} | _]}) ->
+process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _, _} | _]}) ->
   #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.
