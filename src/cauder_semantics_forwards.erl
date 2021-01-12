@@ -90,9 +90,9 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
       {Msg, Log} =
         case LMap of
           #{Pid := [{send, Uid} | RestLog]} ->
-            {#message{uid = Uid, value = Value, dest = Dest}, RestLog};
+            {#message{uid = Uid, value = Value, src = Pid, dest = Dest}, RestLog};
           _ ->
-            {#message{value = Value, dest = Dest}, []}
+            {#message{value = Value, src = Pid, dest = Dest}, []}
         end,
 
       P = P0#proc{
@@ -109,13 +109,13 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         time = Msg#message.uid
       },
       Sys#sys{
-        mail  = cauder_mailbox:add(Msg, Pid, Mail),
+        mail  = cauder_mailbox:add(Msg, Mail),
         procs = PMap#{Pid => P},
         logs  = LMap#{Pid => Log},
         trace = [T | Trace]
       };
     {rec, VarBody, Cs} when Es == [VarBody] ->
-      {{Bs1, Es1, {Msg, Src, QPos}, Mail1}, NewLog} =
+      {{Bs1, Es1, {Msg, QPos}, Mail1}, NewLog} =
         case LMap of
           #{Pid := [{'receive', LogUid} | RestLog]} ->
             {cauder_eval:match_rec_uid(Cs, Bs, LogUid, Mail), RestLog};
@@ -124,7 +124,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         end,
 
       P = P0#proc{
-        hist  = [{rec, Bs0, Es0, Stk0, Msg, Src, QPos} | Hist],
+        hist  = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist],
         stack = Stk,
         env   = cauder_utils:merge_bindings(Bs, Bs1),
         exprs = Es1

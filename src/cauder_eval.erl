@@ -407,7 +407,7 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, Body, {Message, Sender, QueuePosition}, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
@@ -415,7 +415,6 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
   NewBindings :: cauder_types:environment(),
   Body :: cauder_types:af_body(),
   Message :: cauder_types:message(),
-  Sender :: cauder_types:proc_id(),
   QueuePosition :: pos_integer(),
   NewMail :: cauder_mailbox:mailbox().
 
@@ -426,8 +425,8 @@ match_rec_pid(Cs, Bs, Pid, Mail) ->
       case match_rec(Cs, Bs, Messages) of
         nomatch -> nomatch;
         {Bs1, Body, Msg} ->
-          {{Src, QPos}, NewMail} = cauder_mailbox:delete(Msg, Mail),
-          {Bs1, Body, {Msg, Src, QPos}, NewMail}
+          {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+          {Bs1, Body, {Msg, QPos}, NewMail}
       end
   end.
 
@@ -448,7 +447,7 @@ match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
   end.
 
 
--spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, Body, {Message, Sender, QueuePosition}, NewMail} | nomatch when
+-spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   Uid :: cauder_mailbox:uid(),
@@ -456,16 +455,15 @@ match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
   NewBindings :: cauder_types:environment(),
   Body :: cauder_types:af_body(),
   Message :: cauder_types:message(),
-  Sender :: cauder_types:proc_id(),
   QueuePosition :: pos_integer(),
   NewMail :: cauder_mailbox:mailbox().
 
 match_rec_uid(Cs, Bs0, Uid, Mail0) ->
   case cauder_mailbox:uid_take(Uid, Mail0) of
     false -> nomatch;
-    {value, {Msg, Src, QPos}, Mail1} ->
+    {value, {Msg, QPos}, Mail1} ->
       case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
-        {match, Bs, Body} -> {Bs, Body, {Msg, Src, QPos}, Mail1};
+        {match, Bs, Body} -> {Bs, Body, {Msg, QPos}, Mail1};
         nomatch -> nomatch
       end
   end.

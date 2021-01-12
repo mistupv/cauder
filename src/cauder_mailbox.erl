@@ -2,16 +2,18 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/3, add_r/4, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
+-export([new/0, add/2, add_r/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
 -export_type([mailbox/0, uid/0, message/0]).
 
 -include("cauder.hrl").
 
--opaque mailbox() :: {
-  #{uid() => {cauder_types:proc_id(), cauder_types:proc_id()}}, % #{Uid => {Source, Target}}
-  #{cauder_types:proc_id() => #{cauder_types:proc_id() => queue:queue(message())}} % #{Target => #{Source => queue(Msg)}
-}.
+-record(mailbox, {
+  index = maps:new() :: #{uid() => {cauder_types:proc_id(), cauder_types:proc_id()}}, % #{Uid => {Src, Dest}}
+  map = maps:new() :: #{cauder_types:proc_id() => #{cauder_types:proc_id() => queue:queue(message())}} % #{Dest => #{Src => queue(Msg)}
+}).
+
+-opaque mailbox() :: #mailbox{}.
 -opaque uid() :: pos_integer().
 -type message() :: #message{}.
 
@@ -35,97 +37,92 @@ uid() ->
 
 -spec new() -> mailbox().
 
-new() ->
-  {maps:new(), maps:new()}.
+new() -> #mailbox{}.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
 %% the rear.
 
--spec add(Message, Source, Mailbox1) -> Mailbox2 when
+-spec add(Message, Mailbox1) -> Mailbox2 when
   Message :: message(),
-  Source :: cauder_types:proc_id(),
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add(#message{uid = Uid} = Message, Source, {Index0, _} = Mailbox) when is_map_key(Uid, Index0) ->
-  error({existing_uid, Uid}, [Message, Source, Mailbox]);
-add(#message{uid = Uid, dest = Target} = Message, Source, {Index0, TargetMap0}) ->
-  Index = maps:put(Uid, {Source, Target}, Index0),
+add(#message{uid = Uid} = Message, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
+  error({existing_uid, Uid}, [Message, Mailbox]);
+add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+  Index = maps:put(Uid, {Src, Dest}, Index0),
 
-  SourceMap0 = maps:get(Target, TargetMap0, maps:new()),
-  Queue0 = maps:get(Source, SourceMap0, queue:new()),
+  SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
+  Queue0 = maps:get(Src, SrcMap0, queue:new()),
 
   Queue = queue:in(Message, Queue0),
-  SourceMap = maps:put(Source, Queue, SourceMap0),
-  TargetMap = maps:put(Target, SourceMap, TargetMap0),
+  SrcMap = maps:put(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
 
-  {Index, TargetMap}.
+  #mailbox{index = Index, map = DestMap}.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
 %% the front.
 
--spec add_r(Message, Source, QueuePos, Mailbox1) -> Mailbox2 when
+-spec add_r(Message, QueuePos, Mailbox1) -> Mailbox2 when
   Message :: message(),
-  Source :: cauder_types:proc_id(),
   QueuePos :: pos_integer(),
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add_r(#message{uid = Uid} = Message, Source, QueuePos, {Index0, _} = Mailbox) when is_map_key(Uid, Index0) ->
-  error({existing_uid, Uid}, [Message, Source, QueuePos, Mailbox]);
-add_r(#message{uid = Uid, dest = Target} = Message, Source, QueuePos, {Index0, TargetMap0}) ->
-  Index = maps:put(Uid, {Source, Target}, Index0),
+add_r(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
+  error({existing_uid, Uid}, [Message, QueuePos, Mailbox]);
+add_r(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
+  Index = maps:put(Uid, {Src, Dest}, Index0),
 
-  SourceMap0 = maps:get(Target, TargetMap0, maps:new()),
-  Queue0 = maps:get(Source, SourceMap0, queue:new()),
+  SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
+  Queue0 = maps:get(Src, SrcMap0, queue:new()),
 
   Queue = queue_insert(QueuePos, Message, Queue0),
-  SourceMap = maps:put(Source, Queue, SourceMap0),
-  TargetMap = maps:put(Target, SourceMap, TargetMap0),
+  SrcMap = maps:put(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
 
-  {Index, TargetMap}.
+  #mailbox{index = Index, map = DestMap}.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec delete(Message, Mailbox1) -> {{Source, QueuePosition}, Mailbox2} when
+-spec delete(Message, Mailbox1) -> {QueuePosition, Mailbox2} when
   Message :: message(),
   Mailbox1 :: mailbox(),
-  Source :: cauder_types:proc_id(),
   QueuePosition :: pos_integer(),
   Mailbox2 :: mailbox().
 
-delete(#message{uid = Uid, dest = Target} = Message, {Index0, Targets0}) when is_map_key(Uid, Index0) ->
-  {Source, Target} = maps:get(Uid, Index0),
+delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
   Index = maps:remove(Uid, Index0),
 
-  SourceMap0 = maps:get(Target, Targets0),
-  Queue0 = maps:get(Source, SourceMap0),
+  SrcMap0 = maps:get(Dest, DestMap0),
+  Queue0 = maps:get(Src, SrcMap0),
 
   Queue = queue_delete(Message, Queue0),
-  SourceMap = maps:put(Source, Queue, SourceMap0),
-  TargetMap = maps:put(Target, SourceMap, Targets0),
+  SrcMap = maps:put(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
 
   QueuePos = queue_index_of(Message, Queue0),
-  Mailbox = {Index, TargetMap},
+  Mailbox = #mailbox{index = Index, map = DestMap},
 
-  {{Source, QueuePos}, Mailbox}.
+  {QueuePos, Mailbox}.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the messages whose destination is the given `Pid'.
 
--spec pid_get(Pid, Mailbox) -> Messages when
-  Pid :: cauder_types:proc_id(),
+-spec pid_get(Dest, Mailbox) -> Messages when
+  Dest :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
   Messages :: [message()].
 
-pid_get(Pid, {_, Map}) when is_map_key(Pid, Map) ->
-  lists:flatmap(fun queue:to_list/1, maps:values(maps:get(Pid, Map)));
+pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
+  lists:flatmap(fun queue:to_list/1, maps:values(maps:get(Dest, DestMap)));
 pid_get(_, _) -> [].
 
 
@@ -137,7 +134,7 @@ pid_get(_, _) -> [].
   Uid :: uid(),
   Mailbox :: mailbox().
 
-uid_member(Uid, {Index, _}) -> maps:is_key(Uid, Index).
+uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 
 
 %%------------------------------------------------------------------------------
@@ -146,24 +143,24 @@ uid_member(Uid, {Index, _}) -> maps:is_key(Uid, Index).
 %% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where the `Message'
 %% has been removed.
 
--spec uid_take(Uid, Mailbox1) -> {value, {Message, Source, QueuePosition}, Mailbox2} | false when
+-spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
   Uid :: uid(),
   Mailbox1 :: mailbox(),
   Message :: message(),
-  Source :: cauder_types:proc_id(),
   QueuePosition :: pos_integer(),
   Mailbox2 :: mailbox().
 
-uid_take(Uid, {Index, TargetMap} = Mailbox0) ->
+uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
   case maps:find(Uid, Index) of
     error ->
       false;
-    {ok, {Source, Target}} ->
-      Queue = maps:get(Source, maps:get(Target, TargetMap)),
+    {ok, {Src, Dest}} ->
+      SrcMap = maps:get(Dest, DestMap),
+      Queue = maps:get(Src, SrcMap),
       {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
       QueuePos = queue_index_of(Message, Queue),
       {_, Mailbox} = delete(Message, Mailbox0),
-      {value, {Message, Source, QueuePos}, Mailbox}
+      {value, {Message, QueuePos}, Mailbox}
   end.
 
 
@@ -175,13 +172,10 @@ uid_take(Uid, {Index, TargetMap} = Mailbox0) ->
   Mailbox :: mailbox(),
   Message :: message().
 
-to_list({_, TargetMap}) ->
-  io:format("TargetMap: ~p\n", [TargetMap]),
+to_list(#mailbox{map = DestMap}) ->
   QueueToList = fun queue:to_list/1,
-  MapToList = fun(SourceMap) -> lists:flatmap(QueueToList, maps:values(SourceMap)) end,
-  List = lists:flatmap(MapToList, maps:values(TargetMap)),
-  io:format("List: ~p\n", [List]),
-  List.
+  MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, maps:values(SrcMap)) end,
+  lists:flatmap(MapToList, maps:values(DestMap)).
 
 
 %%%=============================================================================

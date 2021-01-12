@@ -101,7 +101,7 @@ rollback_step(#sys{procs = PMap, roll = RollLog} = Sys0, Pid) ->
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
       rollback_spawn(Sys, Pid, SpawnPid);
-    {send, _Bs, _E, _Stk, #message{uid = Uid,  dest = Dest}=Msg} ->
+    {send, _Bs, _E, _Stk, #message{uid = Uid, dest = Dest} = Msg} ->
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
       ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
       rollback_send(Sys, Pid, Dest, Uid);
@@ -253,7 +253,7 @@ rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _, _} ->
+    {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} ->
       rollback_after_receive(Sys0, Pid, Uid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),
@@ -271,7 +271,7 @@ rollback_after_receive(Sys0, Pid, Uid) ->
   #sys{procs = PMap} = Sys1 = rollback_step(Sys0, Pid),
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _E, _Stk, #message{uid = Uid}, _, _} ->
+    {rec, _Bs, _E, _Stk, #message{uid = Uid}, _QPos} ->
       rollback_after_receive(Sys1, Pid, Uid);
     _ -> Sys1
   end.

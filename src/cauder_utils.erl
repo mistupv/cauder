@@ -270,7 +270,7 @@ has_send([_ | RestHist], Uid)                                    -> has_send(Res
   Result :: boolean().
 
 has_rec([], _)                                                 -> false;
-has_rec([{rec, _Bs, _Es, _Stk, #message{uid = Uid}, _, _} | _], Uid) -> true;
+has_rec([{rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} | _], Uid) -> true;
 has_rec([_ | RestHist], Uid)                                   -> has_rec(RestHist, Uid).
 
 
@@ -495,4 +495,4 @@ is_conc_item({tau, _Bs, _Es, _Stk})         -> false;
 is_conc_item({self, _Bs, _Es, _Stk})        -> false;
 is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
 is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _, _})   -> true.
+is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos})   -> true.

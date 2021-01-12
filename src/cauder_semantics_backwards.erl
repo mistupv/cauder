@@ -58,7 +58,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         logs  = maps:update_with(Pid, fun(Log) -> [{spawn, Gid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
-    {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
+    {send, Bs, Es, Stk, #message{uid = Uid, value = Value, dest = Dest} = Msg} ->
       {_, OldMail} = cauder_mailbox:delete(Msg, Mail),
       P = P0#proc{
         hist  = RestHist,
@@ -70,7 +70,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         type = ?RULE_SEND,
         from = Pid,
         to   = Dest,
-        val  = Val,
+        val  = Value,
         time = Uid
       },
       Sys#sys{
@@ -79,7 +79,7 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         logs  = maps:update_with(Pid, fun(Log) -> [{send, Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
-    {rec, Bs, Es, Stk, M = #message{dest = Pid, value = Val, uid = Uid}, Src, QPos} ->
+    {rec, Bs, Es, Stk, M = #message{uid = Uid, value = Value, dest = Pid}, QPos} ->
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -89,11 +89,11 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
       T = #trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val  = Val,
+        val  = Value,
         time = Uid
       },
       Sys#sys{
-        mail  = cauder_mailbox:add_r(M, Src, QPos, Mail),
+        mail  = cauder_mailbox:add_r(M, QPos, Mail),
         procs = PMap#{Pid => P},
         logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
@@ -153,5 +153,5 @@ process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk
     true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
     false -> ?NULL_OPT
   end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _, _} | _]}) ->
+process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
   #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.

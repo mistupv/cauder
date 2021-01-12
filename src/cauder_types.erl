@@ -40,7 +40,7 @@
                        | {self, environment(), [abstract_expr()], stack()}
                        | {spawn, environment(), [abstract_expr()], stack(), proc_id()}
                        | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
-                       | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), Src :: proc_id(), QPos :: pos_integer()}.
+                       | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
 
 -type stack() :: [stack_entry()].
 -type stack_entry() :: {mfa(), environment(), [abstract_expr()], af_variable()}

@@ -93,7 +93,9 @@
   uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
   % Message
   value :: term(),
-  % Destination
+  % Sender PID
+  src :: cauder_types:proc_id(),
+  % Receiver PID
   dest :: cauder_types:proc_id()
 }).
 
