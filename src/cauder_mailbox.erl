@@ -64,8 +64,8 @@ add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Inde
   #mailbox{index = Index, map = DestMap}.
 
 %%------------------------------------------------------------------------------
-%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
-%% the front.
+%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' inserted at
+%% `QueuePos'.
 
 -spec add_r(Message, QueuePos, Mailbox1) -> Mailbox2 when
   Message :: message(),
@@ -114,10 +114,11 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the messages whose destination is the given `Pid'.
+%% @doc Returns the messages from `Mailbox' whose destination is the given
+%% `Destination'.
 
--spec pid_get(Dest, Mailbox) -> Messages when
-  Dest :: cauder_types:proc_id(),
+-spec pid_get(Destination, Mailbox) -> Messages when
+  Destination :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
   Messages :: [message()].
 
@@ -140,8 +141,8 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 %%------------------------------------------------------------------------------
 %% @doc Searches the mailbox `Mailbox1' for a message whose uid compares equal
 %% to `Uid'. Returns `{value, Message, Mailbox2}' if such a message is found,
-%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where the `Message'
-%% has been removed.
+%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
+%% been removed.
 
 -spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
   Uid :: uid(),
@@ -197,7 +198,7 @@ queue_delete(Item, Queue) -> queue:from_list(lists:delete(Item, queue:to_list(Qu
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the a copy of `Queue1' with `Item' inserted at `Index'.
+%% @doc Returns a copy of `Queue1' with `Item' inserted at `Index'.
 
 -spec queue_insert(Index, Item, Queue1) -> Queue2 when
   Index :: pos_integer(),
@@ -210,7 +211,7 @@ queue_insert(Index, Item, Queue) -> queue:from_list(list_insert(Index, Item, que
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the a copy of `List1' with `Item' inserted at `Index'.
+%% @doc Returns a copy of `List1' with `Item' inserted at `Index'.
 
 -spec list_insert(Index, Item, List1) -> List2 when
   Index :: pos_integer(),
