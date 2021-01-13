@@ -2,7 +2,7 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/2, add_r/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
+-export([new/0, add/2, insert/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
 -export_type([mailbox/0, uid/0, message/0]).
 
@@ -67,15 +67,15 @@ add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Inde
 %% @doc Returns a new mailbox formed from `Mailbox1' with `Message' inserted at
 %% `QueuePos'.
 
--spec add_r(Message, QueuePos, Mailbox1) -> Mailbox2 when
+-spec insert(Message, QueuePos, Mailbox1) -> Mailbox2 when
   Message :: message(),
   QueuePos :: pos_integer(),
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add_r(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
+insert(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
   error({existing_uid, Uid}, [Message, QueuePos, Mailbox]);
-add_r(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
+insert(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
   Index = maps:put(Uid, {Src, Dest}, Index0),
 
   SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
