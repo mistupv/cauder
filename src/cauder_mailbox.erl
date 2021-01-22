@@ -9,8 +9,8 @@
 -include("cauder.hrl").
 
 -record(mailbox, {
-  index = maps:new() :: #{uid() => {cauder_types:proc_id(), cauder_types:proc_id()}}, % #{Uid => {Src, Dest}}
-  map = maps:new() :: #{cauder_types:proc_id() => #{cauder_types:proc_id() => queue:queue(message())}} % #{Dest => #{Src => queue(Msg)}
+  index = maps:new() :: #{Uid :: uid() => {Src :: cauder_types:proc_id(), Dest :: cauder_types:proc_id()}},
+  map = maps:new() :: #{Dest :: cauder_types:proc_id() => #{Src :: cauder_types:proc_id() => MsgQueue :: queue:queue(message())}}
 }).
 
 -opaque mailbox() :: #mailbox{}.
