@@ -415,6 +415,19 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
   cauder_wx_statusbar:rollback_spawn_start(Pid),
   {noreply, refresh(State, State#wx_state{system = System, task = rollback_spawn})};
 
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Start_Button), State) ->
+  TextCtrl = cauder_wx:find(?ACTION_Rollback_Start, wxTextCtrl),
+  case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
+    '' ->
+      cauder_wx_statusbar:rollback_start_fail(),
+      {noreply, State};
+    Node ->
+      {ok, System} = cauder:rollback_start(Node),
+      cauder_wx_statusbar:rollback_start_begin(Node),
+      {noreply, refresh(State, State#wx_state{system = System, task = rollback_start})}
+  end;
+
+
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
   Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
   Idx = wxChoice:getSelection(Choice),
@@ -617,6 +630,14 @@ handle_info({dbg, {finish, {rollback_steps, Steps}, Time, System}}, #wx_state{ta
   cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
+handle_info({dbg, {finish, {rollback_start, Node}, Time, System}}, #wx_state{task = rollback_start} = State) ->
+  cauder_wx_statusbar:rollback_start_finish(Node, Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
+handle_info({dbg, {fail, rollback_start, no_rollback}}, #wx_state{task = rollback_start} = State) ->
+  cauder_wx_statusbar:rollback_start_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
 
 handle_info({dbg, {finish, {rollback_spawn, Pid}, Time, System}}, #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_finish(Pid, Time),
@@ -706,8 +727,8 @@ start_session(#wx_state{module = Module}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   EntryPoints = cauder:get_entry_points(Module),
   case cauder_wx_dialog:start_session(Frame, EntryPoints) of
-    {manual, {Mod, Fun, Args}} ->
-      ok = cauder:init_system(Mod, Fun, Args),
+    {manual, {Mod, Fun, Node, Args}} ->
+      ok = cauder:init_system(Mod, Fun, Node, Args),
       cauder_wx_statusbar:init_start(),
       true;
     {replay, Path} ->

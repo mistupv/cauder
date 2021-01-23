@@ -28,7 +28,10 @@ create(Parent) ->
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-  wxSizer:add(Sizer, create_mail(Win), Expand),
+  NodesAndMail = wxNotebook:new(Win, ?SYSTEM_NodesAndMail),
+  wxNotebook:addPage(NodesAndMail, create_nodes(NodesAndMail), "Nodes"),
+  wxNotebook:addPage(NodesAndMail, create_mail(NodesAndMail), "Email"),
+  wxSizer:add(Sizer, NodesAndMail, Expand),
 
   wxSizer:addSpacer(Sizer, 5),
 
@@ -49,6 +52,7 @@ create(Parent) ->
   NewState :: cauder_wx:state().
 
 update(OldState, NewState) ->
+  update_nodes(OldState, NewState),
   update_mail(OldState, NewState),
   update_trace(OldState, NewState),
   update_roll_log(OldState, NewState).
@@ -66,10 +70,10 @@ update(OldState, NewState) ->
 create_mail(Parent) ->
   Win = wxPanel:new(Parent),
 
-  Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Mail"}]),
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
 
-  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_NodesAndMail_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
   wxBoxSizer:add(Sizer, MailArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Item = wxListItem:new(),
@@ -97,6 +101,44 @@ create_mail(Parent) ->
 
   Win.
 
+-spec create_nodes(Parent) -> Window when
+    Parent :: wxWindow:wxWindow(),
+    Window :: wxWindow:wxWindow().
+
+create_nodes(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
+
+  NodesArea = wxTextCtrl:new(Win, ?SYSTEM_NodesAndMail_Nodes, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
+  wxBoxSizer:add(Sizer, NodesArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
+
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxTextCtrl:setFont(NodesArea, Font),
+
+  Win.
+
+-spec update_nodes(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
+
+update_nodes(#wx_state{system = #sys{nodes = Nodes}}, #wx_state{system = #sys{nodes = Nodes}}) ->
+  ok;
+update_nodes(_, #wx_state{system = undefined}) ->
+  ok;
+update_nodes(_, #wx_state{system = #sys{nodes = Nodes}}) ->
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_NodesAndMail_Nodes, wxNotebook), ?SYSTEM_Notebook_Trace),
+  NodesArea = cauder_wx:find(?SYSTEM_NodesAndMail_Nodes, wxTextCtrl),
+  wxTextCtrl:freeze(NodesArea),
+  wxTextCtrl:clear(NodesArea),
+
+  [FirstNode | RemNodes] = lists:map(fun(Node) -> atom_to_list(Node) end, Nodes),
+  NodesListFormatted = "[" ++ lists:foldl(fun(Node, AccIn) -> Node ++ ", " ++ AccIn end, FirstNode, RemNodes) ++ "]",
+
+  wxTextCtrl:appendText(NodesArea, NodesListFormatted),
+  wxTextCtrl:thaw(NodesArea).
+
 
 -spec update_mail(OldState, NewState) -> ok when
   OldState :: cauder_wx:state(),
@@ -105,11 +147,11 @@ create_mail(Parent) ->
 update_mail(#wx_state{system = #sys{mail = Mail}}, #wx_state{system = #sys{mail = Mail}}) ->
   ok;
 update_mail(_, #wx_state{system = undefined}) ->
-  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail, wxListCtrl)),
+  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl)),
   ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}}) ->
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
+  MailArea = cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   lists:foldl(
@@ -123,6 +165,7 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}}) ->
     end, 0, Mail),
   wxListCtrl:thaw(MailArea),
   ok.
+
 
 
 %%%=============================================================================

@@ -12,12 +12,12 @@
 %% API
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
 -export([subscribe/0, unsubscribe/0]).
--export([load_file/1, init_system/3, init_system/1, stop_system/0]).
+-export([load_file/1, init_system/4, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
 -export([step_multiple/2]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
--export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
+-export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_start/1, rollback_receive/1, rollback_variable/1]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
 
@@ -74,7 +74,7 @@ start_link() -> gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
 
 %%------------------------------------------------------------------------------
-%% @doc Stops the debugging server.
+%% @doc Stops the debugging server
 
 -spec stop() -> ok.
 
@@ -134,14 +134,15 @@ load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 %%
 %% @see task_start/2
 
--spec init_system(Module, Function, Arguments) -> Reply when
+-spec init_system(Module, Function, Node, Arguments) -> Reply when
   Module :: module(),
   Function :: atom(),
+  Node :: cauder_types:net_node(),
   Arguments :: cauder_types:af_args(),
   Reply :: ok | busy.
 
-init_system(Mod, Fun, Args) ->
-  case gen_server:call(?SERVER, {user, {start, {Mod, Fun, Args}}}) of
+init_system(Mod, Fun, Node, Args) ->
+  case gen_server:call(?SERVER, {user, {start, {Mod, Fun, Node, Args}}}) of
     {ok, _} -> ok;
     busy -> busy
   end.
@@ -385,6 +386,24 @@ rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {
 
 
 %%------------------------------------------------------------------------------
+%% @doc Rolls back the start of the node with the given name.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_rollback_start/2
+
+-spec rollback_start(Node) -> Reply when
+    Node :: cauder_types:net_node(),
+    Reply :: {ok, CurrentSystem} | busy,
+    CurrentSystem :: cauder_types:system().
+
+rollback_start(Node) -> gen_server:call(?SERVER, {user, {rollback_start, Node}}).
+
+
+%%------------------------------------------------------------------------------
 %% @doc Rolls back the spawning of the process with the given pid.
 %%
 %% This is an asynchronous action: if the server accepts the task then the tuple
@@ -621,6 +640,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       replay_full_log -> fun task_replay_full_log/2;
       rollback_steps -> fun task_rollback_steps/2;
       rollback_spawn -> fun task_rollback_spawn/2;
+      rollback_start -> fun task_rollback_start/2;
       rollback_send -> fun task_rollback_send/2;
       rollback_receive -> fun task_rollback_receive/2;
       rollback_variable -> fun task_rollback_variable/2
@@ -739,22 +759,24 @@ task_load(File, System) ->
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_start({M, F, As}, undefined) ->
+task_start({M, F, N, As}, undefined) ->
   {Time, System} =
     timer:tc(
       fun() ->
-        Pid = cauder_utils:fresh_pid(),
-        Proc = #proc{
-          pid   = Pid,
-          exprs = [cauder_syntax:remote_call(M, F, As)],
-          spf   = {M, F, length(As)}
-        },
-        #sys{
-          procs = #{Pid => Proc}
-        }
+          Node = list_to_atom(N),
+          Pid = cauder_utils:fresh_pid(),
+          Proc = #proc{
+                    node = Node,
+                    pid   = Pid,
+                    exprs = [cauder_syntax:remote_call(M, F, As)],
+                    spf   = {M, F, length(As)}
+                   },
+          #sys{
+             procs = #{Pid => Proc},
+             nodes = [list_to_atom(N)]
+            }
       end
     ),
-
   {start, Time, System};
 
 task_start(LogPath, undefined) ->
@@ -797,8 +819,7 @@ task_step({Sem, Pid}, Sys0) ->
         Sys1 = Sem:step(Sys0, Pid),
         {Rule, Sys1}
       end
-    ),
-
+     ),
   {{step, Sem, Rule}, Time, Sys1}.
 
 
@@ -959,6 +980,26 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
     ),
 
   {{rollback_steps, {StepsDone, Steps}}, Time, Sys1}.
+
+
+-spec task_rollback_start(Node, System) -> {{rollback_start, Node}, Time, NewSystem} when
+    Node :: cauder_types:net_node(),
+    System :: cauder_types:system(),
+    Time :: non_neg_integer(),
+    NewSystem :: cauder_types:system().
+
+task_rollback_start(Node, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+          case cauder_rollback:can_rollback_start(Sys0, Node) of
+            false -> error(no_rollback);
+            true -> cauder_rollback:rollback_start(Sys0, Node)
+          end
+      end
+     ),
+
+  {{rollback_start, Node}, Time, Sys1}.
 
 
 -spec task_rollback_spawn(Pid, System) -> {{rollback_spawn, Pid}, Time, NewSystem} when

@@ -31,13 +31,13 @@
 
 -define(FRAME, 500).
 
--define(FRAME_SIZE_INIT, {900, 800}).
+-define(FRAME_SIZE_INIT, {1250, 775}).
 
 -define(ZOOM_MIN, -10).
 -define(ZOOM_MAX, 20).
 -define(ZOOM_DEFAULT, (?ZOOM_MIN + ?FONT_SIZE_APPARENT_DEFAULT - ?FONT_SIZE_MIN)).
 
--define(FONT_SIZE_MIN, 7).
+-define(FONT_SIZE_MIN, 10).
 % Change if you want a different initial font size
 -define(FONT_SIZE_APPARENT_DEFAULT, 9).
 % DO NOT CHANGE. This is the actual default font size taking into account zoom levels
@@ -172,20 +172,25 @@
 -define(ACTION_Rollback_Send, 2143).
 -define(ACTION_Rollback_Receive, 2144).
 -define(ACTION_Rollback_Variable, 2145).
+-define(ACTION_Rollback_Start, 2146).
 
--define(ACTION_Rollback_Steps_Button, 2146).
--define(ACTION_Rollback_Spawn_Button, 2147).
--define(ACTION_Rollback_Send_Button, 2148).
--define(ACTION_Rollback_Receive_Button, 2149).
--define(ACTION_Rollback_Variable_Button, 2150).
+-define(ACTION_Rollback_Steps_Button, 2147).
+-define(ACTION_Rollback_Spawn_Button, 2148).
+-define(ACTION_Rollback_Send_Button, 2149).
+-define(ACTION_Rollback_Receive_Button, 2150).
+-define(ACTION_Rollback_Variable_Button, 2151).
+-define(ACTION_Rollback_Start_Button, 2152).
 
 %% ----- System Info Panel ----- %%
 
--define(SYSTEM_Mail, 2200).
+-define(SYSTEM_NodesAndMail, 2200).
+-define(SYSTEM_NodesAndMail_Nodes, 0).
+-define(SYSTEM_NodesAndMail_Mail, 1).
+
 
 -define(SYSTEM_Notebook, 2210).
--define(SYSTEM_Notebook_Trace, 0).
--define(SYSTEM_Notebook_RollLog, 1).
+-define(SYSTEM_Notebook_Trace, 2).
+-define(SYSTEM_Notebook_RollLog, 3).
 
 -define(SYSTEM_Trace, 2211).
 -define(SYSTEM_RollLog, 2212).
@@ -246,6 +251,9 @@
 %% -------------------- Dialog strings -------------------- %%
 
 -define(DIALOG_StartSession_Title, "Start debugging session").
+
+-define(DIALOG_StartSession_NodeName_Title, "Warning: Node name").
+-define(DIALOG_StartSession_NodeName_Message, "Node name not correct, the node name must be of the form 'name@host'").
 
 -define(DIALOG_StartSession_ArgCount_Title, "Warming: Argument count").
 -define(DIALOG_StartSession_ArgCount_Message, "Wrong number of argumments!\nExpected ~b but got ~b.").

@@ -76,7 +76,7 @@ create(Frame) ->
 
   RunMenu = create_menu(
     [
-      #menu_item{id = ?MENU_Run_Start, text = "St&art...", help = ?HELP_Run_Start, enabled = false},
+      #menu_item{id = ?MENU_Run_Start, text = "St&art...\tCtrl+S", help = ?HELP_Run_Start, enabled = false},
       #menu_item{id = ?MENU_Run_Stop, text = "St&op", help = ?HELP_Run_Stop, enabled = false}
     ]
   ),

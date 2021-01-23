@@ -193,6 +193,14 @@ expr(Bs, {self, Line}, Stk) ->
   Var = cauder_utils:temp_variable(Line),
   #result{env = Bs, exprs = [Var], stack = Stk, label = {self, Var}};
 
+expr(Bs, {node, Line}, Stk) ->
+  Var = cauder_utils:temp_variable(Line),
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {node, Var}};
+
+expr(Bs, {nodes, Line}, Stk) ->
+  Var = cauder_utils:temp_variable(Line),
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {nodes, Var}};
+
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
   case is_reducible(Fun, Bs) of
     true -> eval_and_update({Bs, Fun, Stk}, {3, E});
@@ -216,6 +224,50 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
               Label = {spawn, Var, concrete(M), concrete(F), concrete(As)},
               #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
           end
+      end
+  end;
+
+expr(Bs, E = {spawn, Line, N, M, F, As}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3, E});
+    false ->
+      case is_reducible(M, Bs) of
+        true -> eval_and_update({Bs, M, Stk}, {4, E});
+        false ->
+          case is_reducible(F, Bs) of
+            true -> eval_and_update({Bs, F, Stk}, {5, E});
+            false ->
+              case is_reducible(As, Bs) of
+                true -> eval_and_update({Bs, As, Stk}, {6, E});
+                false ->
+                  Var = cauder_utils:temp_variable(Line),
+                  Label = {spawn, Var, concrete(N), concrete(M), concrete(F), concrete(As)},
+                  #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+              end
+          end
+      end
+  end;
+
+
+expr(Bs, E = {start, Line, N}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3,E});
+    false ->
+      Var = cauder_utils:temp_variable(Line),
+      Label = {start, Var, concrete(N)},
+      #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+  end;
+
+expr(Bs, E = {start, Line, H, N}, Stk) ->
+  case is_reducible(H, Bs) of
+    true -> eval_and_update({Bs, H, Stk}, {3,E});
+    false ->
+      case is_reducible(N, Bs) of
+        true -> eval_and_update({Bs, N, Stk}, {4,E});
+        false ->
+          Var = cauder_utils:temp_variable(Line),
+          Label = {start, Var, concrete(N)},
+          #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
       end
   end;
 

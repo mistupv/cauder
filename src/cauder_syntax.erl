@@ -103,6 +103,10 @@ guard_test({tuple, Anno, _})   -> {value, ln(Anno), false};
 
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, self}}, []}) ->
   {self, ln(Anno)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
+  {node, ln(Anno)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
+  {nodes, ln(Anno)};
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, F}}, As0}) ->
   check_guard_bif(F, length(As0)),
   As = gexpr_list(As0),
@@ -151,6 +155,10 @@ gexpr({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
 %%% all BIF calls, even in guards.
 gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, self}}, []}) ->
   {self, ln(Anno)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
+  {node, ln(Anno)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
+  {nodes, ln(Anno)};
 gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, F}}, As0}) ->
   check_guard_bif(F, length(As0)),
   As = gexpr_list(As0),
@@ -218,10 +226,20 @@ expr({'fun', Anno, {clauses, Cs0}}) ->
   {make_fun, ln(Anno), Name, Cs};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, self}}, []}) ->
   {self, ln(Anno)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
+  {node, ln(Anno)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
+  {nodes, ln(Anno)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Fun]}) ->
   {spawn, ln(Anno), expr(Fun)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Mod, Func, As]}) ->
   {spawn, ln(Anno), expr(Mod), expr(Func), expr(As)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Node, Mod, Func, As]}) ->
+  {spawn, ln(Anno), expr(Node), expr(Mod), expr(Func), expr(As)};
+expr({call, Anno, {remote, _, {atom, _, slave}, {atom, _, start}}, [Name]}) ->
+  {start, ln(Anno), expr(Name)};
+expr({call, Anno, {remote, _, {atom, _, slave}, {atom, _, start}}, [Host, Name]}) ->
+  {start, ln(Anno), expr(Host), expr(Name)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, send}}, [Dest, Msg]}) ->
   {send, ln(Anno), expr(Dest), expr(Msg)};
 expr({call, Anno, {remote, _, {atom, _, Mod}, {atom, _, Func}}, As0}) ->
@@ -385,6 +403,10 @@ replace_variable({bif, Line, M, F, As0}, Var, Val) ->
   {bif, Line, M, F, As};
 replace_variable(E = {self, _}, _, _) ->
   E;
+replace_variable(E = {node, _}, _, _) ->
+  E;
+replace_variable(E = {nodes, _}, _, _) ->
+  E;
 replace_variable({spawn, Line, Fun0}, Var, Val) ->
   Fun = replace_variable(Fun0, Var, Val),
   {spawn, Line, Fun};
@@ -393,6 +415,19 @@ replace_variable({spawn, Line, M0, F0, As0}, Var, Val) ->
   F = replace_variable(F0, Var, Val),
   As = replace_variable(As0, Var, Val),
   {spawn, Line, M, F, As};
+replace_variable({spawn, Line, N0, M0, F0, As0}, Var, Val) ->
+  N = replace_variable(N0, Var, Val),
+  M = replace_variable(M0, Var, Val),
+  F = replace_variable(F0, Var, Val),
+  As = replace_variable(As0, Var, Val),
+  {spawn, Line, N, M, F, As};
+replace_variable({start, Line, Node0}, Var, Val) ->
+  N = replace_variable(Node0, Var, Val),
+  {start, Line, N};
+replace_variable({start, Line, Host0, Name0}, Var, Val) ->
+  H = replace_variable(Host0, Var, Val),
+  N = replace_variable(Name0, Var, Val),
+  {start, Line, H, N};
 replace_variable({send, Line, L0, R0}, Var, Val) ->
   L = replace_variable(L0, Var, Val),
   R = replace_variable(R0, Var, Val),
@@ -487,6 +522,12 @@ to_abstract_expr({bif, Line, M, F, As}) ->
 to_abstract_expr({self, Line}) ->
   Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(self), []),
   set_line(Node, Line);
+to_abstract_expr({node, Line}) ->
+  Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(node), []),
+  set_line(Node, Line);
+to_abstract_expr({nodes, Line}) ->
+  Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(nodes), []),
+  set_line(Node, Line);
 to_abstract_expr({spawn, Line, Fun}) ->
   Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(spawn), [to_abstract_expr(Fun)]),
   set_line(Node, Line);
@@ -495,6 +536,24 @@ to_abstract_expr({spawn, Line, M, F, As}) ->
     erl_syntax:atom(erlang),
     erl_syntax:atom(spawn),
     [to_abstract_expr(M), to_abstract_expr(F), to_abstract_expr(As)]),
+  set_line(Node, Line);
+to_abstract_expr({spawn, Line, N, M, F, As}) ->
+  Node = erl_syntax:application(
+           erl_syntax:atom(erlang),
+           erl_syntax:atom(spawn),
+           [to_abstract_expr(N), to_abstract_expr(M), to_abstract_expr(F), to_abstract_expr(As)]),
+  set_line(Node, Line);
+to_abstract_expr({start, Line, N}) ->
+  Node = erl_syntax:application(
+    erl_syntax:atom(slave),
+    erl_syntax:atom(start),
+    [to_abstract_expr(N)]),
+  set_line(Node, Line);
+to_abstract_expr({start, Line, H, N}) ->
+  Node = erl_syntax:application(
+    erl_syntax:atom(slave),
+    erl_syntax:atom(start),
+           [to_abstract_expr(H), to_abstract_expr(N)]),
   set_line(Node, Line);
 to_abstract_expr({send, Line, L, R}) ->
   Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(send), [to_abstract_expr(L), to_abstract_expr(R)]),

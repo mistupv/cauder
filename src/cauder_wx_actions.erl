@@ -614,6 +614,28 @@ create_rollback(Parent) ->
 
   wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
 
+  % Start
+
+  Start = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, Start),
+
+  StartStaticText = wxStaticText:new(Win, ?wxID_ANY, "Node. Name:", StaticAlignRight),
+  wxBoxSizer:add(Start, StartStaticText, CenterVertical),
+
+  wxBoxSizer:addSpacer(Start, ?SPACER_SMALL),
+
+  StartText = wxTextCtrl:new(Win, ?ACTION_Rollback_Start, [InputSize]),
+  wxBoxSizer:add(Start, StartText, CenterVertical),
+
+  wxBoxSizer:addSpacer(Start, ?SPACER_MEDIUM),
+
+  StartButton = wxButton:new(Win, ?ACTION_Rollback_Start_Button, [{label, "Roll start"}, ButtonSize]),
+  wxBoxSizer:add(Start, StartButton, CenterVertical),
+
+  % -----
+
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
   % Send
 
   Send = wxBoxSizer:new(?wxHORIZONTAL),

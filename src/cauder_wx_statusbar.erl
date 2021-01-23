@@ -18,6 +18,7 @@
 -export([replay_full_log_start/0, replay_full_log_finish/1]).
 % Rollback
 -export([rollback_steps_start/0, rollback_steps_finish/2]).
+-export([rollback_start_begin/1, rollback_start_finish/2, rollback_start_fail/0]).
 -export([rollback_spawn_start/1, rollback_spawn_finish/2, rollback_spawn_fail/0]).
 -export([rollback_send_start/1, rollback_send_finish/2, rollback_send_fail/0]).
 -export([rollback_receive_start/1, rollback_receive_finish/2, rollback_receive_fail/0]).
@@ -390,6 +391,30 @@ rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 %%%=============================================================================
 
 
+-spec rollback_start_begin(Node) -> ok when
+    Node :: cauder_types:net_node().
+
+rollback_start_begin(Node) -> set_text(io_lib:format(?ROLLBACK_START_BEGIN, [Node])).
+
+
+-spec rollback_start_finish(Node, Time) -> ok when
+    Node :: cauder_types:net_Node(),
+    Time :: non_neg_integer().
+
+rollback_start_finish(Node, Time) ->
+  TimeStr = time_to_string(Time),
+  Status = io_lib:format(?ROLLBACK_START_FINISH, [Node, TimeStr]),
+  set_text(Status).
+
+
+-spec rollback_start_fail() -> ok.
+
+rollback_start_fail() -> set_text(?ROLLBACK_START_FAIL).
+
+
+%%%=============================================================================
+
+
 -spec rollback_send_start(Uid) -> ok when
   Uid :: cauder_types:msg_id().
 
@@ -487,7 +512,10 @@ semantics_to_string(?BWD_SEM) -> "backward".
 
 rule_to_string(?RULE_SEQ)     -> "Seq";
 rule_to_string(?RULE_SELF)    -> "Self";
+rule_to_string(?RULE_NODE)    -> "Node";
+rule_to_string(?RULE_NODES)   -> "Nodes";
 rule_to_string(?RULE_SPAWN)   -> "Spawn";
+rule_to_string(?RULE_START)   -> "Start";
 rule_to_string(?RULE_SEND)    -> "Send";
 rule_to_string(?RULE_RECEIVE) -> "Receive".
 

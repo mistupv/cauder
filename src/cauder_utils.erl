@@ -8,13 +8,14 @@
 -export([fundef_lookup/1]).
 -export([take_message/2, find_message/2]).
 -export([find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2]).
--export([find_process_with_spawn/2, find_process_with_send/2, find_process_with_receive/2, find_process_with_variable/2]).
+-export([find_process_with_spawn/2, find_process_with_start/2, find_process_on_node/2, find_process_with_failed_start/2, find_process_with_read/2, find_process_with_send/2, find_process_with_receive/2, find_process_with_variable/2]).
 -export([merge_bindings/2]).
+-export([checkNodeName/1]).
 -export([stringToMFA/1, stringToExpressions/1]).
 -export([filter_options/2]).
 -export([fresh_pid/0, fresh_uid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
--export([gen_log_send/4, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
+-export([gen_log_nodes/1, gen_log_send/4, gen_log_spawn/1, gen_log_start/1, clear_log/1, must_focus_log/1]).
 -export([load_replay_data/1]).
 -export([current_line/1, is_dead/1]).
 -export([is_conc_item/1]).
@@ -161,6 +162,56 @@ find_process_with_spawn(PMap, Pid) ->
 
 
 %%------------------------------------------------------------------------------
+%% @doc Searches for the process that started the node with the given name, by
+%% looking at its history.
+
+-spec find_process_with_start(ProcessMap, Node) -> {value, Process} | false when
+    ProcessMap :: cauder_types:process_map(),
+    Node :: cauder_types:net_node(),
+    Process :: cauder_types:process().
+
+find_process_with_start(PMap, Node) ->
+  lists:search(fun(#proc{hist = H}) -> has_start(H, Node) end, maps:values(PMap)).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for the process(es) that tried to start `Node' and failed because
+%% this was already part of the network, by looking at its history.
+
+-spec find_process_with_failed_start(ProcessMap, Node) -> {value, Process} | false when
+  ProcessMap :: cauder_types:process_map(),
+  Node :: cauder_types:net_node(),
+  Process :: cauder_types:process().
+
+find_process_with_failed_start(ProcessMap, Node) ->
+  lists:search(fun(#proc{hist = H}) -> has_failed_start(H, Node) end, maps:values(ProcessMap)).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) running on `Node'
+
+-spec find_process_on_node(ProcessMap, Node) -> {value, Process} | false when
+    ProcessMap :: cauder_types:process_map(),
+    Node :: cauder_types:net_node(),
+    Process :: cauder_types:process().
+
+find_process_on_node(ProcessMap, Node) ->
+  lists:search(fun(#proc{node = ProcNode}) -> ProcNode =:= Node end, maps:values(ProcessMap)).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a read of `Node' by means
+%% of the function 'nodes()'
+
+-spec find_process_with_read(ProcessMap, Node) -> {value, Process} | false when
+    ProcessMap :: cauder_types:process_map(),
+    Node :: cauder_types:net_node(),
+    Process :: cauder_types:process().
+
+find_process_with_read(ProcessMap, Node) ->
+  lists:search(fun(#proc{hist = H}) -> has_read(H, Node) end, maps:values(ProcessMap)).
+
+%%------------------------------------------------------------------------------
 %% @doc Searches for the process that sent the message with the given uid, by
 %% looking at its history.
 
@@ -231,6 +282,21 @@ stringToMFA(String) ->
   [M, F, A] = string:lexemes(String, ":/"),
   {list_to_atom(M), list_to_atom(F), list_to_integer(A)}.
 
+%%------------------------------------------------------------------------------
+%% @doc Given an atom that represents a node checks that the format is correct.
+%% Returns `error' if the format of the atom is not a valid Erlang node name.
+
+-spec checkNodeName(NodeName) -> ok | error when
+    NodeName :: cauder_types:net_node().
+
+checkNodeName([]) -> error;
+checkNodeName(NodeName) ->
+  case string:split(NodeName, "@") of
+    [Name, Host] when length(Name) > 0, length(Host) > 0 ->
+      ok;
+      _ -> error
+  end.
+
 
 %%------------------------------------------------------------------------------
 %% @doc Converts the given string into a list of abstract expressions.
@@ -277,6 +343,52 @@ filter_options(Options, Pid) ->
 has_spawn([], _)                                   -> false;
 has_spawn([{spawn, _Bs, _Es, _Stk, Pid} | _], Pid) -> true;
 has_spawn([_ | RestHist], Pid)                     -> has_spawn(RestHist, Pid).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a `start' entry for the
+%% process with the given node or not.
+
+-spec has_start(History, Node) -> Result when
+    History :: cauder_types:history(),
+    Node :: cauder_types:net_node(),
+    Result :: boolean().
+
+has_start([], _)                                              -> false;
+has_start([{start, success, _Bs, _Es, _Stk, Node} | _], Node) -> true;
+has_start([_ | RestHist], Node)                               -> has_start(RestHist, Node).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a failed `start' entry for
+%% the given node or not.
+
+-spec has_failed_start(History, Node) -> Result when
+    History :: cauder_types:history(),
+    Node :: cauder_types:net_node(),
+    Result :: boolean().
+
+has_failed_start([], _)                                           -> false;
+has_failed_start([{start, fail, _Bs, _Es, _Stk, Node} | _], Node) -> true;
+has_failed_start([_ | RestHist], Node)                            -> has_failed_start(RestHist, Node).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a read of `Node' by checking
+%% the history item of the function 'nodes'
+
+-spec has_read(History, Node) -> Result when
+    History :: cauder_types:history(),
+    Node :: cauder_types:net_node(),
+    Result :: boolean().
+
+has_read([], _)                                             -> false;
+has_read([{nodes, _Bs, _Es, _Stk, Nodes} | RestHist], Node) ->
+  case lists:member(Node, Nodes) of
+    true -> true;
+    false -> has_read(RestHist, Node)
+  end;
+has_read([_ | RestHist], Node)                              -> has_read(RestHist, Node).
 
 
 %%------------------------------------------------------------------------------
@@ -374,6 +486,17 @@ is_temp_variable_name(Name) ->
 
 
 %%------------------------------------------------------------------------------
+%% @doc Returns a roll log message about rolling the 'nodes()' of the process
+%% with the given pid
+
+-spec gen_log_nodes(Pid) -> [Log] when
+  Pid :: cauder_types:proc_id(),
+  Log :: [string()].
+
+gen_log_nodes(Pid) ->
+  [["Roll nodes of", cauder_pp:pid(Pid)]].
+
+%%------------------------------------------------------------------------------
 %% @doc Returns a roll log message about spawning a process with the given pid.
 
 -spec gen_log_spawn(Pid) -> [Log] when
@@ -382,6 +505,16 @@ is_temp_variable_name(Name) ->
 
 gen_log_spawn(OtherPid) ->
   [["Roll spawn of ", cauder_pp:pid(OtherPid)]].
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a roll log message about starting a node with the given name.
+
+-spec gen_log_start(Node) -> [Log] when
+  Node :: cauder_types:net_node(),
+  Log :: [string()].
+
+gen_log_start(Node) ->
+  [["Roll start of ", cauder_pp:pp_node(Node)]].
 
 
 %%------------------------------------------------------------------------------
@@ -535,8 +668,14 @@ is_dead(#proc{})                                    -> false.
   HistoryEntry :: cauder_types:history_entry(),
   IsConcurrent :: boolean().
 
-is_conc_item({tau, _Bs, _Es, _Stk})         -> false;
-is_conc_item({self, _Bs, _Es, _Stk})        -> false;
-is_conc_item({spawn, _Bs, _Es, _Stk, _Pid}) -> true;
-is_conc_item({send, _Bs, _Es, _Stk, _Msg})  -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg})   -> true.
+is_conc_item({tau, _Bs, _Es, _Stk})                   -> false;
+is_conc_item({self, _Bs, _Es, _Stk})                  -> false;
+is_conc_item({node, _Bs, _Es, _Stk})                  -> false;
+is_conc_item({nodes, _Bs, _Es, _Stk, _Nodes})         -> true;
+is_conc_item({start, success, _BS, _Es, _Stk, _Node}) -> true;
+is_conc_item({start, fail, _BS, _Es, _Stk, _Node})    -> true;
+is_conc_item({spawn, _Bs, _Es, _Stk, _Pid})           -> true;
+is_conc_item({send, _Bs, _Es, _Stk, _Msg})            -> true;
+is_conc_item({rec, _Bs, _Es, _Stk, _Msg})             -> true.
+
+

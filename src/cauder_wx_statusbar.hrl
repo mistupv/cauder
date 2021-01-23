@@ -42,6 +42,10 @@
 -define(ROLLBACK_SPAWN_FINISH, "Rolled back the spawning of the process with PID ~p in ~s").
 -define(ROLLBACK_SPAWN_FAIL, "Could not rollback the spawning of that process").
 
+-define(ROLLBACK_START_BEGIN, "Rolling back the start of the node with name ~p...").
+-define(ROLLBACK_START_FINISH, "Rolled back the starting of the node with name ~p in ~s").
+-define(ROLLBACK_START_FAIL, "Could not rollback the start of that node").
+
 -define(ROLLBACK_SEND_START, "Rolling back the sending of the message with UID ~p...").
 -define(ROLLBACK_SEND_FINISH, "Rolled back the sending of the message with UID ~p in ~s").
 -define(ROLLBACK_SEND_FAIL, "Could not rollback the sending of that message").

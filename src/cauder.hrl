@@ -19,13 +19,14 @@
 
 -define(RULE_SEQ,      seq).
 -define(RULE_SELF,     self).
+-define(RULE_NODE,     node).
+-define(RULE_NODES,    nodes).
 -define(RULE_SPAWN,    spawn).
+-define(RULE_START,    start).
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').
 
-
 -define(REPLAY_DATA,  200).
-
 
 -define(NOT_EXP,    not_exp).
 -define(NULL_RULE,  null_rule).
@@ -36,7 +37,6 @@
 
 -define(CAUDER_GREEN, {34,139,34}).
 
-
 % System
 -record(sys, {
   % Global mailbox
@@ -45,12 +45,16 @@
   procs :: cauder_types:process_map(),
   % System log
   logs = maps:new() :: cauder_types:log_map(),
+  % System nodes
+  nodes = [] :: [cauder_types:net_node()],
   trace = [] :: [cauder_types:trace()],
   roll = []
 }).
 
 %% Process
 -record(proc, {
+  % Process node
+  node :: cauder_types:net_node(),
   % Process identifier
   pid :: cauder_types:proc_id(),
   % History
@@ -87,9 +91,10 @@
 
 % Trace
 -record(trace, {
-  type :: ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE,
+  type :: ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE,
   from :: cauder_types:proc_id(),
   to :: undefined | cauder_types:proc_id(),
+  node :: undefined | cauder_types:net_node(),
   val :: undefined | term(),
   time :: undefined | cauder_types:msg_id()
 }).
