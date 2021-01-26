@@ -16,6 +16,11 @@
 -export([remote_call/3]).
 
 
+-ifdef(EUNIT).
+-export([pattern/1]).
+-endif.
+
+
 %%------------------------------------------------------------------------------
 %% @doc Transforms a list of abstract clauses to the custom CauDEr
 %% representation.
@@ -57,18 +62,30 @@ pattern({atom, Anno, A})                  -> {value, ln(Anno), A};
 pattern({string, Anno, S})                -> {value, ln(Anno), S};
 pattern({nil, Anno})                      -> {value, ln(Anno), []};
 pattern({var, Anno, V})                   -> {var, ln(Anno), V};
-pattern({cons, Anno, H, T})               -> {cons, ln(Anno), pattern(H), pattern(T)};
-pattern({tuple, Anno, Es})                -> {tuple, ln(Anno), pattern_list(Es)};
+pattern({cons, Anno, H0, T0}) ->
+  case {pattern(H0), pattern(T0)} of
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
+    {H1, T1} -> {cons, ln(Anno), H1, T1}
+  end;
+pattern({tuple, Anno, Es0}) ->
+  Es1 = pattern_list(Es0),
+  try lists:map(fun({value, _, V}) -> V end, Es1) of
+    Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
+  catch
+    error:function_clause -> {tuple, ln(Anno), Es1}
+  end;
 pattern({match, Anno, Pat1, Pat2})        -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
 pattern({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
 pattern({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
 pattern({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
 pattern({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
 pattern({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-pattern({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I}.
+pattern({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
 
 %% TODO Patterns - Map & Bit String
 %% TODO Patterns - Evaluate compile-time expressions.
+
+pattern(_)                                -> exception(error, illegal_pattern).
 
 
 pattern_list([P0 | Ps]) ->
@@ -320,6 +337,18 @@ check_guard_op(Op, Arity, AllowedTypes) ->
     true -> ok;
     false -> error(guard_expr)
   end.
+
+
+%%%=============================================================================
+
+
+-spec exception(Class, Reason) -> no_return() when
+  Class :: error | exit | throw,
+  Reason :: term().
+
+exception(Class, Reason) ->
+  % TODO Add additional info: current line, module, etc.
+  erlang:Class(Reason).
 
 
 %%%=============================================================================
