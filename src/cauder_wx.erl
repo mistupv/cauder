@@ -572,6 +572,13 @@ handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task 
 
   {noreply, refresh(State, State#wx_state{module = Module, system = System, task = undefined})};
 
+handle_info({dbg, {fail, load, {compile_error, Errors}}}, #wx_state{task = load} = State) ->
+  % TODO Show errors in a dialog
+
+  cauder_wx_statusbar:load_fail(),
+
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
 handle_info({dbg, {finish, start, Time, System}}, #wx_state{task = start} = State) ->
   cauder_wx_statusbar:init_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};

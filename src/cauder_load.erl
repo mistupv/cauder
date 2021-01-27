@@ -30,10 +30,20 @@ file(File) -> store_module(File).
   File :: file:filename(),
   Module :: module().
 
+% This function is based on function `dbg_iload:store_module/4` from the erlang debugger
 store_module(File) ->
+  % TODO Load from beam file?
+
   {ok, Forms0} = epp:parse_file(File, [], []),
   Forms1 = epp:interpret_file_attribute(Forms0),
   Forms = erl_expand_records:module(Forms1, []),
+
+  case erl_lint:module(Forms, File) of
+    {ok, _Warnings} -> ok;
+    {error, Errors, _Warnings} -> error({compile_error, Errors})
+  end,
+
+  io:format("~p\n", [Forms]),
 
   [Module] = [M || {attribute, _, module, M} <- Forms],
   Exports = sets:union([sets:from_list(FAs) || {attribute, _, export, FAs} <- Forms]),

@@ -3,6 +3,7 @@
 
 -define(LOAD_START, "Loading file ~s").
 -define(LOAD_FINISH, "Loaded module ~p in ~s").
+-define(LOAD_FAIL, "Failed to load file, there are compilation errors").
 
 -define(INIT_START, "Starting system...").
 -define(INIT_FINISH, "Started system in ~s").
