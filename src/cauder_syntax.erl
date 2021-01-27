@@ -55,13 +55,13 @@ patterns([P0 | Ps]) ->
 patterns([]) -> [].
 
 
-pattern({integer, Anno, I})               -> {value, ln(Anno), I};
-pattern({char, Anno, I})                  -> {value, ln(Anno), I};
-pattern({float, Anno, F})                 -> {value, ln(Anno), F};
-pattern({atom, Anno, A})                  -> {value, ln(Anno), A};
-pattern({string, Anno, S})                -> {value, ln(Anno), S};
-pattern({nil, Anno})                      -> {value, ln(Anno), []};
-pattern({var, Anno, V})                   -> {var, ln(Anno), V};
+pattern({var, Anno, V})                       -> {var, ln(Anno), V};
+pattern({integer, Anno, I})                   -> {value, ln(Anno), I};
+pattern({char, Anno, I})                      -> {value, ln(Anno), I};
+pattern({float, Anno, F})                     -> {value, ln(Anno), F};
+pattern({atom, Anno, A})                      -> {value, ln(Anno), A};
+pattern({string, Anno, S})                    -> {value, ln(Anno), S};
+pattern({nil, Anno})                          -> {value, ln(Anno), []};
 pattern({cons, Anno, H0, T0}) ->
   case {pattern(H0), pattern(T0)} of
     {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
@@ -74,18 +74,29 @@ pattern({tuple, Anno, Es0}) ->
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
   end;
-pattern({match, Anno, Pat1, Pat2})        -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
-pattern({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-pattern({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-pattern({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-pattern({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-pattern({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-pattern({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
 
 %% TODO Patterns - Map & Bit String
-%% TODO Patterns - Evaluate compile-time expressions.
 
-pattern(_)                                -> exception(error, illegal_pattern).
+pattern({match, Anno, Pat1, Pat2})            -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
+
+pattern({op, _, '-', {integer, Anno, I}})     -> {value, ln(Anno), -I};
+pattern({op, _, '+', {integer, Anno, I}})     -> {value, ln(Anno), I};
+pattern({op, _, '-', {char, Anno, I}})        -> {value, ln(Anno), -I};
+pattern({op, _, '+', {char, Anno, I}})        -> {value, ln(Anno), I};
+pattern({op, _, '-', {float, Anno, I}})       -> {value, ln(Anno), -I};
+pattern({op, _, '+', {float, Anno, I}})       -> {value, ln(Anno), I};
+
+%% Evaluate compile-time expressions.
+pattern({op, _, '++', {nil, _}, R})           -> pattern(R);
+pattern({op, _, '++', {cons, Anno, H, T}, R}) -> pattern({cons, Anno, H, {op, Anno, '++', T, R}});
+pattern({op, _, '++', {string, Anno, L}, R})  -> pattern(string_to_conses(Anno, L, R));
+
+pattern({op, _, _, _} = Op)                   -> pattern(erl_eval:partial_eval(Op));
+pattern({op, _, _, _, _} = Op)                -> pattern(erl_eval:partial_eval(Op)).
+
+
+string_to_conses(Anno, Cs, Tail) ->
+  lists:foldr(fun(C, T) -> {cons, Anno, {char, Anno, C}, T} end, Tail, Cs).
 
 
 pattern_list([P0 | Ps]) ->
