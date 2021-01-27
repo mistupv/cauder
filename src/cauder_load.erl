@@ -43,8 +43,6 @@ store_module(File) ->
     {error, Errors, _Warnings} -> error({compile_error, Errors})
   end,
 
-  io:format("~p\n", [Forms]),
-
   [Module] = [M || {attribute, _, module, M} <- Forms],
   Exports = sets:union([sets:from_list(FAs) || {attribute, _, export, FAs} <- Forms]),
 
