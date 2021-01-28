@@ -18,6 +18,9 @@
 
 -ifdef(EUNIT).
 -export([pattern/1]).
+-export([guard_test/1]).
+-export([gexpr/1]).
+-export([expr/1]).
 -endif.
 
 
@@ -56,10 +59,10 @@ patterns([]) -> [].
 
 
 pattern({var, Anno, V})                       -> {var, ln(Anno), V};
+pattern({atom, Anno, A})                      -> {value, ln(Anno), A};
 pattern({integer, Anno, I})                   -> {value, ln(Anno), I};
 pattern({char, Anno, I})                      -> {value, ln(Anno), I};
 pattern({float, Anno, F})                     -> {value, ln(Anno), F};
-pattern({atom, Anno, A})                      -> {value, ln(Anno), A};
 pattern({string, Anno, S})                    -> {value, ln(Anno), S};
 pattern({nil, Anno})                          -> {value, ln(Anno), []};
 pattern({cons, Anno, H0, T0}) ->
@@ -78,13 +81,6 @@ pattern({tuple, Anno, Es0}) ->
 %% TODO Patterns - Map & Bit String
 
 pattern({match, Anno, Pat1, Pat2})            -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
-
-pattern({op, _, '-', {integer, Anno, I}})     -> {value, ln(Anno), -I};
-pattern({op, _, '+', {integer, Anno, I}})     -> {value, ln(Anno), I};
-pattern({op, _, '-', {char, Anno, I}})        -> {value, ln(Anno), -I};
-pattern({op, _, '+', {char, Anno, I}})        -> {value, ln(Anno), I};
-pattern({op, _, '-', {float, Anno, I}})       -> {value, ln(Anno), -I};
-pattern({op, _, '+', {float, Anno, I}})       -> {value, ln(Anno), I};
 
 %% Evaluate compile-time expressions.
 pattern({op, _, '++', {nil, _}, R})           -> pattern(R);
@@ -117,18 +113,6 @@ and_guard([G0 | Gs]) ->
 and_guard([]) -> [].
 
 
-guard_test({var, _, _} = V)    -> V; % Boolean var
-guard_test({atom, Anno, true}) -> {value, ln(Anno), true};
-%% All other constants at this level means false.
-guard_test({atom, Anno, _})    -> {value, ln(Anno), false};
-guard_test({integer, Anno, _}) -> {value, ln(Anno), false};
-guard_test({char, Anno, _})    -> {value, ln(Anno), false};
-guard_test({float, Anno, _})   -> {value, ln(Anno), false};
-guard_test({string, Anno, _})  -> {value, ln(Anno), false};
-guard_test({nil, Anno})        -> {value, ln(Anno), false};
-guard_test({cons, Anno, _, _}) -> {value, ln(Anno), false};
-guard_test({tuple, Anno, _})   -> {value, ln(Anno), false};
-
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, self}}, []}) ->
   {self, ln(Anno)};
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, F}}, As0}) ->
@@ -148,30 +132,42 @@ guard_test({op, Anno, Op, L0, R0}) ->
   L1 = gexpr(L0),
   R1 = gexpr(R0),
   {op, ln(Anno), Op, [L1, R1]};
-guard_test(_)                  -> error(guard_expr).
+
+guard_test({var, _, _} = V)    -> V; % Boolean var
+guard_test({atom, Anno, true}) -> {value, ln(Anno), true};
+
+%% All other constants at this level means false.
+guard_test({atom, Anno, _})    -> {value, ln(Anno), false};
+guard_test({integer, Anno, _}) -> {value, ln(Anno), false};
+guard_test({char, Anno, _})    -> {value, ln(Anno), false};
+guard_test({float, Anno, _})   -> {value, ln(Anno), false};
+guard_test({string, Anno, _})  -> {value, ln(Anno), false};
+guard_test({nil, Anno})        -> {value, ln(Anno), false};
+guard_test({cons, Anno, _, _}) -> {value, ln(Anno), false};
+guard_test({tuple, Anno, _})   -> {value, ln(Anno), false}.
+
+%% TODO Guard test - Map & Bit String
 
 
-gexpr({integer, Anno, I})               -> {value, ln(Anno), I};
-gexpr({char, Anno, I})                  -> {value, ln(Anno), I};
-gexpr({float, Anno, F})                 -> {value, ln(Anno), F};
-gexpr({atom, Anno, A})                  -> {value, ln(Anno), A};
-gexpr({string, Anno, S})                -> {value, ln(Anno), S};
-gexpr({nil, Anno})                      -> {value, ln(Anno), []};
-gexpr({var, Anno, V})                   -> {var, ln(Anno), V};
+gexpr({var, Anno, V})     -> {var, ln(Anno), V};
+gexpr({atom, Anno, A})    -> {value, ln(Anno), A};
+gexpr({integer, Anno, I}) -> {value, ln(Anno), I};
+gexpr({char, Anno, I})    -> {value, ln(Anno), I};
+gexpr({float, Anno, F})   -> {value, ln(Anno), F};
+gexpr({string, Anno, S})  -> {value, ln(Anno), S};
+gexpr({nil, Anno})        -> {value, ln(Anno), []};
 gexpr({cons, Anno, H0, T0}) ->
   case {gexpr(H0), gexpr(T0)} of
-    {{value, Line, H1}, {value, Line, T1}} -> {value, Line, [H1 | T1]};
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
     {H1, T1} -> {cons, ln(Anno), H1, T1}
   end;
 gexpr({tuple, Anno, Es0}) ->
   Es1 = gexpr_list(Es0),
-  {tuple, ln(Anno), Es1};
-gexpr({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-gexpr({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-gexpr({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
+  try lists:map(fun({value, _, V}) -> V end, Es1) of
+    Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
+  catch
+    error:function_clause -> {tuple, ln(Anno), Es1}
+  end;
 
 %% TODO Guards - Map & Bit String
 
@@ -195,8 +191,7 @@ gexpr({op, Anno, Op, L0, R0}) ->
   check_guard_op(Op, 2, [comp, bool, arith]),
   L1 = gexpr(L0),
   R1 = gexpr(R0),
-  {op, ln(Anno), Op, [L1, R1]};
-gexpr(_)                                -> error(guard_expr).
+  {op, ln(Anno), Op, [L1, R1]}.
 
 
 gexpr_list([E0 | Es]) ->
@@ -338,7 +333,7 @@ ln(Anno) -> erl_anno:line(Anno).
 check_guard_bif(Name, Arity) ->
   case erl_internal:guard_bif(Name, Arity) of
     true -> ok;
-    false -> error(guard_expr)
+    false -> exception(error, guard_expr)
   end.
 
 
@@ -346,7 +341,7 @@ check_guard_op(Op, Arity, AllowedTypes) ->
   Type = erl_internal:op_type(Op, Arity),
   case lists:member(Type, AllowedTypes) of
     true -> ok;
-    false -> error(guard_expr)
+    false -> exception(error, guard_expr)
   end.
 
 
