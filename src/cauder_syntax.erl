@@ -206,21 +206,22 @@ exprs([E0 | Es]) ->
 exprs([]) -> [].
 
 
-expr({var, Anno, V})                   -> {var, ln(Anno), V};
-expr({integer, Anno, I})               -> {value, ln(Anno), I};
-expr({char, Anno, I})                  -> {value, ln(Anno), I};
-expr({float, Anno, F})                 -> {value, ln(Anno), F};
-expr({atom, Anno, A})                  -> {value, ln(Anno), A};
-expr({string, Anno, S})                -> {value, ln(Anno), S};
-expr({nil, Anno})                      -> {value, ln(Anno), []};
+expr({var, Anno, V})     -> {var, ln(Anno), V};
+expr({integer, Anno, I}) -> {value, ln(Anno), I};
+expr({char, Anno, I})    -> {value, ln(Anno), I};
+expr({float, Anno, F})   -> {value, ln(Anno), F};
+expr({atom, Anno, A})    -> {value, ln(Anno), A};
+expr({string, Anno, S})  -> {value, ln(Anno), S};
+expr({nil, Anno})        -> {value, ln(Anno), []};
 expr({cons, Anno, H0, T0}) ->
   case {expr(H0), expr(T0)} of
-    {{value, Line, H1}, {value, Line, T1}} -> {value, Line, [H1 | T1]};
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
     {H1, T1} -> {cons, ln(Anno), H1, T1}
   end;
 expr({tuple, Anno, Es0}) ->
   Es1 = expr_list(Es0),
-  try lists:map(fun({value, _, V}) -> V end, Es1) of
+  GetValue = fun({value, _, V}) -> V end,
+  try lists:map(GetValue, Es1) of
     Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
@@ -269,12 +270,6 @@ expr({match, Anno, P0, E0}) ->
   E1 = expr(E0),
   P1 = pattern(P0),
   {match, ln(Anno), P1, E1};
-expr({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-expr({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-expr({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-expr({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-expr({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-expr({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
 expr({op, Anno, Op, A0}) ->
   A1 = expr(A0),
   {op, ln(Anno), Op, [A1]};
