@@ -11,7 +11,7 @@
   environment/0, binding/0,
   option/0,
   semantics/0,
-  scheduler/0,
+  process_scheduler/0, message_scheduler/0,
   rule/0,
   trace/0,
   result/0, label/0
@@ -53,7 +53,8 @@
 
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
 
--type scheduler() :: ?SCHEDULER_ROUND_ROBIN.
+-type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
+-type message_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_Manual.
 
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
 

@@ -355,15 +355,13 @@ handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_
 
 handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_Step_Button(Button) andalso Pid =/= undefined ->
   Sem = button_to_semantics(Button),
-  {ok, System} = cauder:step(Sem, Pid),
+  Spinner = cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl),
+  Steps = wxSpinCtrl:getValue(Spinner),
+  Choice = cauder_wx:find(?ACTION_Manual_Scheduler, wxChoice),
+  Scheduler = wxChoice:getClientData(Choice, wxChoice:getSelection(Choice)),
+  {ok, System} = cauder:step(Sem, Pid, Steps, Scheduler),
   cauder_wx_statusbar:step_start(Sem),
   {noreply, refresh(State, State#wx_state{system = System, task = step})};
-
-handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_StepOver_Button(Button) andalso Pid =/= undefined ->
-  Sem = button_to_semantics(Button),
-  {ok, System} = cauder:step_over(Sem, Pid),
-  cauder_wx_statusbar:step_start(Sem),
-  {noreply, refresh(State, State#wx_state{system = System, task = step_over})};
 
 %%%=============================================================================
 
@@ -578,12 +576,8 @@ handle_info({dbg, {finish, start, Time, System}}, #wx_state{task = start} = Stat
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {step, Sem, Rule}, Time, System}}, #wx_state{task = step} = State) ->
-  cauder_wx_statusbar:step_finish(Sem, Rule, Time),
-  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-
-handle_info({dbg, {finish, {step_over, Sem, Steps}, Time, System}}, #wx_state{task = step_over} = State) ->
-  cauder_wx_statusbar:step_over_finish(Sem, Steps, Time),
+handle_info({dbg, {finish, {step, Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
+  cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 handle_info({dbg, {finish, {step_multiple, Sem, Steps}, Time, System}}, #wx_state{task = step_multiple} = State) ->
@@ -797,20 +791,13 @@ refresh(OldState, NewState) ->
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
-  ButtonId :: ?ACTION_Manual_Step_Forward_Button | ?ACTION_Manual_Step_Backward_Button |
-  ?ACTION_Manual_StepOver_Forward_Button | ?ACTION_Manual_StepOver_Backward_Button |
-%%  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
-  ?ACTION_Automatic_Forward_Button | ?ACTION_Automatic_Backward_Button,
+  ButtonId :: ?ACTION_Manual_Forward_Button | ?ACTION_Manual_Backward_Button | ?ACTION_Automatic_Forward_Button | ?ACTION_Automatic_Backward_Button,
   Semantics :: ?FWD_SEM | ?BWD_SEM.
 
-button_to_semantics(?ACTION_Manual_Step_Forward_Button)      -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_Step_Backward_Button)     -> ?BWD_SEM;
-button_to_semantics(?ACTION_Manual_StepOver_Forward_Button)  -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_StepOver_Backward_Button) -> ?BWD_SEM;
-%%button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
-%%button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
-button_to_semantics(?ACTION_Automatic_Forward_Button)        -> ?FWD_SEM;
-button_to_semantics(?ACTION_Automatic_Backward_Button)       -> ?BWD_SEM.
+button_to_semantics(?ACTION_Manual_Forward_Button)     -> ?FWD_SEM;
+button_to_semantics(?ACTION_Manual_Backward_Button)    -> ?BWD_SEM;
+button_to_semantics(?ACTION_Automatic_Forward_Button)  -> ?FWD_SEM;
+button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?BWD_SEM.
 
 
 %%%=============================================================================

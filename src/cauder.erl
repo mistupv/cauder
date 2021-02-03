@@ -14,7 +14,7 @@
 -export([subscribe/0, unsubscribe/0]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
--export([step/2, step_over/2]).
+-export([step/4]).
 -export([step_multiple/3]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
 -export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
@@ -215,35 +215,15 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys) ++ cauder_semantics_bac
 %%
 %% @see task_step/2
 
--spec step(Semantics, Pid) -> Reply when
+-spec step(Semantics, Pid, Steps, Scheduler) -> Reply when
   Semantics :: cauder_types:semantics(),
   Pid :: cauder_types:proc_id(),
+  Steps :: pos_integer(),
+  Scheduler :: cauder_types:message_scheduler(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
-step(Sem, Pid) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid}}}).
-
-
-%%------------------------------------------------------------------------------
-%% @doc Steps over to the next line in the given process using the given
-%% semantics.
-%%
-%% This is an asynchronous action: if the server accepts the task then the tuple
-%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
-%% system prior to executing this action, otherwise the atom `busy' is returned,
-%% to indicate that the server is currently executing a different task.
-%%
-%% @see task_step_over/2
-%%
-%% @todo Currently not in use.
-
--spec step_over(Semantics, Pid) -> Reply when
-  Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id(),
-  Reply :: {ok, CurrentSystem} | busy,
-  CurrentSystem :: cauder_types:system().
-
-step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}}).
+step(Sem, Pid, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid, Steps, Scheduler}}}).
 
 
 %%%=============================================================================
@@ -263,7 +243,7 @@ step_over(Sem, Pid) -> gen_server:call(?SERVER, {user, {step_over, {Sem, Pid}}})
 -spec step_multiple(Semantics, Steps, Scheduler) -> Reply when
   Semantics :: cauder_types:semantics(),
   Steps :: pos_integer(),
-  Scheduler :: cauder_types:scheduler(),
+  Scheduler :: cauder_types:process_scheduler(),
   Reply :: {ok, CurrentSystem} | busy,
   CurrentSystem :: cauder_types:system().
 
@@ -613,7 +593,6 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       load -> fun task_load/2;
       start -> fun task_start/2;
       step -> fun task_step/2;
-      step_over -> fun task_step_over/2;
       step_multiple -> fun task_step_multiple/2;
       replay_steps -> fun task_replay_steps/2;
       replay_spawn -> fun task_replay_spawn/2;
@@ -704,7 +683,8 @@ run_task(Fun, Args, System) when is_function(Fun, 2) ->
         try Fun(Args, System) of
           {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
         catch
-          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:x -> ok
+%%          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
         end
     end
   ).
@@ -781,52 +761,31 @@ task_start(LogPath, undefined) ->
 %%%=============================================================================
 
 
--spec task_step({Semantics, Pid}, System) -> {{step, Semantics, Rule}, Time, NewSystem} when
+-spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> {{step, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
   Semantics :: cauder_types:semantics(),
   Pid :: cauder_types:proc_id(),
-  System :: cauder_types:system(),
-  Rule :: cauder_types:rule(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
-
-task_step({Sem, Pid}, Sys0) ->
-  {Time, {Rule, Sys1}} =
-    timer:tc(
-      fun() ->
-        Opts = cauder_utils:filter_options(eval_opts(Sys0), Pid),
-        {value, #opt{pid = Pid, sem = Sem, rule = Rule}} = lists:search(fun(Opt) -> Opt#opt.sem =:= Sem end, Opts),
-        Sys1 = Sem:step(Sys0, Pid),
-        {Rule, Sys1}
-      end
-    ),
-
-  {{step, Sem, Rule}, Time, Sys1}.
-
-
--spec task_step_over({Semantics, Pid}, System) -> {{step_over, Semantics, StepsDone}, Time, NewSystem} when
-  Semantics :: cauder_types:semantics(),
-  Pid :: cauder_types:proc_id(),
+  Steps :: non_neg_integer(),
+  Scheduler :: cauder_types:message_scheduler(),
   System :: cauder_types:system(),
   StepsDone :: non_neg_integer(),
   Time :: non_neg_integer(),
   NewSystem :: cauder_types:system().
 
-task_step_over({Sem, Pid}, #sys{procs = PMap} = Sys0) ->
-  #{Pid := #proc{exprs = Es}} = PMap,
+task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
     timer:tc(
       fun() ->
-        step_over(Sem, Sys0, Pid, Es)
+        step(Sem, Scheduler, Sys0, Pid, Steps)
       end
     ),
 
-  {{step_over, Sem, StepsDone}, Time, Sys1}.
+  {{step, Sem, {StepsDone, Steps}}, Time, Sys1}.
 
 
 -spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
   Semantics :: cauder_types:semantics(),
   Steps :: non_neg_integer(),
-  Scheduler :: cauder_types:scheduler(),
+  Scheduler :: cauder_types:process_scheduler(),
   System :: cauder_types:system(),
   StepsDone :: non_neg_integer(),
   Time :: non_neg_integer(),
@@ -1046,37 +1005,40 @@ task_rollback_variable(Name, Sys0) ->
 %%%=============================================================================
 
 
--spec step_over(Semantics, System, Pid, Expressions) -> {NewSystem, StepsDone} | nomatch when
+-spec step(Semantics, Scheduler, System, Pid, Steps) -> {NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
+  Scheduler :: cauder_types:message_scheduler(),
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  Expressions :: [cauder_types:abstract_expr()],
+  Steps :: pos_integer(),
   NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
-step_over(Sem, Sys, Pid, Es) ->
-  RecStep =
-    fun Name(Sys0, Steps) ->
-      Sys1 =
-        try
-          Sem:step(Sys0, Pid)
-        catch
-          error:{badmatch, nomatch} -> throw(nomatch)
-        end,
-      #{Pid := #proc{exprs = Es1}} = Sys1#sys.procs,
-      case Sem of
-        ?FWD_SEM when Es1 =:= tl(Es) -> throw({Sys1, Steps});
-        ?BWD_SEM when tl(tl(Es1)) =:= Es -> throw({Sys0, Steps});
-        _ -> continue
+step(Sem, Scheduler, Sys, Pid, Steps) ->
+  try
+    lists:foldl(
+      fun(Step, {Sys0}) ->
+        Options = cauder_utils:filter_options(eval_opts(Sys0), Pid),
+        case Options of
+          [] -> throw({Sys0, Step});
+          Options ->
+            Sys1 = Sem:step(Sys0, Pid),
+            {Sys1}
+        end
       end,
-      Name(Sys1, Steps + 1)
-    end,
-  catch RecStep(Sys, 0).
+      {Sys},
+      lists:seq(0, Steps - 1)
+    )
+  of
+    {Sys1} -> {Sys1, Steps}
+  catch
+    throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
+  end.
 
 
 -spec step_multiple(Semantics, Scheduler, System, Steps) -> {NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
-  Scheduler :: cauder_types:scheduler(),
+  Scheduler :: cauder_types:process_scheduler(),
   System :: cauder_types:system(),
   Steps :: pos_integer(),
   NewSystem :: cauder_types:system(),
@@ -1086,27 +1048,27 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
   try
     SchedFun = cauder_scheduler:get(Scheduler),
     lists:foldl(
-      fun(Step, {Sys0, Set0, Queue0}) ->
-        Set1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Sem:options(Sys0)),
-        case sets:is_empty(Set1) of
+      fun(Step, {Sys0, PidSet0, PidQueue0}) ->
+        PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Sem:options(Sys0)),
+        case sets:is_empty(PidSet1) of
           true -> throw({Sys0, Step});
           false ->
             Change =
-              case {sets:size(Set0), sets:size(Set1)} of
+              case {sets:size(PidSet0), sets:size(PidSet1)} of
                 {Size, Size} ->
                   none;
                 {0, _} ->
-                  {init, sets:to_list(Set1)};
+                  {init, sets:to_list(PidSet1)};
                 {Size0, Size1} when Size0 < Size1 ->
-                  [ChangePid] = sets:to_list(sets:subtract(Set1, Set0)),
+                  [ChangePid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
                   {add, ChangePid};
                 {Size0, Size1} when Size0 > Size1 ->
-                  [ChangePid] = sets:to_list(sets:subtract(Set0, Set1)),
+                  [ChangePid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
                   {remove, ChangePid}
               end,
-            {Pid, Queue1} = SchedFun(Queue0, Change),
+            {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
             Sys1 = Sem:step(Sys0, Pid),
-            {Sys1, Set1, Queue1}
+            {Sys1, PidSet1, PidQueue1}
         end
       end,
       {Sys, sets:new(), queue:new()},

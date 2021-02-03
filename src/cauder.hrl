@@ -44,8 +44,9 @@
 %%% Schedulers
 %%%=============================================================================
 
--define(SCHEDULER_ROUND_ROBIN, round_robin).
+-define(SCHEDULER_RoundRobin, round_robin).
 -define(SCHEDULER_FCFS, fcfs).
+-define(SCHEDULER_Manual, manual).
 
 
 %%%=============================================================================
