@@ -88,6 +88,17 @@ do_release(State, App) ->
 
   rebar_api:info("Reltool result: ~p~n", [R]),
 
+  case os:type() of
+    {win32, _} ->
+      WinScript = "cauder.cmd",
+      file:copy(filename:join("launcher", WinScript),
+                filename:join(ReleaseDir, WinScript));
+    {unix, _} ->
+      UnixScript = "cauder.sh",
+      file:copy(filename:join("launcher", UnixScript),
+                filename:join(ReleaseDir, UnixScript))
+  end,
+
   {ok, State}.
 
 
