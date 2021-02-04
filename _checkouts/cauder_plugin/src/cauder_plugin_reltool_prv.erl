@@ -96,7 +96,9 @@ do_release(State, App) ->
     {unix, _} ->
       UnixScript = "cauder.sh",
       file:copy(filename:join("launcher", UnixScript),
-                filename:join(ReleaseDir, UnixScript))
+                filename:join(ReleaseDir, UnixScript)),
+
+      set_executable_bit(filename:join(ReleaseDir, UnixScript))
   end,
 
   {ok, State}.
@@ -109,3 +111,10 @@ release_dest_path(State) ->
 prepare_release_dir(Dir) ->
   rebar_file_utils:rm_rf(Dir),
   filelib:ensure_dir(filename:join(Dir, "dummy")).
+
+set_executable_bit(Filename) ->
+  {ok, #file_info{mode = OldMode}} = file:read_file_info(Filename),
+  case OldMode bor 8#111 of
+    OldMode -> ok;
+    NewMode -> file:change_mode(Filename, NewMode)
+  end.
