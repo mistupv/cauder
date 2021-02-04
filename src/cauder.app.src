@@ -32,9 +32,5 @@
       cauder_wx_process,
       cauder_wx_statusbar,
       cauder_wx_system
-    ]},
-    {licenses, ["MIT"]},
-    {links, [
-      {"GitHub", "https://github.com/mistupv/cauder-v2"}
     ]}
   ]}.
