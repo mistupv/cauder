@@ -1,6 +1,6 @@
 -module(cauder_scheduler_tests).
 
--import(cauder_scheduler, [scheduler_round_robin/2, scheduler_fcfs/2, scheduler_manual/2]).
+-import(cauder_scheduler, [scheduler_round_robin/2, scheduler_fcfs/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 
