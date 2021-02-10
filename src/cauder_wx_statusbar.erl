@@ -8,7 +8,7 @@
 -export([init_start/0, init_finish/1]).
 -export([stop_finish/0]).
 % Manual
--export([step_start/1, step_finish/3]).
+-export([step_start/1, step_finish/3, step_suspend/0]).
 -export([step_multiple_finish/3]).
 % Replay
 -export([replay_steps_start/0, replay_steps_finish/2]).
@@ -197,6 +197,11 @@ step_finish(Sem, {Done, Total}, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?STEP_FINISH, [Done, Total, SemStr, TimeStr]),
   set_text(Status).
+
+
+-spec step_suspend() -> ok.
+
+step_suspend() -> set_text(?STEP_SUSPEND).
 
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when

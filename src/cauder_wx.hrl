@@ -28,7 +28,7 @@
 
 -define(GUI_DB, 'cauder_wx/database').
 
--define(IDX_TO_KEY, 'bindings_index_to_key').
+-define(BINDINGS_IDX_TO_KEY, 'bindings_index_to_key').
 
 -define(FRAME, 500).
 

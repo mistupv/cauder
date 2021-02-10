@@ -13,11 +13,13 @@
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
 -export([subscribe/0, unsubscribe/0]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
+-export([suspend_task/3, resume_task/0]).
 -export([eval_opts/1]).
 -export([step/4]).
 -export([step_multiple/3]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
 -export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
+-export([resume/1, cancel/0]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
 
@@ -31,10 +33,17 @@
 -record(state, {
   subs = [] :: [pid()],
   system :: cauder_types:system() | undefined,
-  task :: {atom(), pid()} | undefined
+  task :: {Name :: atom(), Pid :: pid(), State :: task_state()} | undefined
 }).
 
 -type state() :: #state{}.
+
+-type task_state() :: running | suspended.
+
+-type task_result() :: task_result({}).
+-type task_result(Result) :: {task_completion(), Result, Time :: non_neg_integer(), NewSystem :: cauder_types:system()}.
+
+-type task_completion() :: success | cancel | failure.
 
 
 %%%=============================================================================
@@ -440,6 +449,14 @@ rollback_variable(Name) -> gen_server:call(?SERVER, {user, {rollback_variable, N
 %%%=============================================================================
 
 
+resume(MessageId) -> gen_server:call(?SERVER, {user, {resume, MessageId}}).
+
+cancel() -> gen_server:call(?SERVER, {user, cancel}).
+
+
+%%%=============================================================================
+
+
 %%------------------------------------------------------------------------------
 %% @doc Returns the possible entry points of the given module.
 %%
@@ -530,19 +547,35 @@ handle_call({unsubscribe, Sub}, _From, #state{subs = Subs} = State) ->
 
 %%%=============================================================================
 
-handle_call({task, {finish, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
-  % Check finished task matches running task
-  Task =
-    if
-      is_tuple(Value) -> element(1, Value);
-      true -> Value
-    end,
-  lists:foreach(fun(Sub) -> Sub ! {dbg, {finish, Value, Time, NewSystem}} end, Subs),
-  {reply, ok, State#state{system = NewSystem, task = undefined}};
+handle_call({task, {suspend, Receiver, Messages, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
+  notifySubscribers({suspend, Task, {Receiver, Messages}, NewSystem}, Subs),
+  {reply, ok, State#state{task = {Task, Pid, suspended}, system = NewSystem}};
 
-handle_call({task, {fail, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid}} = State) ->
-  lists:foreach(fun(Sub) -> Sub ! {dbg, {fail, Task, Reason}} end, Subs),
+handle_call({task, resume}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, suspended}} = State) ->
+  notifySubscribers(resume, Subs),
+  {reply, ok, State#state{task = {Task, Pid, running}}};
+
+handle_call({task, {cancel, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, suspended}} = State) ->
+  notifySubscribers({cancel, Task, Value, Time, NewSystem}, Subs),
+  {reply, ok, State#state{task = undefined, system = NewSystem}};
+
+handle_call({task, {success, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
+  notifySubscribers({success, Task, Value, Time, NewSystem}, Subs),
+  {reply, ok, State#state{task = undefined, system = NewSystem}};
+
+handle_call({task, {failure, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
+  notifySubscribers({failure, Task, Reason}, Subs),
   {reply, ok, State#state{task = undefined}};
+
+%%%=============================================================================
+
+handle_call({user, {resume, MessageId}}, _From, #state{task = {_, Pid, suspended}} = State) ->
+  Pid ! {resume, MessageId},
+  {reply, ok, State};
+
+handle_call({user, cancel}, _From, #state{task = {_, Pid, suspended}} = State) ->
+  Pid ! cancel,
+  {reply, ok, State};
 
 %%%=============================================================================
 
@@ -561,7 +594,7 @@ handle_call({user, {get, path}}, _From, State)   -> {reply, ets:lookup_element(?
 
 handle_call({user, stop}, {FromPid, _}, #state{subs = Subs, system = System, task = Task} = State) ->
   case Task of
-    {_, Pid} -> exit(Pid, kill);
+    {_, Pid, _} -> exit(Pid, kill);
     undefined -> ok
   end,
   ets:delete(?APP_DB, last_pid),
@@ -572,7 +605,7 @@ handle_call({user, stop}, {FromPid, _}, #state{subs = Subs, system = System, tas
 
 %%%=============================================================================
 
-handle_call({user, _}, _From, #state{task = {_, _}} = State) ->
+handle_call({user, _}, _From, #state{task = {_, _, _}} = State) ->
   {reply, busy, State};
 
 %%%=============================================================================
@@ -583,6 +616,14 @@ handle_call({user, {set, {binding, Pid}, {Key, NewValue}}}, _From, #state{system
   {reply, ok, State#state{system = Sys1}};
 
 %%%=============================================================================
+
+handle_call({user, {task, {resume, MessageId}}}, _From, #state{task = {_, Pid, suspended}} = State) ->
+  Pid ! {resume, MessageId},
+  {reply, ok, State};
+
+handle_call({user, {task, cancel}}, _From, #state{task = {_, Pid, suspended}} = State) ->
+  Pid ! cancel,
+  {reply, ok, State};
 
 handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
   % IMPORTANT: Given a task 'example', the name of the task function must be
@@ -605,14 +646,17 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       rollback_receive -> fun task_rollback_receive/2;
       rollback_variable -> fun task_rollback_variable/2
     end,
-  Pid = run_task(Fun, Args, System),
-  {reply, {ok, System}, State#state{task = {Task, Pid}}};
+  Pid = start_task(Fun, Args, System),
+  {reply, {ok, System}, State#state{task = {Task, Pid, running}}};
 
 %%%=============================================================================
 
 handle_call(Request, _From, State) ->
-  io:format("Unhandled Call:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Call:~n~p~n", [?MODULE, ?LINE, Request]),
   {reply, ok, State}.
+
+notifySubscribers(Message, Subs) ->
+  lists:foreach(fun(Sub) -> Sub ! {dbg, Message} end, Subs).
 
 
 %%------------------------------------------------------------------------------
@@ -624,7 +668,7 @@ handle_call(Request, _From, State) ->
   NewState :: state().
 
 handle_cast(Request, State) ->
-  io:format("Unhandled Cast:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Cast:~n~p~n", [?MODULE, ?LINE, Request]),
   {noreply, State}.
 
 
@@ -637,7 +681,7 @@ handle_cast(Request, State) ->
   NewState :: state().
 
 handle_info(Info, State) ->
-  io:format("Unhandled Info:~n~p~n", [Info]),
+  io:format("[~p:~p] Unhandled Info:~n~p~n", [?MODULE, ?LINE, Info]),
   {noreply, State}.
 
 
@@ -670,55 +714,63 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%=============================================================================
 
 
--spec run_task(Function, Arguments, System) -> TaskPid when
-  Function :: function(),
+-spec start_task(TaskFunction, Arguments, InitialSystem) -> TaskPid when
+  TaskFunction :: fun((Arguments, InitialSystem)-> task_result(any())),
   Arguments :: term(),
-  System :: cauder_types:system(),
+  InitialSystem :: cauder_types:system(),
   TaskPid :: pid().
 
-run_task(Fun, Args, System) when is_function(Fun, 2) ->
+start_task(Task, Args, System) when is_function(Task, 2) ->
   spawn(
     fun
       () ->
-        try Fun(Args, System) of
-          {Value, Time, NewSystem} -> gen_server:call(?SERVER, {task, {finish, Value, Time, NewSystem}})
+        try Task(Args, System) of
+          {_, _, _, _} = Result ->
+            ok = gen_server:call(?SERVER, {task, Result})
         catch
-          error:x -> ok
-%%          error:Reason -> gen_server:call(?SERVER, {task, {fail, Reason}})
+          error:Reason ->
+            ok = gen_server:call(?SERVER, {task, {fail, Reason}})
         end
     end
   ).
 
 
+-spec suspend_task(Receiver, Messages, CurrentSystem) -> {SuspendTime, ({resume, MessageId} | cancel)} when
+  Receiver :: cauder_types:proc_id(),
+  Messages :: [cauder_mailbox:uid()],
+  CurrentSystem :: cauder_types:system(),
+  SuspendTime :: integer(),
+  MessageId :: cauder_mailbox:uid().
+
+suspend_task(Receiver, Messages, System) ->
+  ok = gen_server:call(?SERVER, {task, {suspend, Receiver, Messages, System}}),
+  timer:tc(fun() -> receive Msg -> Msg end end).
+
+resume_task() ->
+  ok = gen_server:call(?SERVER, {task, resume}).
+
+
 %%%=============================================================================
 
 
--spec task_load(File, System) -> {{load, File, Module}, Time, NewSystem} when
+-spec task_load(File, System) -> task_result({File, Module}) when
   File :: file:filename(),
   System :: cauder_types:system(),
-  Module :: module(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  Module :: module().
 
 task_load(File, System) ->
   {Time, {ok, Module}} = timer:tc(cauder_load, file, [File]),
   ets:insert(?APP_DB, {path, filename:absname(filename:dirname(File))}),
 
-  {{load, File, Module}, Time, System}.
+  {success, {File, Module}, Time, System}.
 
 
--spec task_start({Module, Function, Arguments}, System) -> {start, Time, NewSystem} when
+-spec task_start(MFA | LogPath, System :: undefined) -> task_result() when
+  MFA :: {Module, Function, Arguments},
   Module :: module(),
   Function :: atom(),
   Arguments :: [cauder_types:af_literal()],
-  System :: undefined, % Since we are starting the system, there is no current system
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system()
-;               (LogPath, System) -> {start, Time, NewSystem} when
-  LogPath :: file:filename(),
-  System :: undefined, % Since we are starting the system, there is no current system
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  LogPath :: file:filename().
 
 task_start({M, F, As}, undefined) ->
   {Time, System} =
@@ -736,7 +788,7 @@ task_start({M, F, As}, undefined) ->
       end
     ),
 
-  {start, Time, System};
+  {success, {}, Time, System};
 
 task_start(LogPath, undefined) ->
   {Time, System} =
@@ -755,31 +807,25 @@ task_start(LogPath, undefined) ->
       end
     ),
 
-  {start, Time, System}.
+  {success, {}, Time, System}.
 
 
 %%%=============================================================================
 
 
--spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> {{step, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
+-spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
   Semantics :: cauder_types:semantics(),
   Pid :: cauder_types:proc_id(),
   Steps :: non_neg_integer(),
   Scheduler :: cauder_types:message_scheduler(),
   System :: cauder_types:system(),
-  StepsDone :: non_neg_integer(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  StepsDone :: non_neg_integer().
 
 task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
-  {Time, {Sys1, StepsDone}} =
-    timer:tc(
-      fun() ->
-        step(Sem, Scheduler, Sys0, Pid, Steps)
-      end
-    ),
+  {Time, {Completion, Sys1, StepsDone}} =
+    timer:tc(fun() -> step(Sem, Scheduler, Sys0, Pid, Steps) end),
 
-  {{step, Sem, {StepsDone, Steps}}, Time, Sys1}.
+  {Completion, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
 
 -spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
@@ -1005,7 +1051,7 @@ task_rollback_variable(Name, Sys0) ->
 %%%=============================================================================
 
 
--spec step(Semantics, Scheduler, System, Pid, Steps) -> {NewSystem, StepsDone} when
+-spec step(Semantics, Scheduler, System, Pid, Steps) -> {(success | cancel), NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
   Scheduler :: cauder_types:message_scheduler(),
   System :: cauder_types:system(),
@@ -1018,11 +1064,21 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
   try
     lists:foldl(
       fun(Step, {Sys0}) ->
-        Options = cauder_utils:filter_options(eval_opts(Sys0), Pid),
-        case Options of
-          [] -> throw({Sys0, Step});
-          Options ->
-            Sys1 = Sem:step(Sys0, Pid),
+        Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(Sys0)),
+        CanStep = lists:any(fun(Opt) -> Opt#opt.sem =:= Sem end, Options),
+        case CanStep of
+          false -> throw({success, Sys0, Step});
+          true ->
+            Sys1 =
+              case Sem of
+                ?FWD_SEM ->
+                  try
+                    ?FWD_SEM:step(Sys0, Pid, Scheduler)
+                  catch
+                    throw:cancel_task -> throw({cancel, Sys0, Step})
+                  end;
+                ?BWD_SEM -> ?BWD_SEM:step(Sys0, Pid)
+              end,
             {Sys1}
         end
       end,
@@ -1030,9 +1086,9 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
       lists:seq(0, Steps - 1)
     )
   of
-    {Sys1} -> {Sys1, Steps}
+    {Sys1} -> {success, Sys1, Steps}
   catch
-    throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
+    throw:{_, _, _} = Result -> Result
   end.
 
 

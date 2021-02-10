@@ -107,7 +107,7 @@ rollback_step(#sys{procs = PMap, roll = RollLog} = Sys0, Pid) ->
       rollback_send(Sys, Pid, Dest, Uid);
     _ ->
       [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
-      Sem:step(Sys0, Pid)
+       Sem:step(Sys0, Pid)
   end.
 
 

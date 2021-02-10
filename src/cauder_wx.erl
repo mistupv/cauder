@@ -465,7 +465,7 @@ handle_event(
     #wx_state{frame = Frame, system = #sys{procs = PMap}, pid = Pid} = State
 ) ->
   #proc{env = Bs} = maps:get(Pid, PMap),
-  IdxToKey = ets:lookup_element(?GUI_DB, ?IDX_TO_KEY, 2),
+  IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
   Key = maps:get(Idx, IdxToKey),
   Value = maps:get(Key, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
@@ -517,7 +517,7 @@ handle_event(#wx{event = #wxClose{}}, State) ->
 %%%=============================================================================
 
 handle_event(Event, State) ->
-  io:format("Unhandled Event:~n~p~n", [Event]),
+  io:format("[~p:~p] Unhandled Event:~n~p~n", [?MODULE, ?LINE, Event]),
   {noreply, State}.
 
 
@@ -535,7 +535,7 @@ handle_call(noreply, _From, State) ->
   {noreply, State};
 
 handle_call(Request, _From, State) ->
-  io:format("Unhandled Call:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Call:~n~p~n", [?MODULE, ?LINE, Request]),
   {reply, ok, State}.
 
 
@@ -548,7 +548,7 @@ handle_call(Request, _From, State) ->
   NewState :: state().
 
 handle_cast(Request, State) ->
-  io:format("Unhandled Cast:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Cast:~n~p~n", [?MODULE, ?LINE, Request]),
   {noreply, State}.
 
 
@@ -560,7 +560,7 @@ handle_cast(Request, State) ->
   State :: state(),
   NewState :: state().
 
-handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task = load} = State) ->
+handle_info({dbg, {success, load, {File, Module}, Time, System}}, #wx_state{task = load} = State) ->
   {ok, Src, _} = erl_prim_loader:get_file(File),
 
   CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
@@ -570,15 +570,26 @@ handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task 
 
   {noreply, refresh(State, State#wx_state{module = Module, system = System, task = undefined})};
 
-handle_info({dbg, {finish, start, Time, System}}, #wx_state{task = start} = State) ->
+handle_info({dbg, {success, start, {}, Time, System}}, #wx_state{task = start} = State) ->
   cauder_wx_statusbar:init_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {step, Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
+handle_info({dbg, {success, step, {Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
   cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
+handle_info({dbg, {cancel, step, {Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
+  cauder_wx_statusbar:step_finish(Sem, Steps, Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
+handle_info({dbg, {suspend, step, {Receiver, Messages}, System}}, #wx_state{frame = Frame, task = step} = State) ->
+  case cauder_wx_dialog:choose_message(Frame, {Receiver, Messages}) of
+    {ok, MessageId} -> cauder:resume(MessageId);
+    cancel -> cauder:cancel()
+  end,
+  {noreply, refresh(State, State#wx_state{system = System})};
 
 handle_info({dbg, {finish, {step_multiple, Sem, Steps}, Time, System}}, #wx_state{task = step_multiple} = State) ->
   cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
@@ -671,7 +682,7 @@ handle_info({dbg, {fail, rollback_variable, no_rollback}}, #wx_state{task = roll
 
 
 handle_info(Info, State) ->
-  io:format("Unhandled Info:~n~p~n", [Info]),
+  io:format("[~p:~p] Unhandled Info:~n~p~n", [?MODULE, ?LINE, Info]),
   {noreply, State}.
 
 

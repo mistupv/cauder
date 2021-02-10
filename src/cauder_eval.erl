@@ -2,7 +2,7 @@
 
 %% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([match_rec_pid/4, match_rec_uid/4]).
+-export([match_rec_pid/6, match_rec_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder.hrl").
@@ -407,26 +407,46 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
   Mail :: cauder_mailbox:mailbox(),
+  Sched :: cauder_types:message_scheduler(),
+  Sys :: cauder_types:system(),
   NewBindings :: cauder_types:environment(),
   Body :: cauder_types:af_body(),
   Message :: cauder_types:message(),
   QueuePosition :: pos_integer(),
   NewMail :: cauder_mailbox:mailbox().
 
-match_rec_pid(Cs, Bs, Pid, Mail) ->
+match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
   case cauder_mailbox:pid_get(Pid, Mail) of
     [] -> nomatch;
     Messages ->
-      case match_rec(Cs, Bs, Messages) of
-        nomatch -> nomatch;
-        {Bs1, Body, Msg} ->
-          {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
-          {Bs1, Body, {Msg, QPos}, NewMail}
+      case Sched of
+        ?SCHEDULER_Manual ->
+          case match_rec_all(Cs, Bs, Messages) of
+            nomatch -> nomatch;
+            MatchingBranches ->
+              MatchingMessages = lists:map(fun({_, _, Msg}) -> Msg end, maps:values(MatchingBranches)),
+              case cauder:suspend_task(Pid, MatchingMessages, Sys) of
+                {_SuspendTime, {resume, Uid}} -> % TODO Use suspend time
+                  cauder:resume_task(),
+                  {Bs1, Body, Msg} = maps:get(Uid, MatchingBranches),
+                  {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+                  {Bs1, Body, {Msg, QPos}, NewMail};
+                {_SuspendTime, cancel} -> % TODO Use suspend time
+                  throw(cancel_task)
+              end
+          end;
+        ?SCHEDULER_RoundRobin ->
+          case match_rec(Cs, Bs, Messages) of
+            nomatch -> nomatch;
+            {Bs1, Body, Msg} ->
+              {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+              {Bs1, Body, {Msg, QPos}, NewMail}
+          end
       end
   end.
 
@@ -444,6 +464,34 @@ match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
   case match_clause(Bs0, Cs, [abstract(Value)]) of
     {match, Bs, Body} -> {Bs, Body, Msg};
     nomatch -> match_rec(Cs, Bs0, Rest)
+  end.
+
+
+-spec match_rec_all(Clauses, Bindings, Messages) -> #{Uid => {NewBindings, Body, Message}} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  Bindings :: cauder_types:environment(),
+  Messages :: [cauder_mailbox:message()],
+  Uid :: cauder_mailbox:uid(),
+  NewBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message().
+
+
+match_rec_all(Cs, Bs0, Messages) ->
+  MatchingBranches =
+    lists:foldl(
+      fun(#message{uid = Uid, value = Value} = Msg, Map) ->
+        case match_clause(Bs0, Cs, [abstract(Value)]) of
+          {match, Bs, Body} -> maps:put(Uid, {Bs, Body, Msg}, Map);
+          nomatch -> continue
+        end
+      end,
+      maps:new(),
+      Messages
+    ),
+  case maps:size(MatchingBranches) of
+    0 -> nomatch;
+    _ -> MatchingBranches
   end.
 
 
