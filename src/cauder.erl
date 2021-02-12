@@ -208,7 +208,7 @@ stop_system() -> gen_server:call(?SERVER, {user, stop}).
   System :: cauder_types:system(),
   Options :: [cauder_types:option()].
 
-eval_opts(Sys) -> cauder_semantics_forwards:options(Sys) ++ cauder_semantics_backwards:options(Sys).
+eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_semantics_backwards:options(Sys).
 
 
 %%%=============================================================================
@@ -552,7 +552,7 @@ handle_call({task, {suspend, Receiver, Messages, NewSystem}}, {Pid, _}, #state{s
   {reply, ok, State#state{task = {Task, Pid, suspended}, system = NewSystem}};
 
 handle_call({task, resume}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, suspended}} = State) ->
-  notifySubscribers(resume, Subs),
+  notifySubscribers({resume, Task}, Subs),
   {reply, ok, State#state{task = {Task, Pid, running}}};
 
 handle_call({task, {cancel, Value, Time, NewSystem}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, suspended}} = State) ->
@@ -646,7 +646,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       rollback_receive -> fun task_rollback_receive/2;
       rollback_variable -> fun task_rollback_variable/2
     end,
-  Pid = start_task(Fun, Args, System),
+  Pid = run_task(Fun, Args, System),
   {reply, {ok, System}, State#state{task = {Task, Pid, running}}};
 
 %%%=============================================================================
@@ -714,13 +714,13 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%%=============================================================================
 
 
--spec start_task(TaskFunction, Arguments, InitialSystem) -> TaskPid when
+-spec run_task(TaskFunction, Arguments, InitialSystem) -> TaskPid when
   TaskFunction :: fun((Arguments, InitialSystem)-> task_result(any())),
   Arguments :: term(),
   InitialSystem :: cauder_types:system(),
   TaskPid :: pid().
 
-start_task(Task, Args, System) when is_function(Task, 2) ->
+run_task(Task, Args, System) when is_function(Task, 2) ->
   spawn(
     fun
       () ->
@@ -729,7 +729,7 @@ start_task(Task, Args, System) when is_function(Task, 2) ->
             ok = gen_server:call(?SERVER, {task, Result})
         catch
           error:Reason ->
-            ok = gen_server:call(?SERVER, {task, {fail, Reason}})
+            ok = gen_server:call(?SERVER, {task, {failed, Reason}})
         end
     end
   ).
@@ -828,14 +828,12 @@ task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
   {Completion, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
 
--spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> {{step_multiple, Semantics, {StepsDone, Steps}}, Time, NewSystem} when
+-spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
   Semantics :: cauder_types:semantics(),
   Steps :: non_neg_integer(),
   Scheduler :: cauder_types:process_scheduler(),
   System :: cauder_types:system(),
-  StepsDone :: non_neg_integer(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  StepsDone :: non_neg_integer().
 
 task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
@@ -845,19 +843,17 @@ task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
       end
     ),
 
-  {{step_multiple, Sem, {StepsDone, Steps}}, Time, Sys1}.
+  {success, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
 
 %%%=============================================================================
 
 
--spec task_replay_steps({Pid, Steps}, System) -> {{replay_steps, {StepsDone, Steps}}, Time, NewSystem} when
+-spec task_replay_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
   Pid :: cauder_types:proc_id(),
   Steps :: non_neg_integer(),
   System :: cauder_types:system(),
-  StepsDone :: non_neg_integer(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  StepsDone :: non_neg_integer().
 
 task_replay_steps({Pid, Steps}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
@@ -867,14 +863,12 @@ task_replay_steps({Pid, Steps}, Sys0) ->
       end
     ),
 
-  {{replay_steps, {StepsDone, Steps}}, Time, Sys1}.
+  {success, {StepsDone, Steps}, Time, Sys1}.
 
 
--spec task_replay_spawn(Pid, System) -> {{replay_spawn, Pid}, Time, NewSystem} when
+-spec task_replay_spawn(Pid, System) -> task_result(Pid) when
   Pid :: cauder_types:proc_id(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_replay_spawn(Pid, Sys0) ->
   {Time, Sys1} =
@@ -887,14 +881,12 @@ task_replay_spawn(Pid, Sys0) ->
       end
     ),
 
-  {{replay_spawn, Pid}, Time, Sys1}.
+  {success, Pid, Time, Sys1}.
 
 
--spec task_replay_send(Uid, System) -> {{replay_send, Uid}, Time, NewSystem} when
+-spec task_replay_send(Uid, System) -> task_result(Uid) when
   Uid :: cauder_mailbox:uid(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_replay_send(Uid, Sys0) ->
   {Time, Sys1} =
@@ -907,14 +899,12 @@ task_replay_send(Uid, Sys0) ->
       end
     ),
 
-  {{replay_send, Uid}, Time, Sys1}.
+  {success, Uid, Time, Sys1}.
 
 
--spec task_replay_receive(Uid, System) -> {{replay_receive, Uid}, Time, NewSystem} when
+-spec task_replay_receive(Uid, System) -> task_result(Uid) when
   Uid :: cauder_mailbox:uid(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_replay_receive(Uid, Sys0) ->
   {Time, Sys1} =
@@ -927,13 +917,11 @@ task_replay_receive(Uid, Sys0) ->
       end
     ),
 
-  {{replay_receive, Uid}, Time, Sys1}.
+  {success, Uid, Time, Sys1}.
 
 
--spec task_replay_full_log([], System) -> {replay_full_log, Time, NewSystem} when
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+-spec task_replay_full_log([], System) -> task_result() when
+  System :: cauder_types:system().
 
 task_replay_full_log([], Sys0) ->
   {Time, Sys1} =
@@ -943,19 +931,17 @@ task_replay_full_log([], Sys0) ->
       end
     ),
 
-  {replay_full_log, Time, Sys1}.
+  {success, {}, Time, Sys1}.
 
 
 %%%=============================================================================
 
 
--spec task_rollback_steps({Pid, Steps}, System) -> {{rollback_steps, {StepsDone, Steps}}, Time, NewSystem} when
+-spec task_rollback_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
   Pid :: cauder_types:proc_id(),
   Steps :: non_neg_integer(),
   System :: cauder_types:system(),
-  StepsDone :: non_neg_integer(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  StepsDone :: non_neg_integer().
 
 task_rollback_steps({Pid, Steps}, Sys0) ->
   {Time, {Sys1, StepsDone}} =
@@ -965,14 +951,12 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
       end
     ),
 
-  {{rollback_steps, {StepsDone, Steps}}, Time, Sys1}.
+  {success, {StepsDone, Steps}, Time, Sys1}.
 
 
--spec task_rollback_spawn(Pid, System) -> {{rollback_spawn, Pid}, Time, NewSystem} when
+-spec task_rollback_spawn(Pid, System) -> task_result(Pid) when
   Pid :: cauder_types:proc_id(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_rollback_spawn(Pid, Sys0) ->
   {Time, Sys1} =
@@ -985,14 +969,12 @@ task_rollback_spawn(Pid, Sys0) ->
       end
     ),
 
-  {{rollback_spawn, Pid}, Time, Sys1}.
+  {success, Pid, Time, Sys1}.
 
 
--spec task_rollback_send(Uid, System) -> {{rollback_send, Uid}, Time, NewSystem} when
+-spec task_rollback_send(Uid, System) -> task_result(Uid) when
   Uid :: cauder_mailbox:uid(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_rollback_send(Uid, Sys0) ->
   {Time, Sys1} =
@@ -1005,14 +987,12 @@ task_rollback_send(Uid, Sys0) ->
       end
     ),
 
-  {{rollback_send, Uid}, Time, Sys1}.
+  {success, Uid, Time, Sys1}.
 
 
--spec task_rollback_receive(Uid, System) -> {{rollback_receive, Uid}, Time, NewSystem} when
+-spec task_rollback_receive(Uid, System) -> task_result(Uid) when
   Uid :: cauder_mailbox:uid(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_rollback_receive(Uid, Sys0) ->
   {Time, Sys1} =
@@ -1025,14 +1005,12 @@ task_rollback_receive(Uid, Sys0) ->
       end
     ),
 
-  {{rollback_receive, Uid}, Time, Sys1}.
+  {success, Uid, Time, Sys1}.
 
 
--spec task_rollback_variable(Name, System) -> {{rollback_variable, Name}, Time, NewSystem} when
+-spec task_rollback_variable(Name, System) -> task_result(Name) when
   Name :: atom(),
-  System :: cauder_types:system(),
-  Time :: non_neg_integer(),
-  NewSystem :: cauder_types:system().
+  System :: cauder_types:system().
 
 task_rollback_variable(Name, Sys0) ->
   {Time, Sys1} =
@@ -1045,18 +1023,19 @@ task_rollback_variable(Name, Sys0) ->
       end
     ),
 
-  {{rollback_variable, Name}, Time, Sys1}.
+  {success, Name, Time, Sys1}.
 
 
 %%%=============================================================================
 
 
--spec step(Semantics, Scheduler, System, Pid, Steps) -> {(success | cancel), NewSystem, StepsDone} when
+-spec step(Semantics, Scheduler, System, Pid, Steps) -> {Completion, NewSystem, StepsDone} when
   Semantics :: cauder_types:semantics(),
   Scheduler :: cauder_types:message_scheduler(),
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
   Steps :: pos_integer(),
+  Completion :: success | cancel,
   NewSystem :: cauder_types:system(),
   StepsDone :: non_neg_integer().
 
@@ -1064,8 +1043,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
   try
     lists:foldl(
       fun(Step, {Sys0}) ->
-        Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(Sys0)),
-        CanStep = lists:any(fun(Opt) -> Opt#opt.sem =:= Sem end, Options),
+        CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= Sem end, cauder:eval_opts(Sys0)),
         case CanStep of
           false -> throw({success, Sys0, Step});
           true ->
@@ -1073,9 +1051,9 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
               case Sem of
                 ?FWD_SEM ->
                   try
-                    ?FWD_SEM:step(Sys0, Pid, Scheduler)
+                    cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal)
                   catch
-                    throw:cancel_task -> throw({cancel, Sys0, Step})
+                    throw:cancel -> throw({cancel, Sys0, Step})
                   end;
                 ?BWD_SEM -> ?BWD_SEM:step(Sys0, Pid)
               end,

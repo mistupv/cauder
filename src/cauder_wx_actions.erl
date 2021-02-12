@@ -150,7 +150,7 @@ create_manual(Parent) ->
 
   InputSize = {size, {150, -1}},
 
-  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
+  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {75, -1}}],
   CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
   CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
@@ -176,7 +176,7 @@ create_manual(Parent) ->
   Scheduler = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Scheduler, CenterHorizontal),
 
-  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Scheduler:", StaticAlignRight),
+  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Sched.:", StaticAlignRight),
   wxBoxSizer:add(Scheduler, SchedulerText, CenterVertical),
 
   wxBoxSizer:addSpacer(Scheduler, ?SPACER_SMALL),
@@ -264,7 +264,7 @@ create_automatic(Parent) ->
 
   InputSize = {size, {150, -1}},
 
-  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
+  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {75, -1}}],
   CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
   CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
@@ -290,7 +290,7 @@ create_automatic(Parent) ->
   Scheduler = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Scheduler, CenterHorizontal),
 
-  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Scheduler:", StaticAlignRight),
+  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Proc. Sched.:", StaticAlignRight),
   wxBoxSizer:add(Scheduler, SchedulerText, CenterVertical),
 
   wxBoxSizer:addSpacer(Scheduler, ?SPACER_SMALL),

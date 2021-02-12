@@ -85,7 +85,7 @@ replay_step(#sys{logs = LMap} = Sys, Pid) ->
         [{send, Uid} | _] -> replay_send(Sys, Uid);
         [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
       end;
-    _ -> cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_RoundRobin)
+    _ -> cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_RoundRobin, replay)
   end.
 
 
@@ -241,5 +241,5 @@ replay_until_receive_1(Sys0, ReceiverPid, Uid) ->
   Options :: [cauder_types:option()].
 
 options(Sys, Pid) ->
-  Opts = cauder_semantics_forwards:options(Sys),
+  Opts = cauder_semantics_forwards:options(Sys, replay),
   cauder_utils:filter_options(Opts, Pid).

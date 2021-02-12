@@ -15,6 +15,12 @@
 -define(MENU_EVENT(Id, CmdValue), #wx{id = Id, event = #wxCommand{type = command_menu_selected, commandInt = CmdValue}}).
 -define(BUTTON_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_button_clicked}}).
 
+-define(DBG_SUCCESS(Task, Time, System), {dbg, {success, Task, {}, Time, System}}).
+-define(DBG_SUCCESS(Task, Value, Time, System), {dbg, {success, Task, Value, Time, System}}).
+-define(DBG_CANCEL(Task, Value, Time, System), {dbg, {cancel, Task, Value, Time, System}}).
+-define(DBG_SUSPEND(Task, Value, System), {dbg, {suspend, Task, Value, System}}).
+-define(DBG_FAILURE(Task, Reason), {dbg, {failure, Task, Reason}}).
+
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -560,7 +566,7 @@ handle_cast(Request, State) ->
   State :: state(),
   NewState :: state().
 
-handle_info({dbg, {success, load, {File, Module}, Time, System}}, #wx_state{task = load} = State) ->
+handle_info(?DBG_SUCCESS(load, {File, Module}, Time, System), #wx_state{task = load} = State) ->
   {ok, Src, _} = erl_prim_loader:get_file(File),
 
   CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
@@ -570,115 +576,116 @@ handle_info({dbg, {success, load, {File, Module}, Time, System}}, #wx_state{task
 
   {noreply, refresh(State, State#wx_state{module = Module, system = System, task = undefined})};
 
-handle_info({dbg, {success, start, {}, Time, System}}, #wx_state{task = start} = State) ->
+handle_info(?DBG_SUCCESS(start, {}, Time, System), #wx_state{task = start} = State) ->
   cauder_wx_statusbar:init_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {success, step, {Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
+handle_info(?DBG_SUCCESS(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
   cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {cancel, step, {Sem, Steps}, Time, System}}, #wx_state{task = step} = State) ->
+handle_info(?DBG_CANCEL(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
   cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {suspend, step, {Receiver, Messages}, System}}, #wx_state{frame = Frame, task = step} = State) ->
+handle_info(?DBG_SUSPEND(step, {Receiver, Messages}, System), #wx_state{frame = Frame, task = step} = State) ->
   case cauder_wx_dialog:choose_message(Frame, {Receiver, Messages}) of
     {ok, MessageId} -> cauder:resume(MessageId);
     cancel -> cauder:cancel()
   end,
   {noreply, refresh(State, State#wx_state{system = System})};
 
-handle_info({dbg, {finish, {step_multiple, Sem, Steps}, Time, System}}, #wx_state{task = step_multiple} = State) ->
+
+handle_info(?DBG_SUCCESS(step_multiple, {Sem, Steps}, Time, System), #wx_state{task = step_multiple} = State) ->
   cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {replay_steps, Steps}, Time, System}}, #wx_state{task = replay_steps} = State) ->
+handle_info(?DBG_SUCCESS(replay_steps, Steps, Time, System), #wx_state{task = replay_steps} = State) ->
   cauder_wx_statusbar:replay_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 
-handle_info({dbg, {finish, {replay_spawn, Pid}, Time, System}}, #wx_state{task = replay_spawn} = State) ->
+handle_info(?DBG_SUCCESS(replay_spawn, Pid, Time, System), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_spawn, no_replay}}, #wx_state{task = replay_spawn} = State) ->
+handle_info(?DBG_FAILURE(replay_spawn, no_replay), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {replay_send, Uid}, Time, System}}, #wx_state{task = replay_send} = State) ->
+handle_info(?DBG_SUCCESS(replay_send, Uid, Time, System), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_send, no_replay}}, #wx_state{task = replay_send} = State) ->
+handle_info(?DBG_FAILURE(replay_send, no_replay), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {replay_receive, Uid}, Time, System}}, #wx_state{task = replay_receive} = State) ->
+handle_info(?DBG_SUCCESS(replay_receive, Uid, Time, System), #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_receive, no_replay}}, #wx_state{task = replay_receive} = State) ->
+handle_info(?DBG_FAILURE(replay_receive, no_replay), #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, replay_full_log, Time, System}}, #wx_state{task = replay_full_log} = State) ->
+handle_info(?DBG_SUCCESS(replay_full_log, Time, System), #wx_state{task = replay_full_log} = State) ->
   cauder_wx_statusbar:replay_full_log_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {rollback_steps, Steps}, Time, System}}, #wx_state{task = rollback_steps} = State) ->
+handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = rollback_steps} = State) ->
   cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_spawn, Pid}, Time, System}}, #wx_state{task = rollback_spawn} = State) ->
+handle_info(?DBG_SUCCESS(rollback_spawn, Pid, Time, System), #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_spawn, no_rollback}}, #wx_state{task = rollback_spawn} = State) ->
+handle_info(?DBG_FAILURE(rollback_spawn, no_rollback), #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_send, Uid}, Time, System}}, #wx_state{task = rollback_send} = State) ->
+handle_info(?DBG_SUCCESS(rollback_send, Uid, Time, System), #wx_state{task = rollback_send} = State) ->
   cauder_wx_statusbar:rollback_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_send, no_rollback}}, #wx_state{task = rollback_send} = State) ->
+handle_info(?DBG_FAILURE(rollback_send, no_rollback), #wx_state{task = rollback_send} = State) ->
   cauder_wx_statusbar:rollback_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_receive, Uid}, Time, System}}, #wx_state{task = rollback_receive} = State) ->
+handle_info(?DBG_SUCCESS(rollback_receive, Uid, Time, System), #wx_state{task = rollback_receive} = State) ->
   cauder_wx_statusbar:rollback_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_receive, no_rollback}}, #wx_state{task = rollback_receive} = State) ->
+handle_info(?DBG_FAILURE(rollback_receive, no_rollback), #wx_state{task = rollback_receive} = State) ->
   cauder_wx_statusbar:rollback_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_variable, Name}, Time, System}}, #wx_state{task = rollback_variable} = State) ->
+handle_info(?DBG_SUCCESS(rollback_variable, Name, Time, System), #wx_state{task = rollback_variable} = State) ->
   cauder_wx_statusbar:rollback_variable_finish(Name, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_variable, no_rollback}}, #wx_state{task = rollback_variable} = State) ->
+handle_info(?DBG_FAILURE(rollback_variable, no_rollback), #wx_state{task = rollback_variable} = State) ->
   cauder_wx_statusbar:rollback_variable_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 %%%=============================================================================
 
 % TODO Handle failed tasks when the user did not start the task.
-% i.e.: given {fail, Task1, _} and #wx_state{task = Task2} then Task1 != Task2
+% i.e.: given {failure, Task1, _} and #wx_state{task = Task2} then Task1 != Task2
 
 
 handle_info(Info, State) ->

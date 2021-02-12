@@ -437,9 +437,10 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
                   {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
                   {Bs1, Body, {Msg, QPos}, NewMail};
                 {_SuspendTime, cancel} -> % TODO Use suspend time
-                  throw(cancel_task)
+                  throw(cancel)
               end
           end;
+        % TODO Actually use scheduler
         ?SCHEDULER_RoundRobin ->
           case match_rec(Cs, Bs, Messages) of
             nomatch -> nomatch;
