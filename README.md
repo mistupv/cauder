@@ -84,10 +84,10 @@ Eshell V11.0  (abort with ^G)
 
 #### Using the _escript_
 
-Simply run the `cauder` binary generated in the `bin` folder:
+Simply run the `cauder` binary generated in the `_build/default/bin` folder:
 
 ```shell script
-./bin/cauder
+./_build/default/bin/cauder
 ```
 
 ## Usage
