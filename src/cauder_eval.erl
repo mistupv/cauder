@@ -266,7 +266,7 @@ expr(Bs, E = {start, Line, H, N}, Stk) ->
         true -> eval_and_update({Bs, N, Stk}, {4,E});
         false ->
           Var = cauder_utils:temp_variable(Line),
-          Label = {start, Var, concrete(N)},
+          Label = {start, Var, concrete(H), concrete(N)},
           #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
       end
   end;
