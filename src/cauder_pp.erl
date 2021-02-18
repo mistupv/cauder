@@ -87,8 +87,10 @@ trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Ui
   io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
   io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
-trace_entry(#trace{type = ?RULE_START, from = From, node = Node}) ->
+trace_entry(#trace{type = ?RULE_START, from = From, res = succ, node = Node}) ->
   io_lib:format("~s starts ~s", [pid(From), Node]);
+trace_entry(#trace{type = ?RULE_START, from = From, res = fail, node = Node}) ->
+  io_lib:format("Warning: ~s tried to start ~s and failed", [pid(From), Node]);
 trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
   io_lib:format("~s receives ~p (~p)", [pid(From), Val, Uid]).
 

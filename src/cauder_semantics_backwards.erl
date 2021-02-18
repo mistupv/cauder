@@ -79,6 +79,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       T = #trace{
              type = ?RULE_START,
              from = Pid,
+             res  = succ,
              node = Node
             },
       Sys#sys{
@@ -97,6 +98,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       T = #trace{
              type = ?RULE_START,
              from = Pid,
+             res  = fail,
              node = Node
             },
       Sys#sys{

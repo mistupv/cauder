@@ -35,6 +35,7 @@
 step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
   {#proc{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
   #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0),
+
   case Label of
     tau ->
       P = P0#proc{
@@ -177,6 +178,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
           T = #trace{
                  type = ?RULE_START,
                  from = Pid,
+                 res  = succ,
                  node = NewNode
                 },
           Sys#sys{
@@ -195,6 +197,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
           T = #trace{
                  type = ?RULE_START,
                  from = Pid,
+                 res  = fail,
                  node = NewNode
                 },
           Sys#sys{
@@ -203,7 +206,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
            }
       end;
     {start, VarNode, Host, NewName} ->
-      NewNode = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
+      NewNode = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
       case lists:member(NewNode, Nodes) of
         false ->
           P = P0#proc{
@@ -215,6 +218,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
           T = #trace{
                  type = ?RULE_START,
                  from = Pid,
+                 res  = succ,
                  node = NewNode
                 },
           Sys#sys{
@@ -233,6 +237,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
           T = #trace{
                  type = ?RULE_START,
                  from = Pid,
+                 res  = fail,
                  node = NewNode
                 },
           Sys#sys{

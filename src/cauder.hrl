@@ -96,6 +96,7 @@
   to :: undefined | cauder_types:proc_id(),
   node :: undefined | cauder_types:net_node(),
   val :: undefined | term(),
+  res :: undefined | succ | fail,
   time :: undefined | cauder_types:msg_id()
 }).
 
