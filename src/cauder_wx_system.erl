@@ -30,7 +30,7 @@ create(Parent) ->
 
   NodesAndMail = wxNotebook:new(Win, ?SYSTEM_NodesAndMail),
   wxNotebook:addPage(NodesAndMail, create_nodes(NodesAndMail), "Nodes"),
-  wxNotebook:addPage(NodesAndMail, create_mail(NodesAndMail), "Email"),
+  wxNotebook:addPage(NodesAndMail, create_mail(NodesAndMail), "Mailbox"),
   wxSizer:add(Sizer, NodesAndMail, Expand),
 
   wxSizer:addSpacer(Sizer, 5),
