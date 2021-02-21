@@ -90,7 +90,16 @@ stop() -> gen_server:stop(?SERVER).
 
 -spec subscribe() -> ok.
 
-subscribe() -> gen_server:call(?SERVER, {subscribe, self()}).
+subscribe() -> subscribe(self()).
+
+%%------------------------------------------------------------------------------
+%% @doc Subscribes the process with the given `Pid' to receive information about
+%% system changes.
+
+-spec subscribe(Pid) -> ok when
+  Pid :: pid().
+
+subscribe(Pid) -> gen_server:call(?SERVER, {subscribe, Pid}).
 
 
 %%------------------------------------------------------------------------------
@@ -99,7 +108,16 @@ subscribe() -> gen_server:call(?SERVER, {subscribe, self()}).
 
 -spec unsubscribe() -> ok.
 
-unsubscribe() -> gen_server:call(?SERVER, {unsubscribe, self()}).
+unsubscribe() -> unsubscribe(self()).
+
+%%------------------------------------------------------------------------------
+%% @doc Unsubscribes the process with the given `Pid' to receive information about
+%% system changes.
+
+-spec unsubscribe(Pid) -> ok when
+  Pid :: pid().
+
+unsubscribe(Pid) -> gen_server:call(?SERVER, {unsubscribe, Pid}).
 
 
 %%%=============================================================================
