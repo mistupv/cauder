@@ -46,22 +46,21 @@ pid_get_test_() ->
   M1 = #message{uid = 1, value = "A", src = 1, dest = 3},
   M2 = #message{uid = 3, value = "B", src = 1, dest = 3},
   M3 = #message{uid = 2, value = "C", src = 2, dest = 3},
-  M4 = #message{uid = 4, value = "D", src = 2, dest = 3},
+  M4 = #message{uid = 4, value = "D", src = 2, dest = 1},
   M5 = #message{uid = 6, value = "E", src = 3, dest = 1},
   M6 = #message{uid = 5, value = "F", src = 3, dest = 2},
 
   Mail = add(M6, add(M5, add(M4, add(M3, add(M2, add(M1, new())))))),
 
-  List1 = pid_get(1, Mail),
-  List2 = pid_get(2, Mail),
-  List3 = pid_get(3, Mail),
-  List4 = pid_get(4, Mail),
+  List1 = lists:map(fun queue:to_list/1, pid_get(1, Mail)),
+  List2 = lists:map(fun queue:to_list/1, pid_get(2, Mail)),
+  List3 = lists:map(fun queue:to_list/1, pid_get(3, Mail)),
+  List4 = lists:map(fun queue:to_list/1, pid_get(4, Mail)),
 
   [
-    ?_assertEqual([M5], List1),
-    ?_assertEqual([M6], List2),
-    ?_assertEqual([M1, M2], lists:filter(fun(#message{src = Src}) -> Src =:= 1 end, List3)),
-    ?_assertEqual([M3, M4], lists:filter(fun(#message{src = Src}) -> Src =:= 2 end, List3)),
+    ?_assertEqual([[M4], [M5]], List1),
+    ?_assertEqual([[M6]], List2),
+    ?_assertEqual([[M1, M2], [M3]], List3),
     ?_assertEqual([], List4)
   ].
 

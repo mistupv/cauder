@@ -54,7 +54,7 @@
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
 
 -type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
--type message_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_Manual.
+-type message_scheduler() :: ?SCHEDULER_Random | ?SCHEDULER_Manual.
 
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
 

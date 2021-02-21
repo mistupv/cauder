@@ -85,7 +85,7 @@ replay_step(#sys{logs = LMap} = Sys, Pid) ->
         [{send, Uid} | _] -> replay_send(Sys, Uid);
         [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
       end;
-    _ -> cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_RoundRobin, replay)
+    _ -> cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_Random, replay)
   end.
 
 

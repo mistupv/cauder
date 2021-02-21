@@ -282,7 +282,7 @@ expression_option(Pid, [E0 | Es0], Bs, Stk, Log, Mail, Sys, Mode) ->
           case Mode of
             normal ->
               % TODO Refactor to only check for match, don't returns unnecessary information
-              case cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, ?SCHEDULER_RoundRobin, Sys) of
+              case cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, ?SCHEDULER_Random, Sys) of
                 nomatch -> ?NOT_EXP;
                 _ -> ?RULE_RECEIVE
               end;

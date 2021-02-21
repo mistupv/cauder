@@ -10,7 +10,7 @@
 
 -record(mailbox, {
   index = maps:new() :: #{Uid :: uid() => {Src :: cauder_types:proc_id(), Dest :: cauder_types:proc_id()}},
-  map = maps:new() :: #{Dest :: cauder_types:proc_id() => #{Src :: cauder_types:proc_id() => MsgQueue :: queue:queue(message())}}
+  map = maps:new() :: #{Dest :: cauder_types:proc_id() => orddict:orddict(Src :: cauder_types:proc_id(), MsgQueue :: queue:queue(message()))}
 }).
 
 -opaque mailbox() :: #mailbox{}.
@@ -54,11 +54,15 @@ add(#message{uid = Uid} = Message, #mailbox{index = Index0} = Mailbox) when is_m
 add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
   Index = maps:put(Uid, {Src, Dest}, Index0),
 
-  SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
-  Queue0 = maps:get(Src, SrcMap0, queue:new()),
+  SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
+  Queue0 =
+    case orddict:find(Src, SrcMap0) of
+      {ok, Value} -> Value;
+      error -> queue:new()
+    end,
 
   Queue = queue:in(Message, Queue0),
-  SrcMap = maps:put(Src, Queue, SrcMap0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
   DestMap = maps:put(Dest, SrcMap, DestMap0),
 
   #mailbox{index = Index, map = DestMap}.
@@ -78,11 +82,15 @@ insert(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailb
 insert(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
   Index = maps:put(Uid, {Src, Dest}, Index0),
 
-  SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
-  Queue0 = maps:get(Src, SrcMap0, queue:new()),
+  SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
+  Queue0 =
+    case orddict:find(Src, SrcMap0) of
+      {ok, Value} -> Value;
+      error -> queue:new()
+    end,
 
   Queue = queue_insert(QueuePos, Message, Queue0),
-  SrcMap = maps:put(Src, Queue, SrcMap0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
   DestMap = maps:put(Dest, SrcMap, DestMap0),
 
   #mailbox{index = Index, map = DestMap}.
@@ -101,10 +109,10 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
   Index = maps:remove(Uid, Index0),
 
   SrcMap0 = maps:get(Dest, DestMap0),
-  Queue0 = maps:get(Src, SrcMap0),
+  Queue0 = orddict:fetch(Src, SrcMap0),
 
   Queue = queue_delete(Message, Queue0),
-  SrcMap = maps:put(Src, Queue, SrcMap0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
   DestMap = maps:put(Dest, SrcMap, DestMap0),
 
   QueuePos = queue_index_of(Message, Queue0),
@@ -120,10 +128,14 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
 -spec pid_get(Destination, Mailbox) -> Messages when
   Destination :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
-  Messages :: [message()].
+  Messages :: [queue:queue(message())].
 
 pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
-  lists:flatmap(fun queue:to_list/1, maps:values(maps:get(Dest, DestMap)));
+  lists:filtermap(fun({_, Queue}) ->
+    case queue:is_empty(Queue) of
+      true -> false;
+      false -> {true, Queue}
+    end end,      orddict:to_list(maps:get(Dest, DestMap)));
 pid_get(_, _) -> [].
 
 
@@ -157,7 +169,7 @@ uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
       false;
     {ok, {Src, Dest}} ->
       SrcMap = maps:get(Dest, DestMap),
-      Queue = maps:get(Src, SrcMap),
+      Queue = orddict:fetch(Src, SrcMap),
       {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
       QueuePos = queue_index_of(Message, Queue),
       {_, Mailbox} = delete(Message, Mailbox0),
@@ -174,8 +186,8 @@ uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
   Message :: message().
 
 to_list(#mailbox{map = DestMap}) ->
-  QueueToList = fun queue:to_list/1,
-  MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, maps:values(SrcMap)) end,
+  QueueToList = fun({_, Queue}) -> queue:to_list(Queue) end,
+  MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, orddict:to_list(SrcMap)) end,
   lists:flatmap(MapToList, maps:values(DestMap)).
 
 

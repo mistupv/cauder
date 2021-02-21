@@ -186,7 +186,7 @@ create_manual(Parent) ->
 
   SchedulerItems =
     [
-      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_RoundRobin},
+      {?SCHEDULER_Random_Name, ?SCHEDULER_Random},
       {?SCHEDULER_Manual_Name, ?SCHEDULER_Manual}
     ],
 

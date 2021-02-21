@@ -423,28 +423,48 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
   case cauder_mailbox:pid_get(Pid, Mail) of
     [] -> nomatch;
-    Messages ->
+    QueueList ->
       case Sched of
         ?SCHEDULER_Manual ->
-          case match_rec_all(Cs, Bs, Messages) of
-            nomatch -> nomatch;
-            MatchingBranches ->
-              MatchingMessages = lists:map(fun({_, _, Msg}) -> Msg end, maps:values(MatchingBranches)),
+          FoldQueue =
+            fun
+              (Msg, Map1) ->
+                case match_rec(Cs, Bs, #message{uid = Uid} = Msg) of
+                  {match, Bs1, Body} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
+                  nomatch -> skip
+                end
+            end,
+          FoldQueueList = fun(Queue, Map0) -> lists:foldl(FoldQueue, Map0, queue:to_list(Queue)) end,
+          MatchingBranchesMap = lists:foldl(FoldQueueList, maps:new(), QueueList),
+          case maps:size(MatchingBranchesMap) of
+            0 -> nomatch;
+            _ ->
+              MatchingMessages = lists:map(fun({_, _, Msg}) -> Msg end, maps:values(MatchingBranchesMap)),
               case cauder:suspend_task(Pid, MatchingMessages, Sys) of
                 {_SuspendTime, {resume, Uid}} -> % TODO Use suspend time
                   cauder:resume_task(),
-                  {Bs1, Body, Msg} = maps:get(Uid, MatchingBranches),
+                  {Bs1, Body, Msg} = maps:get(Uid, MatchingBranchesMap),
                   {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
                   {Bs1, Body, {Msg, QPos}, NewMail};
                 {_SuspendTime, cancel} -> % TODO Use suspend time
                   throw(cancel)
               end
           end;
-        % TODO Actually use scheduler
-        ?SCHEDULER_RoundRobin ->
-          case match_rec(Cs, Bs, Messages) of
-            nomatch -> nomatch;
-            {Bs1, Body, Msg} ->
+        ?SCHEDULER_Random ->
+          MatchingBranches = lists:filtermap(
+            fun(Queue) ->
+              {value, Msg} = queue:peek(Queue),
+              case match_rec(Cs, Bs, Msg) of
+                {match, Bs1, Body} -> {true, {Bs1, Body, Msg}};
+                nomatch -> false
+              end
+            end,
+            QueueList
+          ),
+          case length(MatchingBranches) of
+            0 -> nomatch;
+            Length ->
+              {Bs1, Body, Msg} = lists:nth(rand:uniform(Length), MatchingBranches),
               {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
               {Bs1, Body, {Msg, QPos}, NewMail}
           end
@@ -452,48 +472,14 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
   end.
 
 
--spec match_rec(Clauses, Bindings, Messages) -> {NewBindings, Body, Message} | nomatch when
+-spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
-  Messages :: [cauder_mailbox:message()],
+  Message :: cauder_mailbox:message(),
   NewBindings :: cauder_types:environment(),
-  Body :: cauder_types:af_body(),
-  Message :: cauder_types:message().
+  Body :: cauder_types:af_body().
 
-match_rec(_, _, []) -> nomatch;
-match_rec(Cs, Bs0, [#message{value = Value} = Msg | Rest]) ->
-  case match_clause(Bs0, Cs, [abstract(Value)]) of
-    {match, Bs, Body} -> {Bs, Body, Msg};
-    nomatch -> match_rec(Cs, Bs0, Rest)
-  end.
-
-
--spec match_rec_all(Clauses, Bindings, Messages) -> #{Uid => {NewBindings, Body, Message}} | nomatch when
-  Clauses :: cauder_types:af_clause_seq(),
-  Bindings :: cauder_types:environment(),
-  Messages :: [cauder_mailbox:message()],
-  Uid :: cauder_mailbox:uid(),
-  NewBindings :: cauder_types:environment(),
-  Body :: cauder_types:af_body(),
-  Message :: cauder_types:message().
-
-
-match_rec_all(Cs, Bs0, Messages) ->
-  MatchingBranches =
-    lists:foldl(
-      fun(#message{uid = Uid, value = Value} = Msg, Map) ->
-        case match_clause(Bs0, Cs, [abstract(Value)]) of
-          {match, Bs, Body} -> maps:put(Uid, {Bs, Body, Msg}, Map);
-          nomatch -> continue
-        end
-      end,
-      maps:new(),
-      Messages
-    ),
-  case maps:size(MatchingBranches) of
-    0 -> nomatch;
-    _ -> MatchingBranches
-  end.
+match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
 
 -spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
