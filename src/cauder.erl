@@ -11,7 +11,7 @@
 
 %% API
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
--export([subscribe/0, unsubscribe/0]).
+-export([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
