@@ -11,7 +11,7 @@
 
 %% API
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
--export([subscribe/0, unsubscribe/0]).
+-export([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
 -export([load_file/1, init_system/3, init_system/1, stop_system/0]).
 -export([suspend_task/3, resume_task/0]).
 -export([eval_opts/1]).
@@ -99,7 +99,16 @@ stop() -> gen_server:stop(?SERVER).
 
 -spec subscribe() -> ok.
 
-subscribe() -> gen_server:call(?SERVER, {subscribe, self()}).
+subscribe() -> subscribe(self()).
+
+%%------------------------------------------------------------------------------
+%% @doc Subscribes the process with the given `Pid' to receive information about
+%% system changes.
+
+-spec subscribe(Pid) -> ok when
+  Pid :: pid().
+
+subscribe(Pid) -> gen_server:call(?SERVER, {subscribe, Pid}).
 
 
 %%------------------------------------------------------------------------------
@@ -108,7 +117,16 @@ subscribe() -> gen_server:call(?SERVER, {subscribe, self()}).
 
 -spec unsubscribe() -> ok.
 
-unsubscribe() -> gen_server:call(?SERVER, {unsubscribe, self()}).
+unsubscribe() -> unsubscribe(self()).
+
+%%------------------------------------------------------------------------------
+%% @doc Unsubscribes the process with the given `Pid' to receive information about
+%% system changes.
+
+-spec unsubscribe(Pid) -> ok when
+  Pid :: pid().
+
+unsubscribe(Pid) -> gen_server:call(?SERVER, {unsubscribe, Pid}).
 
 
 %%%=============================================================================

@@ -25,7 +25,6 @@ REBAR_URL="https://s3.amazonaws.com/rebar3/rebar3"
 .PHONY: compile
 compile: $(REBAR)
 	@$(REBAR) compile
-	@cp -rf _build/default/lib/cauder/ebin .
 
 
 # ------------------------------------------------------------------------------
@@ -35,7 +34,6 @@ compile: $(REBAR)
 .PHONY: escriptize
 escriptize: $(REBAR)
 	@$(REBAR) escriptize
-	@cp -rf _build/default/bin .
 
 
 # ------------------------------------------------------------------------------
@@ -75,7 +73,5 @@ clean: $(REBAR)
 
 .PHONY: distclean
 distclean:
-	@rm -rf bin
-	@rm -rf ebin
 	@rm -rf _build
 	@rm ./$(REBAR)
