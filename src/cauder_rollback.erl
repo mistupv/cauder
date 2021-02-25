@@ -107,7 +107,10 @@ rollback_step(#sys{procs = PMap, roll = RollLog} = Sys0, Pid) ->
       rollback_send(Sys, Pid, Dest, Uid);
     _ ->
       [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
-       Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 
@@ -185,7 +188,10 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
       Sys1 = rollback_step(Sys0, SpawnPid),
       rollback_spawn(Sys1, Pid, SpawnPid);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 
@@ -203,7 +209,10 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
       Sys1 = rollback_step(Sys0, DestPid),
       rollback_send(Sys1, Pid, DestPid, Uid);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 

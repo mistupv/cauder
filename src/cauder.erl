@@ -1061,21 +1061,29 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
   try
     lists:foldl(
       fun(Step, {Sys0}) ->
-        CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid andalso Opt#opt.sem =:= Sem end, cauder:eval_opts(Sys0)),
-        case CanStep of
-          false -> throw({success, Sys0, Step});
-          true ->
-            Sys1 =
-              case Sem of
-                ?FWD_SEM ->
-                  try
-                    cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal)
-                  catch
-                    throw:cancel -> throw({cancel, Sys0, Step})
-                  end;
-                ?BWD_SEM -> ?BWD_SEM:step(Sys0, Pid)
-              end,
-            {Sys1}
+        case Sem of
+          ?FWD_SEM ->
+            Opts = cauder_semantics_forwards:options(Sys0, normal),
+            CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
+            case CanStep of
+              false -> throw({success, Sys0, Step});
+              true ->
+                try
+                  Sys1 = cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal),
+                  {Sys1}
+                catch
+                  throw:cancel -> throw({cancel, Sys0, Step})
+                end
+            end;
+          ?BWD_SEM ->
+            Opts = cauder_semantics_backwards:options(Sys0),
+            CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
+            case CanStep of
+              false -> throw({success, Sys0, Step});
+              true ->
+                Sys1 = cauder_semantics_backwards:step(Sys0, Pid),
+                {Sys1}
+            end
         end
       end,
       {Sys},
@@ -1101,7 +1109,12 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
     SchedFun = cauder_scheduler:get(Scheduler),
     lists:foldl(
       fun(Step, {Sys0, PidSet0, PidQueue0}) ->
-        PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Sem:options(Sys0)),
+        Opts =
+          case Sem of
+            ?FWD_SEM -> cauder_semantics_forwards:options(Sys0, normal);
+            ?BWD_SEM -> cauder_semantics_backwards:options(Sys0)
+          end,
+        PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
         case sets:is_empty(PidSet1) of
           true -> throw({Sys0, Step});
           false ->
@@ -1119,7 +1132,11 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
                   {remove, ChangePid}
               end,
             {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
-            Sys1 = Sem:step(Sys0, Pid),
+            Sys1 =
+              case Sem of
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+              end,
             {Sys1, PidSet1, PidQueue1}
         end
       end,
