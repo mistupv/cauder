@@ -130,12 +130,12 @@ update_bindings(_, #wx_state{config = #config{bindings = false}}) ->
 update_bindings(_, #wx_state{system = undefined}) ->
   show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
   wxListCtrl:deleteAllItems(cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl)),
-  ets:delete(?GUI_DB, ?IDX_TO_KEY),
+  ets:delete(?GUI_DB, ?BINDINGS_IDX_TO_KEY),
   ok;
 update_bindings(_, #wx_state{pid = undefined}) ->
   show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
   wxListCtrl:deleteAllItems(cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl)),
-  ets:delete(?GUI_DB, ?IDX_TO_KEY),
+  ets:delete(?GUI_DB, ?BINDINGS_IDX_TO_KEY),
   ok;
 update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{bindings_mode = all}}) ->
   show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
@@ -158,7 +158,7 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
       {0, #{}},
       Bs
     ),
-  ets:insert(?GUI_DB, {?IDX_TO_KEY, IdxToKey}),
+  ets:insert(?GUI_DB, {?BINDINGS_IDX_TO_KEY, IdxToKey}),
   wxListCtrl:thaw(BindingsControl);
 update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{bindings_mode = relevant}}) ->
   show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
@@ -184,7 +184,7 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
       {0, #{}},
       Bs1
     ),
-  ets:insert(?GUI_DB, {?IDX_TO_KEY, IdxToKey}),
+  ets:insert(?GUI_DB, {?BINDINGS_IDX_TO_KEY, IdxToKey}),
   wxListCtrl:thaw(BindingsControl).
 
 

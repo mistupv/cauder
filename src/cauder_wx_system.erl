@@ -83,15 +83,20 @@ create_mail(Parent) ->
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 1, Item),
 
-  wxListItem:setText(Item, "Dest."),
+  wxListItem:setText(Item, "Src."),
   wxListItem:setFont(Item, Font),
   wxListCtrl:insertColumn(MailArea, 2, Item),
 
+  wxListItem:setText(Item, "Dest."),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MailArea, 3, Item),
+
   wxListItem:destroy(Item),
 
-  wxListCtrl:setColumnWidth(MailArea, 0, 75),
+  wxListCtrl:setColumnWidth(MailArea, 0, 50),
   wxListCtrl:setColumnWidth(MailArea, 1, 150),
-  wxListCtrl:setColumnWidth(MailArea, 2, 75),
+  wxListCtrl:setColumnWidth(MailArea, 2, 50),
+  wxListCtrl:setColumnWidth(MailArea, 3, 50),
 
   wxListCtrl:connect(MailArea, command_list_item_activated),
 
@@ -124,12 +129,13 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mo
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   lists:foldl(
-    fun(#message{uid = Uid, value = Value, dest = Dest}, Row) ->
+    fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
       wxListCtrl:insertItem(MailArea, Row, ""),
       wxListCtrl:setItemFont(MailArea, Row, Font),
       wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
       wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
-      wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Dest)),
+      wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
+      wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
       Row + 1
     end, 0, cauder_mailbox:to_list(Mail)),
   wxListCtrl:thaw(MailArea),
@@ -144,12 +150,13 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config
     undefined -> ok;
     Pid ->
       lists:foldl(
-        fun(#message{uid = Uid, value = Value, dest = Dest}, Row) ->
+        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
           wxListCtrl:insertItem(MailArea, Row, ""),
           wxListCtrl:setItemFont(MailArea, Row, Font),
           wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
           wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
-          wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Dest)),
+          wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
+          wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
           Row + 1
         end, 0, cauder_mailbox:pid_get(Pid, Mail))
   end,

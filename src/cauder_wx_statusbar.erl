@@ -8,8 +8,8 @@
 -export([init_start/0, init_finish/1]).
 -export([stop_finish/0]).
 % Manual
--export([step_start/1, step_finish/3]).
--export([step_over_finish/3, step_into_finish/3, step_multiple_finish/3]).
+-export([step_start/1, step_finish/3, step_suspend/0]).
+-export([step_multiple_finish/3]).
 % Replay
 -export([replay_steps_start/0, replay_steps_finish/2]).
 -export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
@@ -186,41 +186,22 @@ step_start(Sem) ->
   set_text(Status).
 
 
--spec step_finish(Semantics, Rule, Time) -> ok when
+-spec step_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
   Semantics :: cauder_types:semantics(),
-  Rule :: cauder_types:rule(),
+  StepsDone :: non_neg_integer(),
+  StepsTotal :: pos_integer(),
   Time :: non_neg_integer().
 
-step_finish(Sem, Rule, Time) ->
+step_finish(Sem, {Done, Total}, Time) ->
   SemStr = semantics_to_string(Sem),
-  RuleStr = rule_to_string(Rule),
   TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_FINISH, [SemStr, RuleStr, TimeStr]),
+  Status = io_lib:format(?STEP_FINISH, [Done, Total, SemStr, TimeStr]),
   set_text(Status).
 
 
--spec step_over_finish(Semantics, Steps, Time) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer(),
-  Time :: non_neg_integer().
+-spec step_suspend() -> ok.
 
-step_over_finish(Sem, Steps, Time) ->
-  SemStr = semantics_to_string(Sem),
-  TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_OVER_FINISH, [Steps, SemStr, TimeStr]),
-  set_text(Status).
-
-
--spec step_into_finish(Semantics, Steps, Time) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer(),
-  Time :: non_neg_integer().
-
-step_into_finish(Sem, Steps, Time) ->
-  SemStr = semantics_to_string(Sem),
-  TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_INTO_FINISH, [Steps, SemStr, TimeStr]),
-  set_text(Status).
+step_suspend() -> set_text(?STEP_SUSPEND).
 
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
@@ -479,17 +460,6 @@ set_text(Text) ->
 
 semantics_to_string(?FWD_SEM) -> "forward";
 semantics_to_string(?BWD_SEM) -> "backward".
-
-
--spec rule_to_string(Rule) -> String when
-  Rule :: cauder_types:rule(),
-  String :: string().
-
-rule_to_string(?RULE_SEQ)     -> "Seq";
-rule_to_string(?RULE_SELF)    -> "Self";
-rule_to_string(?RULE_SPAWN)   -> "Spawn";
-rule_to_string(?RULE_SEND)    -> "Send";
-rule_to_string(?RULE_RECEIVE) -> "Receive".
 
 
 -spec time_to_string(Time) -> String when

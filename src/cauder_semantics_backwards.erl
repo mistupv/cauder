@@ -26,9 +26,9 @@
   NewSystem :: cauder_types:system().
 
 step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
-  {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+  {#proc{pid = Pid, hist = [Entry0 | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
 
-  case Entry of
+  case Entry0 of
     {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self ->
       P = P0#proc{
         hist  = RestHist,
@@ -52,14 +52,15 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         from = Pid,
         to   = Gid
       },
+      Entry1 = {spawn, Gid},
       Sys#sys{
         mail  = Mail,
         procs = maps:remove(Gid, PMap#{Pid => P}),
-        logs  = maps:update_with(Pid, fun(Log) -> [{spawn, Gid} | Log] end, [], LMap),
+        logs  = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
         trace = lists:delete(T, Trace)
       };
-    {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
-      OldMail = cauder_mailbox:delete(Msg, Mail),
+    {send, Bs, Es, Stk, #message{uid = Uid, value = Value, dest = Dest} = Msg} ->
+      {_, OldMail} = cauder_mailbox:delete(Msg, Mail),
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -70,16 +71,17 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
         type = ?RULE_SEND,
         from = Pid,
         to   = Dest,
-        val  = Val,
+        val  = Value,
         time = Uid
       },
+      Entry1 = {send, Uid},
       Sys#sys{
         mail  = OldMail,
         procs = PMap#{Pid => P},
-        logs  = maps:update_with(Pid, fun(Log) -> [{send, Uid} | Log] end, [], LMap),
+        logs  = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
         trace = lists:delete(T, Trace)
       };
-    {rec, Bs, Es, Stk, M = #message{dest = Pid, value = Val, uid = Uid}} ->
+    {rec, Bs, Es, Stk, M = #message{uid = Uid, value = Value, dest = Pid}, QPos} ->
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -89,13 +91,14 @@ step(#sys{mail = Mail, logs = LMap, trace = Trace} = Sys, Pid) ->
       T = #trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val  = Val,
+        val  = Value,
         time = Uid
       },
+      Entry1 = {'receive', Uid},
       Sys#sys{
-        mail  = cauder_mailbox:add_r(M, Mail),
+        mail  = cauder_mailbox:insert(M, QPos, Mail),
         procs = PMap#{Pid => P},
-        logs  = maps:update_with(Pid, fun(Log) -> [{'receive', Uid} | Log] end, [], LMap),
+        logs  = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
         trace = lists:delete(T, Trace)
       }
   end.
@@ -153,5 +156,5 @@ process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk
     true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
     false -> ?NULL_OPT
   end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg} | _]}) ->
+process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
   #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.
