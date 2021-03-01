@@ -72,7 +72,7 @@ pattern({cons, Anno, H0, T0}) ->
   end;
 pattern({tuple, Anno, Es0}) ->
   Es1 = pattern_list(Es0),
-  try lists:map(fun({value, _, V}) -> V end, Es1) of
+  try lists:map(fun get_value/1, Es1) of
     Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
@@ -163,7 +163,7 @@ gexpr({cons, Anno, H0, T0}) ->
   end;
 gexpr({tuple, Anno, Es0}) ->
   Es1 = gexpr_list(Es0),
-  try lists:map(fun({value, _, V}) -> V end, Es1) of
+  try lists:map(fun get_value/1, Es1) of
     Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
@@ -220,8 +220,7 @@ expr({cons, Anno, H0, T0}) ->
   end;
 expr({tuple, Anno, Es0}) ->
   Es1 = expr_list(Es0),
-  GetValue = fun({value, _, V}) -> V end,
-  try lists:map(GetValue, Es1) of
+  try lists:map(fun get_value/1, Es1) of
     Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
@@ -338,6 +337,16 @@ check_guard_op(Op, Arity, AllowedTypes) ->
     true -> ok;
     false -> exception(error, guard_expr)
   end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the Erlang term represented by the given `AbstractLiteral'.
+
+-spec get_value(AbstractLiteral) -> Term when
+  AbstractLiteral :: cauder_types:af_literal(),
+  Term :: term().
+
+get_value({value, _, V}) -> V.
 
 
 %%%=============================================================================
