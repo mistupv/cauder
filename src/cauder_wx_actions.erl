@@ -145,73 +145,72 @@ create_manual(Parent) ->
   SizerH = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Border, SizerH, [{proportion, 1}, {flag, ?wxALL bor ?wxALIGN_CENTER}, {border, ?SPACER_LARGE}]),
 
-  SizerV = wxBoxSizer:new(?wxVERTICAL),
-  wxBoxSizer:add(SizerH, SizerV, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
+  Content = wxBoxSizer:new(?wxVERTICAL),
+  wxBoxSizer:add(SizerH, Content, [{proportion, 1}, {flag, ?wxALIGN_CENTER}]),
 
-  % ----- Buttons -----
+  InputSize = {size, {150, -1}},
 
-  Buttons = wxBoxSizer:new(?wxVERTICAL),
-  wxBoxSizer:add(SizerV, Buttons, [{flag, ?wxEXPAND}]),
+  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {75, -1}}],
+  CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
+  CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
-  % Step
+  % Steps
 
-  Step = wxPanel:new(Win, [{winid, ?ACTION_Manual_Step}]),
-  wxBoxSizer:add(Buttons, Step),
+  Steps = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, Steps, CenterHorizontal),
 
-  StepSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Step, [{label, "Step"}]),
-  wxPanel:setSizer(Step, StepSizer),
+  StepsText = wxStaticText:new(Win, ?wxID_ANY, "Steps:", StaticAlignRight),
+  wxBoxSizer:add(Steps, StepsText, CenterVertical),
 
-  StepBwd = wxButton:new(Step, ?ACTION_Manual_Step_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(StepSizer, StepBwd),
+  wxBoxSizer:addSpacer(Steps, ?SPACER_SMALL),
 
-  wxBoxSizer:addSpacer(StepSizer, ?SPACER_SMALL),
-
-  StepFwd = wxButton:new(Step, ?ACTION_Manual_Step_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(StepSizer, StepFwd),
+  StepsSpin = wxSpinCtrl:new(Win, [{id, ?ACTION_Manual_Steps}, {min, 1}, {max, ?MAX_STEPS}, {initial, 1}, InputSize]),
+  wxBoxSizer:add(Steps, StepsSpin, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   % -----
 
-  wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
 
-  % Step Over
+  % Scheduler
 
-  StepOver = wxPanel:new(Win, [{winid, ?ACTION_Manual_StepOver}]),
-  wxBoxSizer:add(Buttons, StepOver),
+  Scheduler = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, Scheduler, CenterHorizontal),
 
-  StepOverSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, StepOver, [{label, "Step Over"}]),
-  wxPanel:setSizer(StepOver, StepOverSizer),
+  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Msg. Sched.:", StaticAlignRight),
+  wxBoxSizer:add(Scheduler, SchedulerText, CenterVertical),
 
-  StepOverBwd = wxButton:new(StepOver, ?ACTION_Manual_StepOver_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(StepOverSizer, StepOverBwd),
+  wxBoxSizer:addSpacer(Scheduler, ?SPACER_SMALL),
 
-  wxBoxSizer:addSpacer(StepOverSizer, ?SPACER_SMALL),
+  SchedulerChoice = wxChoice:new(Win, ?ACTION_Manual_Scheduler, [InputSize]),
+  wxBoxSizer:add(Scheduler, SchedulerChoice, CenterVertical),
 
-  StepOverFwd = wxButton:new(StepOver, ?ACTION_Manual_StepOver_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(StepOverSizer, StepOverFwd),
+  SchedulerItems =
+    [
+      {?SCHEDULER_Random_Name, ?SCHEDULER_Random},
+      {?SCHEDULER_Manual_Name, ?SCHEDULER_Manual}
+    ],
 
-  wxPanel:hide(StepOver), % Temporarily hidden
+  populate_choice(SchedulerChoice, SchedulerItems),
+
+  wxChoice:setSelection(SchedulerChoice, 0),
+  wxChoice:enable(SchedulerChoice, [{enable, length(SchedulerItems) > 1}]),
 
   % -----
 
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
+  % Buttons
+
+  Buttons = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Content, Buttons, CenterHorizontal),
+
+  BwdButton = wxButton:new(Win, ?ACTION_Manual_Backward_Button, [{label, "Backward"}]),
+  wxBoxSizer:add(Buttons, BwdButton, CenterVertical),
+
   wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
-  % Step Into
-
-  StepInto = wxPanel:new(Win, [{winid, ?ACTION_Manual_StepInto}]),
-  wxBoxSizer:add(Buttons, StepInto),
-
-  StepIntoSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, StepInto, [{label, "Step Into"}]),
-  wxPanel:setSizer(StepInto, StepIntoSizer),
-
-  StepIntoBwd = wxButton:new(StepInto, ?ACTION_Manual_StepInto_Backward_Button, [{label, "Backward"}]),
-  wxBoxSizer:add(StepIntoSizer, StepIntoBwd),
-
-  wxBoxSizer:addSpacer(StepIntoSizer, ?SPACER_SMALL),
-
-  StepIntoFwd = wxButton:new(StepInto, ?ACTION_Manual_StepInto_Forward_Button, [{label, "Forward"}]),
-  wxBoxSizer:add(StepIntoSizer, StepIntoFwd),
-
-  wxPanel:hide(StepInto), % Temporarily hidden
+  FwdButton = wxButton:new(Win, ?ACTION_Manual_Forward_Button, [{label, "Forward"}]),
+  wxBoxSizer:add(Buttons, FwdButton, CenterVertical),
 
   Win.
 
@@ -234,21 +233,13 @@ update_manual(_, #wx_state{pid = undefined}) ->
 update_manual(_, #wx_state{system = System, pid = Pid}) ->
   wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
-  ProcOpts = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
-  ManualStep = cauder_wx:find(?ACTION_Manual_Step, wxPanel),
+  Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
+  CanFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
+  CanBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
 
-  case ProcOpts of
-    [] ->
-      wxPanel:disable(ManualStep);
-    _ ->
-      wxPanel:enable(ManualStep),
-
-      CanStepFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, ProcOpts),
-      CanStepBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, ProcOpts),
-
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Forward_Button, wxButton), [{enable, CanStepFwd}]),
-      wxButton:enable(cauder_wx:find(?ACTION_Manual_Step_Backward_Button, wxButton), [{enable, CanStepBwd}])
-  end,
+  wxSpinCtrl:enable(cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
+  wxButton:enable(cauder_wx:find(?ACTION_Manual_Backward_Button, wxSpinCtrl), [{enable, CanBwd}]),
   ok.
 
 
@@ -273,7 +264,7 @@ create_automatic(Parent) ->
 
   InputSize = {size, {150, -1}},
 
-  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {60, -1}}],
+  StaticAlignRight = [{style, ?wxALIGN_RIGHT bor ?wxST_NO_AUTORESIZE}, {size, {75, -1}}],
   CenterHorizontal = [{flag, ?wxALIGN_CENTER_HORIZONTAL}],
   CenterVertical = [{flag, ?wxALIGN_CENTER_VERTICAL}],
 
@@ -299,7 +290,7 @@ create_automatic(Parent) ->
   Scheduler = wxBoxSizer:new(?wxHORIZONTAL),
   wxBoxSizer:add(Content, Scheduler, CenterHorizontal),
 
-  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Scheduler:", StaticAlignRight),
+  SchedulerText = wxStaticText:new(Win, ?wxID_ANY, "Proc. Sched.:", StaticAlignRight),
   wxBoxSizer:add(Scheduler, SchedulerText, CenterVertical),
 
   wxBoxSizer:addSpacer(Scheduler, ?SPACER_SMALL),
@@ -309,7 +300,7 @@ create_automatic(Parent) ->
 
   SchedulerItems =
     [
-      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_ROUND_ROBIN},
+      {?SCHEDULER_RoundRobin_Name, ?SCHEDULER_RoundRobin},
       {?SCHEDULER_FCFS_Name, ?SCHEDULER_FCFS}
     ],
 

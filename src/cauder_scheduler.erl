@@ -3,16 +3,20 @@
 %% API
 -export([get/1]).
 
+
+-ifdef(EUNIT).
+-export([scheduler_round_robin/2, scheduler_fcfs/2]).
+-endif.
+
+
 -include("cauder.hrl").
 
--type change() :: none |
-                  {init, [cauder_types:proc_id(), ...]} |
-                  {add, cauder_types:proc_id()} |
-                  {remove, cauder_types:proc_id()}.
+-type change(Item) :: none |
+                      {init, [Item, ...]} |
+                      {add, Item} |
+                      {remove, Item}.
 
--type proc_queue() :: queue:queue(cauder_types:proc_id()).
-
--type scheduler_fun() :: fun((proc_queue(), change()) -> {cauder_types:proc_id(), proc_queue()}).
+-type scheduler_fun(Item) :: fun((Queue :: queue:queue(Item), Change :: change(Item)) -> {Item, NewQueue :: queue:queue(Item)}).
 
 
 %%%=============================================================================
@@ -26,7 +30,7 @@
 
 -spec get(Key) -> SchedulerFun when
   Key :: atom(),
-  SchedulerFun :: scheduler_fun().
+  SchedulerFun :: scheduler_fun(_).
 
 get(Key) ->
   maps:get(Key, schedulers()).
@@ -46,11 +50,11 @@ get(Key) ->
 -spec schedulers() -> Map when
   Map :: #{Key := SchedulerFun},
   Key :: atom(),
-  SchedulerFun :: scheduler_fun().
+  SchedulerFun :: scheduler_fun(_).
 
 schedulers() ->
   #{
-    ?SCHEDULER_ROUND_ROBIN => fun scheduler_round_robin/2,
+    ?SCHEDULER_RoundRobin => fun scheduler_round_robin/2,
     ?SCHEDULER_FCFS => fun scheduler_fcfs/2
   }.
 
@@ -63,55 +67,82 @@ schedulers() ->
 %%------------------------------------------------------------------------------
 %% @doc Round-robin scheduling implementation.
 
--spec scheduler_round_robin(Queue, Change) -> {Pid, NewQueue} when
-  Queue :: proc_queue(),
-  Change :: change(),
-  Pid :: cauder_types:proc_id(),
-  NewQueue :: proc_queue().
+-spec scheduler_round_robin(Queue, Change) -> {Item, NewQueue} when
+  Queue :: queue:queue(Item),
+  Change :: change(Item),
+  Item :: term(),
+  NewQueue :: queue:queue(Item).
 
+scheduler_round_robin(Q0, {init, [Item | Items]}) ->
+  case queue:is_empty(Q0) of
+    false -> error(not_empty);
+    true ->
+      Q1 = lists:foldl(fun queue:in/2, Q0, Items),
+      Q2 = queue:in(Item, Q1),
+      {Item, Q2}
+  end;
 scheduler_round_robin(Q0, none) ->
-  {{value, Pid}, Q1} = queue:out(Q0),
-  Q2 = queue:in(Pid, Q1),
-  {Pid, Q2};
-scheduler_round_robin(Q0, {init, [Pid | Ps]}) ->
-  Q1 = lists:foldl(fun queue:in/2, Q0, Ps),
-  Q2 = queue:in(Pid, Q1),
-  {Pid, Q2};
-scheduler_round_robin(Q0, {add, NewPid}) ->
-  {{value, Pid}, Q1} = queue:out(Q0),
-  Q2 = queue:in(NewPid, Q1),
-  Q3 = queue:in(Pid, Q2),
-  {Pid, Q3};
-scheduler_round_robin(Q0, {remove, OldPid}) ->
-  % The removed Pid must be the one at the end of the queue, the last one that was given "cpu time"
-  {{value, OldPid}, Q1} = queue:out_r(Q0),
-  {{value, Pid}, Q2} = queue:out(Q1),
-  Q3 = queue:in(Pid, Q2),
-  {Pid, Q3}.
+  case queue:out(Q0) of
+    {empty, _} -> error(empty);
+    {{value, Item}, Q1} ->
+      Q2 = queue:in(Item, Q1),
+      {Item, Q2}
+  end;
+scheduler_round_robin(Q0, {add, NewItem}) ->
+  case queue:out(Q0) of
+    {empty, _} -> error(empty);
+    {{value, Item}, Q1} ->
+      Q2 = queue:in(NewItem, Q1),
+      Q3 = queue:in(Item, Q2),
+      {Item, Q3}
+  end;
+scheduler_round_robin(Q0, {remove, OldItem}) ->
+  % The removed Item must be the one at the end of the queue, the last one that was given "cpu time"
+  case queue:out_r(Q0) of
+    {empty, _} -> error(empty);
+    {{value, OldItem}, Q1} ->
+      {{value, Item}, Q2} = queue:out(Q1),
+      Q3 = queue:in(Item, Q2),
+      {Item, Q3};
+    {{value, _}, _} -> error(not_tail)
+  end.
 
 
 %%------------------------------------------------------------------------------
 %% @doc First come, first served scheduling implementation.
 
--spec scheduler_fcfs(Queue, Change) -> {Pid, NewQueue} when
-  Queue :: proc_queue(),
-  Change :: change(),
-  Pid :: cauder_types:proc_id(),
-  NewQueue :: proc_queue().
+-spec scheduler_fcfs(Queue, Change) -> {Item, NewQueue} when
+  Queue :: queue:queue(Item),
+  Change :: change(Item),
+  Item :: term(),
+  NewQueue :: queue:queue(Item).
 
-scheduler_fcfs(Q0, none) ->
-  {value, Pid} = queue:peek(Q0),
-  {Pid, Q0};
 scheduler_fcfs(Q0, {init, Ps}) ->
-  Q1 = lists:foldl(fun queue:in/2, Q0, Ps),
-  {value, Pid} = queue:peek(Q1),
-  {Pid, Q1};
-scheduler_fcfs(Q0, {add, NewPid}) ->
-  {value, Pid} = queue:peek(Q0),
-  Q1 = queue:in(NewPid, Q0),
-  {Pid, Q1};
-scheduler_fcfs(Q0, {remove, OldPid}) ->
-  % The removed Pid must be the first one in the queue, the last one that was given "cpu time"
-  {{value, OldPid}, Q1} = queue:out(Q0),
-  {value, Pid} = queue:peek(Q1),
-  {Pid, Q1}.
+  case queue:is_empty(Q0) of
+    false -> error(not_empty);
+    true ->
+      Q1 = lists:foldl(fun queue:in/2, Q0, Ps),
+      {value, Item} = queue:peek(Q1),
+      {Item, Q1}
+  end;
+scheduler_fcfs(Q0, none) ->
+  case queue:peek(Q0) of
+    empty -> error(empty);
+    {value, Item} -> {Item, Q0}
+  end;
+scheduler_fcfs(Q0, {add, NewItem}) ->
+  case queue:peek(Q0) of
+    empty -> error(empty);
+    {value, Item} ->
+      Q1 = queue:in(NewItem, Q0),
+      {Item, Q1}
+  end;
+scheduler_fcfs(Q0, {remove, OldItem}) ->
+  % The removed Item must be the first one in the queue, the last one that was given "cpu time"
+  case queue:out(Q0) of
+    {empty, _} -> error(empty);
+    {{value, OldItem}, Q1} ->
+      {value, Item} = queue:peek(Q1),
+      {Item, Q1};
+    {{value, _}, _} -> error(not_head)
+  end.
