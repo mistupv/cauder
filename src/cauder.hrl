@@ -44,8 +44,10 @@
 %%% Schedulers
 %%%=============================================================================
 
--define(SCHEDULER_ROUND_ROBIN, round_robin).
+-define(SCHEDULER_RoundRobin, round_robin).
 -define(SCHEDULER_FCFS, fcfs).
+-define(SCHEDULER_Random, random).
+-define(SCHEDULER_Manual, manual).
 
 
 %%%=============================================================================
@@ -93,7 +95,9 @@
   uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
   % Message
   value :: term(),
-  % Destination
+  % Sender PID
+  src :: cauder_types:proc_id(),
+  % Receiver PID
   dest :: cauder_types:proc_id()
 }).
 

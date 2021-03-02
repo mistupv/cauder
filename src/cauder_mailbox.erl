@@ -2,13 +2,18 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/2, add_r/2, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
+-export([new/0, add/2, insert/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
 -export_type([mailbox/0, uid/0, message/0]).
 
 -include("cauder.hrl").
 
--opaque mailbox() :: {queue:queue(uid()), #{cauder_types:proc_id() => queue:queue(message())}}.
+-record(mailbox, {
+  index = maps:new() :: #{Uid :: uid() => {Src :: cauder_types:proc_id(), Dest :: cauder_types:proc_id()}},
+  map = maps:new() :: #{Dest :: cauder_types:proc_id() => orddict:orddict(Src :: cauder_types:proc_id(), MsgQueue :: queue:queue(message()))}
+}).
+
+-opaque mailbox() :: #mailbox{}.
 -opaque uid() :: pos_integer().
 -type message() :: #message{}.
 
@@ -32,8 +37,7 @@ uid() ->
 
 -spec new() -> mailbox().
 
-new() ->
-  {queue:new(), maps:new()}.
+new() -> #mailbox{}.
 
 
 %%------------------------------------------------------------------------------
@@ -45,74 +49,94 @@ new() ->
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
-  case queue:member(Uid, Uids) of
-    true ->
-      error({existing_uid, Uid}, [Message, Mailbox]);
-    false ->
-      QueueIn = fun(Queue) -> queue:in(Message, Queue) end,
-      Map1 = maps:update_with(Dest, QueueIn, queue:from_list([Message]), Map0),
-      {queue:in(Uid, Uids), Map1}
-  end.
+add(#message{uid = Uid} = Message, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
+  error({existing_uid, Uid}, [Message, Mailbox]);
+add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+  Index = maps:put(Uid, {Src, Dest}, Index0),
+
+  SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
+  Queue0 =
+    case orddict:find(Src, SrcMap0) of
+      {ok, Value} -> Value;
+      error -> queue:new()
+    end,
+
+  Queue = queue:in(Message, Queue0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
+
+  #mailbox{index = Index, map = DestMap}.
 
 %%------------------------------------------------------------------------------
-%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' appended to
-%% the front.
+%% @doc Returns a new mailbox formed from `Mailbox1' with `Message' inserted at
+%% `QueuePos'.
 
--spec add_r(Message, Mailbox1) -> Mailbox2 when
+-spec insert(Message, QueuePos, Mailbox1) -> Mailbox2 when
   Message :: message(),
+  QueuePos :: pos_integer(),
   Mailbox1 :: mailbox(),
   Mailbox2 :: mailbox().
 
-add_r(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
-  case queue:member(Uid, Uids) of
-    true ->
-      error({existing_uid, Uid}, [Message, Mailbox]);
-    false ->
-      QueueIn = fun(Queue) -> queue:in_r(Message, Queue) end,
-      Map1 = maps:update_with(Dest, QueueIn, queue:from_list([Message]), Map0),
-      {queue:in_r(Uid, Uids), Map1}
-  end.
+insert(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
+  error({existing_uid, Uid}, [Message, QueuePos, Mailbox]);
+insert(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
+  Index = maps:put(Uid, {Src, Dest}, Index0),
+
+  SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
+  Queue0 =
+    case orddict:find(Src, SrcMap0) of
+      {ok, Value} -> Value;
+      error -> queue:new()
+    end,
+
+  Queue = queue_insert(QueuePos, Message, Queue0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
+
+  #mailbox{index = Index, map = DestMap}.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec delete(Message, Mailbox1) -> Mailbox2 when
+-spec delete(Message, Mailbox1) -> {QueuePosition, Mailbox2} when
   Message :: message(),
   Mailbox1 :: mailbox(),
+  QueuePosition :: pos_integer(),
   Mailbox2 :: mailbox().
 
-delete(#message{uid = Uid, dest = Dest} = Message, {Uids, Map0} = Mailbox) ->
-  case queue:member(Uid, Uids) of
-    false -> Mailbox;
-    true ->
-      Queue = maps:get(Dest, Map0),
-      NewQueue = queue_delete(Message, Queue),
-      Map1 =
-        case queue:is_empty(NewQueue) of
-          true ->
-            maps:remove(Dest, Map0);
-          false ->
-            Map0#{Dest := NewQueue}
-        end,
-      {queue_delete(Uid, Uids), Map1}
-  end.
+delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+  Index = maps:remove(Uid, Index0),
+
+  SrcMap0 = maps:get(Dest, DestMap0),
+  Queue0 = orddict:fetch(Src, SrcMap0),
+
+  Queue = queue_delete(Message, Queue0),
+  SrcMap = orddict:store(Src, Queue, SrcMap0),
+  DestMap = maps:put(Dest, SrcMap, DestMap0),
+
+  QueuePos = queue_index_of(Message, Queue0),
+  Mailbox = #mailbox{index = Index, map = DestMap},
+
+  {QueuePos, Mailbox}.
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns `Mailbox1', but with `Message' removed.
+%% @doc Returns the messages from `Mailbox' whose destination is the given
+%% `Destination'.
 
--spec pid_get(Pid, Mailbox) -> Messages when
-  Pid :: cauder_types:proc_id(),
+-spec pid_get(Destination, Mailbox) -> Messages when
+  Destination :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
-  Messages :: [message()].
+  Messages :: [queue:queue(message())].
 
-pid_get(Pid, {_, Map}) ->
-  case maps:find(Pid, Map) of
-    {ok, Queue} -> queue:to_list(Queue);
-    error -> []
-  end.
+pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
+  lists:filtermap(fun({_, Queue}) ->
+    case queue:is_empty(Queue) of
+      true -> false;
+      false -> {true, Queue}
+    end end,      orddict:to_list(maps:get(Dest, DestMap)));
+pid_get(_, _) -> [].
 
 
 %%------------------------------------------------------------------------------
@@ -123,78 +147,48 @@ pid_get(Pid, {_, Map}) ->
   Uid :: uid(),
   Mailbox :: mailbox().
 
-uid_member(Uid, {Uids, _}) ->
-  queue:member(Uid, Uids).
+uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 
 
 %%------------------------------------------------------------------------------
 %% @doc Searches the mailbox `Mailbox1' for a message whose uid compares equal
-%% to `Uid'. Returns {value, Message, Mailbox2} if such a message is found,
-%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where the `Message'
-%% has been removed.
+%% to `Uid'. Returns `{value, Message, Mailbox2}' if such a message is found,
+%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
+%% been removed.
 
--spec uid_take(Uid, Mailbox1) -> {value, Message, Mailbox2} | false when
+-spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
   Uid :: uid(),
   Mailbox1 :: mailbox(),
   Message :: message(),
+  QueuePosition :: pos_integer(),
   Mailbox2 :: mailbox().
 
-uid_take(Uid, {Uids, Map}) ->
-  case queue_delete(Uid, Uids) of
-    Uids -> false;
-    NewUids ->
-      MatchUid =
-        fun
-          (Msg) -> Msg#message.uid =:= Uid
-        end,
-      MapIterate =
-        fun
-          Fun(I0) ->
-            case maps:next(I0) of
-              {K, {R0, F0}, I1} ->
-                case take_first(MatchUid, R0) of
-                  {value, Msg, R1} ->
-                    throw({K, Msg, {R1, F0}});
-                  false ->
-                    case take_first(MatchUid, F0) of
-                      {value, Msg, F1} ->
-                        throw({K, Msg, {R0, F1}});
-                      false ->
-                        Fun(I1)
-                    end
-                end;
-              none -> false
-            end
-        end,
-      try
-        MapIterate(maps:iterator(Map))
-      catch
-        throw:{Key, Message, Queue} ->
-          {value, Message, {NewUids, maps:put(Key, Queue, Map)}}
-      end
+uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
+  case maps:find(Uid, Index) of
+    error ->
+      false;
+    {ok, {Src, Dest}} ->
+      SrcMap = maps:get(Dest, DestMap),
+      Queue = orddict:fetch(Src, SrcMap),
+      {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
+      QueuePos = queue_index_of(Message, Queue),
+      {_, Mailbox} = delete(Message, Mailbox0),
+      {value, {Message, QueuePos}, Mailbox}
   end.
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the messages of `Mailbox' as a list. The messages returned are
-%% sorted according to their uid.
+%% @doc Returns a complete list of messages, in arbitrary order, contained in
+%% `Mailbox'.
 
 -spec to_list(Mailbox) -> [Message] when
   Mailbox :: mailbox(),
   Message :: message().
 
-to_list({Uids, Map0}) ->
-  Map =
-    lists:foldl(
-      fun(Queue, Map1) ->
-        lists:foldl(
-          fun(Msg, Map2) ->
-            maps:put(Msg#message.uid, Msg, Map2)
-          end,
-          Map1, queue:to_list(Queue))
-      end,
-      #{}, maps:values(Map0)),
-  lists:map(fun(Uid) -> maps:get(Uid, Map) end, queue:to_list(Uids)).
+to_list(#mailbox{map = DestMap}) ->
+  QueueToList = fun({_, Queue}) -> queue:to_list(Queue) end,
+  MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, orddict:to_list(SrcMap)) end,
+  lists:flatmap(MapToList, maps:values(DestMap)).
 
 
 %%%=============================================================================
@@ -212,27 +206,64 @@ to_list({Uids, Map0}) ->
   Queue2 :: queue:queue(T),
   T :: term().
 
-queue_delete(Item, Queue) ->
-  queue:from_list(lists:delete(Item, queue:to_list(Queue))).
+queue_delete(Item, Queue) -> queue:from_list(lists:delete(Item, queue:to_list(Queue))).
 
 
 %%------------------------------------------------------------------------------
-%% @doc If there is a `Value' in `List1' such that `Pred(Value)' returns `true',
-%% returns `{value, Value, List2}' for the first such `Value' where `List2' is a
-%% copy of `List1' where `Value' is deleted, otherwise returns `false'.
+%% @doc Returns a copy of `Queue1' with `Item' inserted at `Index'.
 
--spec take_first(Pred, List1) -> {value, Value, List2} | false when
-  Pred :: fun((Value) -> boolean()),
+-spec queue_insert(Index, Item, Queue1) -> Queue2 when
+  Index :: pos_integer(),
+  Item :: T,
+  Queue1 :: queue:queue(T),
+  Queue2 :: queue:queue(T),
+  T :: term().
+
+queue_insert(Index, Item, Queue) -> queue:from_list(list_insert(Index, Item, queue:to_list(Queue))).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a copy of `List1' with `Item' inserted at `Index'.
+
+-spec list_insert(Index, Item, List1) -> List2 when
+  Index :: pos_integer(),
+  Item :: T,
   List1 :: [T],
-  Value :: T,
-  List2 :: [T].
+  List2 :: [T],
+  T :: term().
 
-take_first(Pred, L) ->
-  take_first(Pred, L, []).
+list_insert(Index, Item, List) -> list_insert(Index, 1, Item, List, []).
 
-take_first(_, [], _) -> false;
-take_first(Pred, [H | T], Es) ->
-  case Pred(H) of
-    true -> {value, H, lists:reverse(Es, T)};
-    false -> take_first(Pred, T, [H | Es])
-  end.
+
+list_insert(Index, Index, Item, List, Acc)      -> lists:reverse([Item | Acc], List);
+list_insert(Index, CurrIdx, Item, [H | T], Acc) -> list_insert(Index, CurrIdx + 1, Item, T, [H | Acc]).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the index of `Item' in `Queue' or `false' if there is no such
+%% item.
+
+-spec queue_index_of(Item, Queue) -> Index | false when
+  Item :: T,
+  Queue :: queue:queue(T),
+  Index :: pos_integer(),
+  T :: term().
+
+queue_index_of(Item, Queue) -> index_of(Item, queue:to_list(Queue)).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the index of `Item' in `List' or `false' if there is no such
+%% item.
+
+-spec index_of(Item, List) -> Index | false when
+  Item :: T,
+  List :: [T],
+  Index :: pos_integer(),
+  T :: term().
+
+index_of(Item, List) -> index_of(Item, List, 1).
+
+index_of(_, [], _)                -> false;
+index_of(Item, [Item | _], Index) -> Index;
+index_of(Item, [_ | Tail], Index) -> index_of(Item, Tail, Index + 1).
