@@ -4,7 +4,7 @@
 -export([create/1, update/2, update_position/2]).
 %% Predefined statuses
 -export([no_process/0, no_match/0]).
--export([load_start/1, load_finish/2]).
+-export([load_start/1, load_finish/2, load_fail/0]).
 -export([init_start/0, init_finish/1]).
 -export([stop_finish/0]).
 % Manual
@@ -147,6 +147,11 @@ load_finish(Module, Time) ->
   TimeStr = time_to_string(Time),
   Status = io_lib:format(?LOAD_FINISH, [Module, TimeStr]),
   set_text(Status).
+
+
+-spec load_fail() -> ok.
+
+load_fail() -> set_text(?LOAD_FAIL).
 
 
 %%%=============================================================================
