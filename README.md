@@ -38,15 +38,13 @@ To clean-up the build files, type:
 
 ## Running
 
-You can run CauDEr in multiple ways:
-
 ### Using the Erlang shell
 
-To start a shell with all the required dependencies, type:
+To start an Erlang shell with all the required dependencies, type:
 
     ./rebar3 shell
 
-There are multiples ways to run CauDEr:
+There are multiples ways to run CauDEr from the Erlang shell:
 
 #### Like an _escript_
 
