@@ -8,7 +8,8 @@ init(State) ->
 
 init_providers(State) ->
   lists:foldl(fun init_provider/2, State, [
-    cauder_plugin_reltool_prv
+    cauder_plugin_prv_clean,
+    cauder_plugin_prv_reltool
   ]).
 
 init_provider(Module, State) ->

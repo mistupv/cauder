@@ -1,4 +1,4 @@
--module(cauder_plugin_reltool_prv).
+-module(cauder_plugin_prv_reltool).
 
 %% API
 -export([init/1, do/1, format_error/1]).
