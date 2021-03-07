@@ -94,7 +94,7 @@ do_release(State, App) ->
       file:copy(filename:join("launcher", WinScript),
                 filename:join(ReleaseDir, WinScript));
     {unix, _} ->
-      UnixScript = "cauder.sh",
+      UnixScript = "cauder",
       file:copy(filename:join("launcher", UnixScript),
                 filename:join(ReleaseDir, UnixScript)),
 
