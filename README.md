@@ -4,38 +4,49 @@ A Causal-Consistent Reversible Debugger for Erlang
 
 ![CauDEr screenshot](screenshot.png)
 
+**_CAUTION: This tool is still under development_**
 
 ## Dependencies
 
-* **Erlang/OTP** ≥ 23.0
-* **Rebar3** (Optional)
-* **Make**
-
+* Erlang 23 or higher
 
 ## Building
 
-You can use the following `make` tasks to build CauDEr:
+To build the project, type:
 
-* Create _escript_: `make` (or `make escriptize`)
-* Compile only: `make compile`
-* Build documentation: `make edoc`
-* Run dialyzer: `make dialyzer`
-* Cleanup: `make clean`
+    ./rebar3 compile
 
+To create an _escript_, type:
+
+    ./rebar3 escriptize
+
+To create a release for your platform, type:
+
+    ./rebar3 reltool
+
+To run tests, type:
+
+    ./rebar3 do eunit, ct
+
+To run dialyzer, type:
+
+    ./rebar3 dialyzer
+
+To clean-up the build files, type:
+
+    ./rebar3 clean
 
 ## Running
 
-You can run CauDEr in multiple ways:
-
 ### Using the Erlang shell
 
-Using `rebar3 shell` will start a shell with all the required dependencies.
+To start an Erlang shell with all the required dependencies, type:
 
-There are multiples ways to run CauDEr:
+    ./rebar3 shell
+
+There are multiples ways to run CauDEr from the Erlang shell:
 
 #### Like an _escript_
-
-Calling the function `cauder:main/0` will start CauDEr like the _escript_.
 
 ```
 Eshell V11.0  (abort with ^G)
@@ -43,7 +54,8 @@ Eshell V11.0  (abort with ^G)
 ok
 ```
 
-ℹ️ This function will wait for the GUI to close before returning, which means the shell will be blocked.
+ℹ️ This function will wait for the CauDEr window to close before returning,
+which means the shell will be blocked.
 
 #### Like an application
 
@@ -53,23 +65,10 @@ Eshell V11.0  (abort with ^G)
 ok
 ```
 
-ℹ️ To stop CauDEr you can use `application:stop(cauder)`, but it is not necessary if you just close the window.
+ℹ️ To stop CauDEr you can use `application:stop(cauder)`, or simply close the
+window.
 
 #### Manually
-
-##### Debugger only
-
-To start the debugger only you can call the following function:
-
-```
-Eshell V11.0  (abort with ^G)
-1> cauder:start(). % Starting the debugger
-{ok,<0.80.0>}
-```
-
-##### Debugger and GUI
-
-To start the debugger and the GUI you will need to call the following functions in order:
 
 ```
 Eshell V11.0  (abort with ^G)
@@ -79,21 +78,28 @@ Eshell V11.0  (abort with ^G)
 {ok,<0.82.0>,{wx_ref,35,wxFrame,<0.82.0>}}
 ```
 
-⚠️ If you try to start the GUI without previously starting the debugger, it will fail with the following error: `{error,{not_started,cauder}}`
+⚠️ If you try to start the GUI without previously starting the debugger, it will
+fail with the following error: `{error,{not_started,cauder}}`
 
 
-#### Using the _escript_
+### Using the _escript_
 
-Simply run the `cauder` binary generated in the `_build/default/bin` folder:
+    ./_build/default/bin/cauder
 
-```shell script
-./_build/default/bin/cauder
-```
+ℹ️ This will block the current shell until the CauDEr window is closed.
 
-## Usage
+### Using the release
 
-For more information about how to use CauDEr you can check the [Wiki](https://github.com/mistupv/cauder-v2/wiki) (Under construction!)
+    ./_build/default/reltool/cauder
+
+ℹ️ This script will start CauDEr in detached mode.
+
+## Documentation
+
+To learn how to use CauDEr you can check the
+[Wiki](https://github.com/mistupv/cauder-v2/wiki) (Under construction!)
 
 ## License
 
-See [LICENSE](LICENSE) file.
+This project is available under the terms of the MIT license. See the
+[`LICENSE`](LICENSE) file for the copyright information and licensing terms.

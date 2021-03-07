@@ -4,9 +4,8 @@
 erl_crash.dump
 
 # Rebar 3
-rebar3
-rebar3.cmd
 rebar.lock
+rebar3.crashdump
 _build/
 
 ### JetBrains
@@ -17,6 +16,7 @@ _build/
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
+.idea/emacs.xml
 
 # IntelliJ
 out/
