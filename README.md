@@ -1,14 +1,19 @@
 # CauDEr
 
+A Causal-Consistent Reversible Debugger for Erlang.
+
 [![Erlang](https://img.shields.io/badge/Erlang%2FOTP-23.0-blue?logo=erlang)](https://www.erlang.org/)
-[![GitHub Actions](https://img.shields.io/github/workflow/status/mistupv/cauder-v2/Erlang%20CI?label=Erlang%20CI&logo=github)](https://github.com/mistupv/cauder-v2/actions/workflows/erlang.yml)
-[![License](https://img.shields.io/github/license/mistupv/cauder-v2?label=License&logo=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmVyc2lvbj0iMS4xIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI0Y1RjVGNSIgZD0iTTEyLDNDMTAuNzMsMyA5LjYsMy44IDkuMTgsNUgzVjdINC45NUwyLDE0QzEuNTMsMTYgMywxNyA1LjUsMTdDOCwxNyA5LjU2LDE2IDksMTRMNi4wNSw3SDkuMTdDOS41LDcuODUgMTAuMTUsOC41IDExLDguODNWMjBIMlYyMkgyMlYyMEgxM1Y4LjgyQzEzLjg1LDguNSAxNC41LDcuODUgMTQuODIsN0gxNy45NUwxNSwxNEMxNC41MywxNiAxNiwxNyAxOC41LDE3QzIxLDE3IDIyLjU2LDE2IDIyLDE0TDE5LjA1LDdIMjFWNUgxNC44M0MxNC40LDMuOCAxMy4yNywzIDEyLDNNMTIsNUExLDEgMCAwLDEgMTMsNkExLDEgMCAwLDEgMTIsN0ExLDEgMCAwLDEgMTEsNkExLDEgMCAwLDEgMTIsNU01LjUsMTAuMjVMNywxNEg0TDUuNSwxMC4yNU0xOC41LDEwLjI1TDIwLDE0SDE3TDE4LjUsMTAuMjVaIiAvPjwvc3ZnPg==)](https://github.com/mistupv/cauder-v2/blob/dev/LICENSE)
+[![GitHub Actions](https://img.shields.io/github/workflow/status/mistupv/cauder/Erlang%20CI?label=Erlang%20CI&logo=github)](https://github.com/mistupv/cauder/actions/workflows/erlang.yml)
+[![License](https://img.shields.io/github/license/mistupv/cauder?label=License&logo=data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB4bWxuczp4bGluaz0iaHR0cDovL3d3dy53My5vcmcvMTk5OS94bGluayIgdmVyc2lvbj0iMS4xIiB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI0Y1RjVGNSIgZD0iTTEyLDNDMTAuNzMsMyA5LjYsMy44IDkuMTgsNUgzVjdINC45NUwyLDE0QzEuNTMsMTYgMywxNyA1LjUsMTdDOCwxNyA5LjU2LDE2IDksMTRMNi4wNSw3SDkuMTdDOS41LDcuODUgMTAuMTUsOC41IDExLDguODNWMjBIMlYyMkgyMlYyMEgxM1Y4LjgyQzEzLjg1LDguNSAxNC41LDcuODUgMTQuODIsN0gxNy45NUwxNSwxNEMxNC41MywxNiAxNiwxNyAxOC41LDE3QzIxLDE3IDIyLjU2LDE2IDIyLDE0TDE5LjA1LDdIMjFWNUgxNC44M0MxNC40LDMuOCAxMy4yNywzIDEyLDNNMTIsNUExLDEgMCAwLDEgMTMsNkExLDEgMCAwLDEgMTIsN0ExLDEgMCAwLDEgMTEsNkExLDEgMCAwLDEgMTIsNU01LjUsMTAuMjVMNywxNEg0TDUuNSwxMC4yNU0xOC41LDEwLjI1TDIwLDE0SDE3TDE4LjUsMTAuMjVaIiAvPjwvc3ZnPg==)](https://github.com/mistupv/cauder/blob/dev/LICENSE)
 
-A Causal-Consistent Reversible Debugger for Erlang
+**_This tool is still under development_**
 
-![CauDEr screenshot](screenshot.png)
+### Core Erlang version
 
-**_CAUTION: This tool is still under development_**
+In 2020, we decided to rewrite CauDEr to work directly with Erlang instead of Core Erlang.
+The main reasons for this change where simplicity, user-friendliness and breaking changes introduced in newer version of Erlang/OTP.
+
+The old version of CauDEr developed for Core Erlang is still available at [mistupv/cauder-core](https://github.com/mistupv/cauder-core), however it is no longer being actively maintained.
 
 ## Dependencies
 
@@ -98,10 +103,14 @@ fail with the following error: `{error,{not_started,cauder}}`
 
 ℹ️ This script will start CauDEr in detached mode.
 
+## Screenshot
+
+![CauDEr screenshot](screenshot.png)
+
 ## Documentation
 
 To learn how to use CauDEr you can check the
-[Wiki](https://github.com/mistupv/cauder-v2/wiki) (Under construction!)
+[Wiki](https://github.com/mistupv/cauder/wiki) (Under construction!)
 
 ## License
 
