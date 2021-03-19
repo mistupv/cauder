@@ -2,7 +2,7 @@
 
 %% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([match_rec_pid/4, match_rec_uid/4]).
+-export([match_rec_pid/6, match_rec_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder.hrl").
@@ -407,58 +407,98 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
   RecipientPid :: cauder_types:proc_id(),
-  Mail :: [cauder_types:message()],
+  Mail :: cauder_mailbox:mailbox(),
+  Sched :: cauder_types:message_scheduler(),
+  Sys :: cauder_types:system(),
   NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message(),
+  QueuePosition :: pos_integer(),
+  NewMail :: cauder_mailbox:mailbox().
 
-match_rec_pid(Cs, Bs, Pid, Mail) -> match_rec_pid(Cs, Bs, Pid, Mail, []).
-
-
--spec match_rec_pid(Clauses, Bindings, RecipientPid, RemainingMail, CheckedMail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
-  Clauses :: cauder_types:af_clause_seq(),
-  Bindings :: cauder_types:environment(),
-  RecipientPid :: cauder_types:proc_id(),
-  RemainingMail :: [cauder_types:message()],
-  CheckedMail :: [cauder_types:message()],
-  NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
-
-match_rec_pid(_, _, _, [], _) -> nomatch;
-match_rec_pid(Cs, Bs0, Pid, [Msg | Mail], Checked) ->
-  case Msg of
-    #msg{dest = Pid, val = Val} ->
-      case match_clause(Bs0, Cs, [abstract(Val)]) of
-        {match, Bs, Body} -> {Bs, Body, Msg, lists:reverse(Checked, Mail)};
-        nomatch -> match_rec_pid(Cs, Bs0, Pid, Mail, [Msg | Checked])
-      end;
-    _ -> match_rec_pid(Cs, Bs0, Pid, Mail, [Msg | Checked])
+match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
+  case cauder_mailbox:pid_get(Pid, Mail) of
+    [] -> nomatch;
+    QueueList ->
+      case Sched of
+        ?SCHEDULER_Manual ->
+          FoldQueue =
+            fun
+              (Msg, Map1) ->
+                case match_rec(Cs, Bs, #message{uid = Uid} = Msg) of
+                  {match, Bs1, Body} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
+                  nomatch -> skip
+                end
+            end,
+          FoldQueueList = fun(Queue, Map0) -> lists:foldl(FoldQueue, Map0, queue:to_list(Queue)) end,
+          MatchingBranchesMap = lists:foldl(FoldQueueList, maps:new(), QueueList),
+          case maps:size(MatchingBranchesMap) of
+            0 -> nomatch;
+            _ ->
+              MatchingMessages = lists:map(fun({_, _, Msg}) -> Msg end, maps:values(MatchingBranchesMap)),
+              case cauder:suspend_task(Pid, MatchingMessages, Sys) of
+                {_SuspendTime, {resume, Uid}} -> % TODO Use suspend time
+                  cauder:resume_task(),
+                  {Bs1, Body, Msg} = maps:get(Uid, MatchingBranchesMap),
+                  {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+                  {Bs1, Body, {Msg, QPos}, NewMail};
+                {_SuspendTime, cancel} -> % TODO Use suspend time
+                  throw(cancel)
+              end
+          end;
+        ?SCHEDULER_Random ->
+          MatchingBranches = lists:filtermap(
+            fun(Queue) ->
+              {value, Msg} = queue:peek(Queue),
+              case match_rec(Cs, Bs, Msg) of
+                {match, Bs1, Body} -> {true, {Bs1, Body, Msg}};
+                nomatch -> false
+              end
+            end,
+            QueueList
+          ),
+          case length(MatchingBranches) of
+            0 -> nomatch;
+            Length ->
+              {Bs1, Body, Msg} = lists:nth(rand:uniform(Length), MatchingBranches),
+              {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+              {Bs1, Body, {Msg, QPos}, NewMail}
+          end
+      end
   end.
 
 
--spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, MatchedBranch, MatchedMessage, NewMail} | nomatch when
+-spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
   Clauses :: cauder_types:af_clause_seq(),
   Bindings :: cauder_types:environment(),
-  Uid :: cauder_types:msg_id(),
-  Mail :: [cauder_types:message()],
+  Message :: cauder_mailbox:message(),
   NewBindings :: cauder_types:environment(),
-  MatchedBranch :: cauder_types:af_body(),
-  MatchedMessage :: cauder_types:message(),
-  NewMail :: [cauder_types:message()].
+  Body :: cauder_types:af_body().
 
-match_rec_uid(Cs, Bs0, Uid, Mail) ->
-  case cauder_utils:find_message(Mail, Uid) of
+match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
+
+
+-spec match_rec_uid(Clauses, Bindings, Uid, Mail) -> {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch when
+  Clauses :: cauder_types:af_clause_seq(),
+  Bindings :: cauder_types:environment(),
+  Uid :: cauder_mailbox:uid(),
+  Mail :: cauder_mailbox:mailbox(),
+  NewBindings :: cauder_types:environment(),
+  Body :: cauder_types:af_body(),
+  Message :: cauder_types:message(),
+  QueuePosition :: pos_integer(),
+  NewMail :: cauder_mailbox:mailbox().
+
+match_rec_uid(Cs, Bs0, Uid, Mail0) ->
+  case cauder_mailbox:uid_take(Uid, Mail0) of
     false -> nomatch;
-    {value, Msg} ->
-      case match_clause(Bs0, Cs, [abstract(Msg#msg.val)]) of
-        {match, Bs, Body} -> {Bs, Body, Msg, lists:delete(Msg, Mail)};
+    {value, {Msg, QPos}, Mail1} ->
+      case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
+        {match, Bs, Body} -> {Bs, Body, {Msg, QPos}, Mail1};
         nomatch -> nomatch
       end
   end.

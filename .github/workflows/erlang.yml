@@ -1,0 +1,26 @@
+name: Erlang CI
+
+on:
+  push:
+    branches: [ master, dev ]
+  pull_request:
+    branches: [ master, dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: erlang:23.1
+    steps:
+      - uses: actions/checkout@v2
+      - name: Compile
+        run: rebar3 compile
+      - name: Run tests
+        run: rebar3 do eunit, ct
+      - name: Cache Dialyzer PLTs
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/rebar3/rebar3_*_plt
+          key: ${{ runner.os }}-plt
+      - name: Run dialyzer
+        run: rebar3 dialyzer

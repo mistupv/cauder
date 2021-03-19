@@ -52,7 +52,7 @@ can_rollback_spawn(#sys{procs = PMap}, Pid) -> cauder_utils:find_process_with_sp
 
 -spec can_rollback_send(System, Uid) -> CanRollback when
   System :: cauder_types:system(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   CanRollback :: boolean().
 
 can_rollback_send(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_send(PMap, Uid) =/= false.
@@ -64,7 +64,7 @@ can_rollback_send(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_sen
 
 -spec can_rollback_receive(System, Uid) -> CanRollback when
   System :: cauder_types:system(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   CanRollback :: boolean().
 
 can_rollback_receive(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_receive(PMap, Uid) =/= false.
@@ -101,13 +101,16 @@ rollback_step(#sys{procs = PMap, roll = RollLog} = Sys0, Pid) ->
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
       rollback_spawn(Sys, Pid, SpawnPid);
-    {send, _Bs, _E, _Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
-      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Dest, Val, Uid)},
+    {send, _Bs, _E, _Stk, #message{uid = Uid, dest = Dest} = Msg} ->
+      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
       ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
       rollback_send(Sys, Pid, Dest, Uid);
     _ ->
       [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
-      Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 
@@ -131,7 +134,7 @@ rollback_spawn(#sys{procs = PMap} = Sys, Pid) ->
 
 -spec rollback_send(System, Uid) -> NewSystem when
   System :: cauder_types:system(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_send(#sys{procs = PMap} = Sys, Uid) ->
@@ -145,7 +148,7 @@ rollback_send(#sys{procs = PMap} = Sys, Uid) ->
 
 -spec rollback_receive(System, Uid) -> NewSystem when
   System :: cauder_types:system(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_receive(#sys{procs = PMap} = Sys, Uid) ->
@@ -185,7 +188,10 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
       Sys1 = rollback_step(Sys0, SpawnPid),
       rollback_spawn(Sys1, Pid, SpawnPid);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 
@@ -193,7 +199,7 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
   DestPid :: cauder_types:proc_id(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_send(Sys0, Pid, DestPid, Uid) ->
@@ -203,7 +209,10 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
       Sys1 = rollback_step(Sys0, DestPid),
       rollback_send(Sys1, Pid, DestPid, Uid);
     {value, #opt{pid = Pid, sem = Sem}} ->
-      Sem:step(Sys0, Pid)
+      case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+      end
   end.
 
 
@@ -230,13 +239,13 @@ rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
 -spec rollback_until_send(System, Pid, Uid) -> NewSystem when
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {send, _Bs, _Es, _Stk, #msg{uid = Uid}} ->
+    {send, _Bs, _Es, _Stk, #message{uid = Uid}} ->
       rollback_step(Sys0, Pid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),
@@ -247,13 +256,13 @@ rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 -spec rollback_until_receive(System, Pid, Uid) -> NewSystem when
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _Es, _Stk, #msg{uid = Uid}} ->
+    {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} ->
       rollback_after_receive(Sys0, Pid, Uid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),
@@ -264,14 +273,14 @@ rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 -spec rollback_after_receive(System, Pid, Uid) -> NewSystem when
   System :: cauder_types:system(),
   Pid :: cauder_types:proc_id(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   NewSystem :: cauder_types:system().
 
 rollback_after_receive(Sys0, Pid, Uid) ->
   #sys{procs = PMap} = Sys1 = rollback_step(Sys0, Pid),
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {rec, _Bs, _E, _Stk, #msg{uid = Uid}} ->
+    {rec, _Bs, _E, _Stk, #message{uid = Uid}, _QPos} ->
       rollback_after_receive(Sys1, Pid, Uid);
     _ -> Sys1
   end.

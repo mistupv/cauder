@@ -7,6 +7,7 @@
   mailbox = true :: boolean(),
   bindings_mode = relevant :: all | relevant,
   history_mode = concurrent :: full | concurrent,
+  mailbox_mode = process :: all | process,
   status_bar = true :: boolean()
 }).
 
@@ -27,7 +28,7 @@
 
 -define(GUI_DB, 'cauder_wx/database').
 
--define(IDX_TO_KEY, 'bindings_index_to_key').
+-define(BINDINGS_IDX_TO_KEY, 'bindings_index_to_key').
 
 -define(FRAME, 500).
 
@@ -74,7 +75,7 @@
 
 -define(MENU_View_CurrentExpression, 1000).
 
--define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History)).
+-define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History orelse Item =:= ?MENU_View_Mailbox)).
 
 -define(MENU_View_Bindings, 1001).
 -define(MENU_View_Stack, 1002).
@@ -93,16 +94,21 @@
 -define(MENU_View_ConcurrentHistory, 1008).
 -define(MENU_View_FullHistory, 1009).
 
--define(MENU_View_StatusBar, 1010).
+-define(Is_Message_Mode(Item), (Item =:= ?MENU_View_ProcessMessages orelse Item =:= ?MENU_View_AllMessages)).
+
+-define(MENU_View_ProcessMessages, 1010).
+-define(MENU_View_AllMessages, 1011).
+
+-define(MENU_View_StatusBar, 1012).
 
 %% -----
 
--define(MENU_Run_Start, 1011).
--define(MENU_Run_Stop, 1012).
+-define(MENU_Run_Start, 1100).
+-define(MENU_Run_Stop, 1101).
 
 %% -----
 
--define(MENU_Help_ViewHelp, 1013).
+-define(MENU_Help_ViewHelp, 1200).
 
 -define(MENU_Help_About, ?wxID_ABOUT).
 
@@ -120,68 +126,61 @@
 
 -define(ACTION_Manual, 2110).
 
--define(ACTION_Manual_Step, 2111).
--define(ACTION_Manual_Step_Forward_Button, 2112).
--define(ACTION_Manual_Step_Backward_Button, 2113).
+-define(ACTION_Manual_Steps, 2111).
+-define(ACTION_Manual_Scheduler, 2112).
+-define(ACTION_Manual_Forward_Button, 2114).
+-define(ACTION_Manual_Backward_Button, 2115).
 
--define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Step_Forward_Button orelse Button =:= ?ACTION_Manual_Step_Backward_Button)).
-
--define(ACTION_Manual_StepOver, 2114).
--define(ACTION_Manual_StepOver_Forward_Button, 2115).
--define(ACTION_Manual_StepOver_Backward_Button, 2116).
-
--define(Is_StepOver_Button(Button), (Button =:= ?ACTION_Manual_StepOver_Forward_Button orelse Button =:= ?ACTION_Manual_StepOver_Backward_Button)).
-
--define(ACTION_Manual_StepInto, 2117).
--define(ACTION_Manual_StepInto_Forward_Button, 2118).
--define(ACTION_Manual_StepInto_Backward_Button, 2119).
-
--define(Is_StepInto_Button(Button), (Button =:= ?ACTION_Manual_StepInto_Forward_Button orelse Button =:= ?ACTION_Manual_StepInto_Backward_Button)).
+-define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Forward_Button orelse Button =:= ?ACTION_Manual_Backward_Button)).
 
 %% -----
 
--define(ACTION_Automatic, 2120).
+-define(ACTION_Automatic, 2130).
 
--define(ACTION_Automatic_Steps, 2121).
--define(ACTION_Automatic_Forward_Button, 2122).
--define(ACTION_Automatic_Backward_Button, 2123).
+-define(ACTION_Automatic_Steps, 2131).
+-define(ACTION_Automatic_Scheduler, 2132).
+-define(ACTION_Automatic_Forward_Button, 2133).
+-define(ACTION_Automatic_Backward_Button, 2134).
 
 -define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)).
 
 %% -----
 
--define(ACTION_Replay, 2130).
+-define(ACTION_Replay, 2150).
 
--define(ACTION_Replay_Steps, 2131).
--define(ACTION_Replay_Spawn, 2132).
--define(ACTION_Replay_Send, 2133).
--define(ACTION_Replay_Receive, 2134).
+-define(ACTION_Replay_Steps, 2151).
+-define(ACTION_Replay_Spawn, 2152).
+-define(ACTION_Replay_Send, 2153).
+-define(ACTION_Replay_Receive, 2154).
 
--define(ACTION_Replay_Steps_Button, 2135).
--define(ACTION_Replay_Spawn_Button, 2136).
--define(ACTION_Replay_Send_Button, 2137).
--define(ACTION_Replay_Receive_Button, 2138).
--define(ACTION_Replay_FullLog_Button, 2139).
+-define(ACTION_Replay_Steps_Button, 2155).
+-define(ACTION_Replay_Spawn_Button, 2156).
+-define(ACTION_Replay_Send_Button, 2157).
+-define(ACTION_Replay_Receive_Button, 2158).
+-define(ACTION_Replay_FullLog_Button, 2159).
 
 %% -----
 
--define(ACTION_Rollback, 2140).
+-define(ACTION_Rollback, 2170).
 
--define(ACTION_Rollback_Steps, 2141).
--define(ACTION_Rollback_Spawn, 2142).
--define(ACTION_Rollback_Send, 2143).
--define(ACTION_Rollback_Receive, 2144).
--define(ACTION_Rollback_Variable, 2145).
+-define(ACTION_Rollback_Steps, 2171).
+-define(ACTION_Rollback_Spawn, 2172).
+-define(ACTION_Rollback_Send, 2173).
+-define(ACTION_Rollback_Receive, 2174).
+-define(ACTION_Rollback_Variable, 2175).
 
--define(ACTION_Rollback_Steps_Button, 2146).
--define(ACTION_Rollback_Spawn_Button, 2147).
--define(ACTION_Rollback_Send_Button, 2148).
--define(ACTION_Rollback_Receive_Button, 2149).
--define(ACTION_Rollback_Variable_Button, 2150).
+-define(ACTION_Rollback_Steps_Button, 2176).
+-define(ACTION_Rollback_Spawn_Button, 2177).
+-define(ACTION_Rollback_Send_Button, 2178).
+-define(ACTION_Rollback_Receive_Button, 2179).
+-define(ACTION_Rollback_Variable_Button, 2180).
 
 %% ----- System Info Panel ----- %%
 
--define(SYSTEM_Mail, 2200).
+-define(SYSTEM_Panel, 2200).
+
+-define(SYSTEM_Mail_Panel, 2201).
+-define(SYSTEM_Mail_Control, 2202).
 
 -define(SYSTEM_Notebook, 2210).
 -define(SYSTEM_Notebook_Trace, 0).
@@ -213,6 +212,13 @@
 -define(STATUS_BAR, 2400).
 
 
+%% -------------------- Process Scheduler strings -------------------- %%
+
+-define(SCHEDULER_RoundRobin_Name, "Round-robin").
+-define(SCHEDULER_FCFS_Name, "First come, first served").
+-define(SCHEDULER_Random_Name, "Random").
+-define(SCHEDULER_Manual_Name, "Manual").
+
 %% -------------------- Help strings -------------------- %%
 
 -define(HELP_File_Open, "Open an Erlang file").
@@ -236,6 +242,9 @@
 
 -define(HELP_View_ConcurrentHistory, "Show only concurrent history").
 -define(HELP_View_FullHistory, "Show complete history").
+
+-define(HELP_View_ProcessMessages, "Show only current process messages").
+-define(HELP_View_AllMessages, "Show all messages").
 
 -define(HELP_View_StatusBar, "Show or hide status bar").
 

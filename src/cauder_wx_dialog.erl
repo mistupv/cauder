@@ -3,6 +3,7 @@
 %% API
 -export([start_session/2, stop_session/1]).
 -export([edit_binding/2]).
+-export([choose_message/2]).
 -export([drop_files/2]).
 -export([about/1]).
 
@@ -288,6 +289,122 @@ edit_binding(Parent, {Key, Value}) ->
         [{value, _, NewValue}] -> {Key, NewValue};
         _ -> cancel
       end;
+    _ -> cancel
+  end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Shows a dialog that allows the user to choose a messages from a lists of
+%% messages.
+
+-spec choose_message(Parent, {Receiver, Messages}) -> {ok, MessageId} | cancel when
+  Parent :: wxWindow:wxWindow(),
+  Receiver :: cauder_types:proc_id(),
+  Messages :: [cauder_mailbox:message()],
+  MessageId :: cauder_mailbox:uid().
+
+choose_message(Parent, {Receiver, Messages}) ->
+  Dialog = wxDialog:new(Parent, ?wxID_ANY, "Choose a message"),
+
+  Sizer = wxBoxSizer:new(?wxVERTICAL),
+  wxDialog:setSizer(Dialog, Sizer),
+
+  %% ----- Content ----- %%
+
+  Content = wxBoxSizer:new(?wxVERTICAL),
+  wxBoxSizer:add(Sizer, Content, [{flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_LARGE}]),
+
+  HeaderText = wxStaticText:new(Dialog, ?wxID_ANY, io_lib:format("Choose the message to be received by process ~p.", [Receiver])),
+  wxBoxSizer:add(Content, HeaderText, [{proportion, 0}]),
+
+  %% -----
+
+  wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
+  %% -----
+
+  MessageList = wxListCtrl:new(Dialog, [{style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  wxBoxSizer:add(Content, MessageList, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  Item = wxListItem:new(),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+
+  wxListItem:setText(Item, "UID"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MessageList, 0, Item),
+
+  wxListItem:setText(Item, "Value"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MessageList, 1, Item),
+
+  wxListItem:setText(Item, "Source"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MessageList, 2, Item),
+
+  wxListItem:setText(Item, "Destination"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MessageList, 3, Item),
+
+  wxListItem:destroy(Item),
+
+  wxListCtrl:setColumnWidth(MessageList, 0, 50),
+  wxListCtrl:setColumnWidth(MessageList, 1, 200),
+  wxListCtrl:setColumnWidth(MessageList, 2, 75),
+  wxListCtrl:setColumnWidth(MessageList, 3, 75),
+
+  lists:foldl(
+    fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+      wxListCtrl:insertItem(MessageList, Row, ""),
+      wxListCtrl:setItemFont(MessageList, Row, Font),
+      wxListCtrl:setItem(MessageList, Row, 0, cauder_pp:to_string(Uid)),
+      wxListCtrl:setItem(MessageList, Row, 1, cauder_pp:to_string(Value)),
+      wxListCtrl:setItem(MessageList, Row, 2, cauder_pp:to_string(Src)),
+      wxListCtrl:setItem(MessageList, Row, 3, cauder_pp:to_string(Dest)),
+      Row + 1
+    end, 0, Messages),
+
+  %% -----
+
+  Separator = wxStaticLine:new(Dialog, [{style, ?wxLI_HORIZONTAL}]),
+  wxBoxSizer:add(Sizer, Separator, [{flag, ?wxEXPAND}]),
+
+  %% ----- Buttons ----- %%
+
+  Buttons = wxBoxSizer:new(?wxHORIZONTAL),
+  wxBoxSizer:add(Sizer, Buttons, [{flag, ?wxALIGN_RIGHT bor ?wxALL}, {border, ?SPACER_LARGE}]),
+
+  ReceiveButton = wxButton:new(Dialog, ?wxID_OK, [{label, "Receive"}]),
+  wxButton:disable(ReceiveButton),
+  wxBoxSizer:add(Buttons, ReceiveButton),
+
+  wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
+
+  CancelButton = wxButton:new(Dialog, ?wxID_CANCEL, [{label, "Cancel"}]),
+  wxBoxSizer:add(Buttons, CancelButton),
+
+  %% -----
+
+  ItemFocusedCallback =
+    fun
+      (#wx{event = #wxList{itemIndex = Idx}}, _) ->
+        wxButton:enable(ReceiveButton, [{enable, Idx =/= ?wxNOT_FOUND}])
+    end,
+
+  ItemActivatedCallback =
+    fun
+      (#wx{event = #wxList{itemIndex = Idx}}, _) when Idx =/= ?wxNOT_FOUND ->
+        wxDialog:endModal(Dialog, ?wxID_OK)
+    end,
+
+  wxListCtrl:connect(MessageList, command_list_item_focused, [{callback, ItemFocusedCallback}]),
+  wxListCtrl:connect(MessageList, command_list_item_activated, [{callback, ItemActivatedCallback}]),
+
+  wxDialog:fit(Dialog),
+  case wxDialog:showModal(Dialog) of
+    ?wxID_OK ->
+      Idx = wxListCtrl:getNextItem(MessageList, -1, [{state, ?wxLIST_STATE_SELECTED}]),
+      Message = lists:nth(Idx + 1, Messages),
+      {ok, Message#message.uid};
     _ -> cancel
   end.
 
