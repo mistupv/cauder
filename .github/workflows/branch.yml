@@ -1,0 +1,31 @@
+name: 'Release branch'
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version'
+        required: true
+
+jobs:
+  create_branch:
+    name: 'Create release branch'
+    runs-on: ubuntu-latest
+
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2.3.4
+        with:
+          ref: dev
+      - name: "Create branch"
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -b release/$VERSION
+          sed -i "s/{vsn, \".*\"}/{vsn, \"$VERSION\"}/gm" src/cauder.app.src
+          git add src/cauder.app.src
+          git commit -m "Bump version to $VERSION"
+          git push -u origin release/$VERSION

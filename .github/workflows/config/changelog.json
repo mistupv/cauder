@@ -1,0 +1,52 @@
+{
+  "categories": [
+    {
+      "title": "## 💥 Breaking changes",
+      "labels": [
+        "breaking"
+      ]
+    },
+    {
+      "title": "## 🚀 Features",
+      "labels": [
+        "feature"
+      ]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": [
+        "bugfix"
+      ]
+    },
+    {
+      "title": "## 👻 Internal changes",
+      "labels": [
+        "refactor"
+      ]
+    },
+    {
+      "title": "## 🧰 Maintenance",
+      "labels": [
+        "chore"
+      ]
+    },
+    {
+      "title": "## 📚 Documentation",
+      "labels": [
+        "documentation"
+      ]
+    },
+    {
+      "title": "## 🧪 Tests",
+      "labels": [
+        "test"
+      ]
+    }
+  ],
+  "ignore_labels": [
+    "skip-changelog"
+  ],
+  "template": "# What's Changed\n\n${{CHANGELOG}}",
+  "pr_template": "- ${{TITLE}} (#${{NUMBER}}) @${{AUTHOR}}",
+  "empty_template": "- No changes"
+}

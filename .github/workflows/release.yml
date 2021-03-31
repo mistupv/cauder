@@ -1,0 +1,135 @@
+name: 'Publish release'
+
+on:
+  pull_request:
+    branches:
+      - 'main'
+    types:
+      - 'closed'
+
+jobs:
+  skip_check:
+    name: 'Skip check'
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - name: 'Skip check'
+        id: skip_check
+        run: echo "::set-output name=should_skip::$SHOULD_SKIP"
+        env:
+          SHOULD_SKIP: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+
+  linux:
+    name: 'Build (Ubuntu)'
+    needs: skip_check
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:23
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2.3.4
+      - name: 'Reltool'
+        run: rebar3 reltool
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v2
+        with:
+          name: cauder-linux
+          path: _build/default/reltool/cauder-*-linux.zip
+          if-no-files-found: error
+
+  macos:
+    name: 'Build (macOS)'
+    needs: skip_check
+    runs-on: macos-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2.3.4
+      - name: 'Install Erlang'
+        run: brew install erlang@23
+      - name: 'Install rebar3'
+        run: brew install rebar3
+      - name: 'Reltool'
+        run: rebar3 reltool
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v2
+        with:
+          name: cauder-mac
+          path: _build/default/reltool/cauder-*-mac.zip
+          if-no-files-found: error
+
+  windows:
+    name: 'Build (Windows)'
+    needs: skip_check
+    runs-on: windows-latest
+
+    env:
+      OTP_VERSION: '23.2.7'
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2.3.4
+      - name: 'Cache Erlang installer'
+        id: cache
+        uses: actions/cache@v2.1.4
+        with:
+          path: otp_win64_${{ env.OTP_VERSION }}.exe
+          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-installer
+      - name: 'Download Erlang'
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: Invoke-WebRequest "https://erlang.org/download/otp_win64_${Env:OTP_VERSION}.exe" -O "otp_win64_${Env:OTP_VERSION}.exe"
+      - name: 'Install Erlang'
+        run: |
+          Start-Process .\otp_win64_${Env:OTP_VERSION}.exe -ArgumentList "/S" -Wait
+          echo "C:\Program Files\erl-${Env:OTP_VERSION}\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
+      # Latest version of Erlang available in chocolatey is 22.1
+      #- name: 'Install Erlang'
+      #  run: choco install erlang
+      #- name: 'Install rebar3'
+      #  run: choco install rebar3
+      - name: 'Reltool'
+        run: .\rebar3 reltool
+      - name: 'Upload artifact'
+        uses: actions/upload-artifact@v2
+        with:
+          name: cauder-win
+          path: _build/default/reltool/cauder-*-win.zip
+          if-no-files-found: error
+
+  release:
+    name: 'Publish release'
+    needs: [ linux, macos, windows ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v2.3.4
+      - name: 'Extract version'
+        id: version
+        run: echo "::set-output name=version::${HEAD_REF#release/}"
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      - name: 'Build Changelog'
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v1.7.0
+        with:
+          toTag: main
+          failOnError: true
+          configuration: ".github/workflows/config/changelog.json"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: 'Downloads artifacts'
+        uses: actions/download-artifact@v2
+      - name: 'Create Release'
+        uses: softprops/action-gh-release@e99df7cd8088d9c5dddab02bf975f62025a6e760
+        with:
+          tag_name: ${{ format('v{0}', steps.version.outputs.version) }}
+          name: ${{ format('CauDEr {0}', steps.version.outputs.version) }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          files: cauder-*/cauder-*-*.zip
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
