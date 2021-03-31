@@ -10,7 +10,7 @@ start() ->
 racer() ->
   Result = receive
                   %slave:start(domain, name)
-             go -> slave:start(node, another)
+             go -> slave:start(net:localhost(), another)
            end,
   case Result of
     {ok, _} -> winner;

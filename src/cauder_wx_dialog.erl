@@ -80,8 +80,6 @@ start_session(Parent, MFAs) ->
   NodeName = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
   wxBoxSizer:add(ManualSizer, NodeName),
 
-  %  %% Here to ease the process of debugging, must be removed once implemented distrbuted sem
-  %  wxTextCtrl:appendText(NodeName, "cauder@debugger"),
   
   Index = wxChoice:getSelection(FunChoice),
   {_, _, Arity} = wxChoice:getClientData(FunChoice, Index),
@@ -92,7 +90,7 @@ start_session(Parent, MFAs) ->
   ReplayRadio = wxRadioButton:new(Dialog, ?wxID_ANY, "Replay"),
   wxFlexGridSizer:add(Grid, ReplayRadio, [{flag, ?wxALIGN_CENTER_VERTICAL}]),
 
-  %% Replay Panel
+    %% Replay Panel
 
   ReplayPanel = wxPanel:new(Dialog),
   wxFlexGridSizer:add(Grid, ReplayPanel, [{flag, ?wxEXPAND}]),
@@ -101,7 +99,7 @@ start_session(Parent, MFAs) ->
   wxPanel:setSizer(ReplayPanel, ReplaySizer),
 
   BasePath = cauder:get_path(),
-  TracePath = filename:join(BasePath, "trace"),
+  TracePath = filename:join(BasePath, "results"),
   PickerPath =
     case filelib:is_dir(TracePath) of
       true -> TracePath;

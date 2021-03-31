@@ -55,8 +55,7 @@ can_rollback_spawn(#sys{procs = PMap}, Pid) -> cauder_utils:find_process_with_sp
     CanRollback :: boolean().
 
 can_rollback_start(#sys{nodes = Nodes, procs = PMap}, Node) ->
-  {value, FirstProc} = lists:search(fun (#proc{pid = Pid}) -> Pid =:= 0 end, maps:values(PMap)),
-  #proc{node = FirstNode} = FirstProc,
+  #proc{node = FirstNode} = maps:get(lists:min(maps:keys(PMap)), PMap),
   lists:member(Node, Nodes -- [FirstNode]).
 
 
@@ -112,7 +111,7 @@ rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) 
   #proc{hist = [Entry | _], node = Node} = maps:get(Pid, PMap),
   ProcViewOfNodes = SysNodes -- [Node],
   case Entry of
-    {spawn, _Bs, _E, _Stk, SpawnPid} ->
+    {spawn, _Bs, _E, _Stk, _Node,  SpawnPid} ->
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
       ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
       rollback_spawn(Sys, Pid, SpawnPid);
@@ -284,7 +283,7 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
 rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
   #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
   case Entry of
-    {spawn, _Bs, _Es, _Stk, SpawnPid} ->
+    {spawn, _Bs, _Es, _Stk, _Node, SpawnPid} ->
       rollback_step(Sys0, Pid);
     _ ->
       Sys1 = rollback_step(Sys0, Pid),

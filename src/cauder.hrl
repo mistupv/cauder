@@ -104,7 +104,8 @@
 -record(replay, {
   log_path :: file:filename(),
   call :: {module(), atom(), cauder_types:af_args()},
-  main_pid :: cauder_types:proc_id()
+  main_pid :: cauder_types:proc_id(),
+  main_node :: cauder_types:net_node()
 }).
 
 % Evaluation step result

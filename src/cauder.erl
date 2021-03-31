@@ -16,7 +16,7 @@
 -export([eval_opts/1]).
 -export([step/2, step_over/2]).
 -export([step_multiple/2]).
--export([replay_steps/2, replay_send/1, replay_spawn/1, replay_receive/1, replay_full_log/0]).
+-export([replay_steps/2, replay_send/1, replay_spawn/1, replay_start/1, replay_receive/1, replay_full_log/0]).
 -export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_start/1, rollback_receive/1, rollback_variable/1]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
@@ -308,6 +308,24 @@ replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid,
   CurrentSystem :: cauder_types:system().
 
 replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Replays the start of the node with the given name.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_replay_spawn/2
+
+-spec replay_start(Node) -> Reply when
+    Node :: cauder_types:net_node(),
+    Reply :: {ok, CurrentSystem} | busy,
+    CurrentSystem :: cauder_types:system().
+
+replay_start(Node) -> gen_server:call(?SERVER, {user, {replay_start, Node}}).
 
 
 %%------------------------------------------------------------------------------
@@ -635,6 +653,7 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
       step_multiple -> fun task_step_multiple/2;
       replay_steps -> fun task_replay_steps/2;
       replay_spawn -> fun task_replay_spawn/2;
+      replay_start -> fun task_replay_start/2;
       replay_send -> fun task_replay_send/2;
       replay_receive -> fun task_replay_receive/2;
       replay_full_log -> fun task_replay_full_log/2;
@@ -763,10 +782,9 @@ task_start({M, F, N, As}, undefined) ->
   {Time, System} =
     timer:tc(
       fun() ->
-          Node = list_to_atom(N),
           Pid = cauder_utils:fresh_pid(),
           Proc = #proc{
-                    node = Node,
+                    node = list_to_atom(N),
                     pid   = Pid,
                     exprs = [cauder_syntax:remote_call(M, F, As)],
                     spf   = {M, F, length(As)}
@@ -783,15 +801,17 @@ task_start(LogPath, undefined) ->
   {Time, System} =
     timer:tc(
       fun() ->
-        #replay{log_path = LogPath, call = {M, F, As}, main_pid = Pid} = cauder_utils:load_replay_data(LogPath),
+        #replay{log_path = LogPath, call = {M, F, As}, main_pid = Pid, main_node = N} = cauder_utils:load_replay_data(LogPath),
         Proc = #proc{
           pid   = Pid,
+          node  = list_to_atom(N),
           exprs = [cauder_syntax:remote_call(M, F, As)],
           spf   = {M, F, length(As)}
         },
         #sys{
           procs = #{Pid => Proc},
-          logs  = load_logs(LogPath)
+          logs  = load_logs(LogPath),
+          nodes = [list_to_atom(N)]
         }
       end
     ),
@@ -896,12 +916,32 @@ task_replay_spawn(Pid, Sys0) ->
       fun() ->
         case cauder_replay:can_replay_spawn(Sys0, Pid) of
           false -> error(no_replay);
-          true -> cauder_replay:replay_spawn(Sys0, Pid)
+          true -> cauder_replay:replay_spawn(Sys0, Pid, '_')
         end
       end
     ),
 
   {{replay_spawn, Pid}, Time, Sys1}.
+
+
+-spec task_replay_start(Node, System) -> {{replay_start, Node}, Time, NewSystem} when
+    Node :: cauder_types:net_node(),
+    System :: cauder_types:system(),
+    Time :: non_neg_integer(),
+    NewSystem :: cauder_types:system().
+
+task_replay_start(Node, Sys0) ->
+  {Time, Sys1} =
+    timer:tc(
+      fun() ->
+          case cauder_replay:can_replay_start(Sys0, Node) of
+            false -> error(no_replay);
+            _ -> cauder_replay:replay_start(Sys0, Node)
+          end
+      end
+     ),
+
+  {{replay_start, Node}, Time, Sys1}.
 
 
 -spec task_replay_send(Uid, System) -> {{replay_send, Uid}, Time, NewSystem} when
@@ -1153,20 +1193,13 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
   System :: cauder_types:system(),
   NewSystem :: cauder_types:system().
 
-replay_full_log(Sys0 = #sys{logs = LMap}) ->
-  lists:foldl(
-    fun
-      ([], Sys) -> Sys;
-      (Log, Sys) ->
-        case lists:last(Log) of
-          {spawn, Pid} -> cauder_replay:replay_spawn(Sys, Pid);
-          {send, Uid} -> cauder_replay:replay_send(Sys, Uid);
-          {'receive', Uid} -> cauder_replay:replay_receive(Sys, Uid)
-        end
-    end,
-    Sys0,
-    maps:values(LMap)
-  ).
+replay_full_log(Sys = #sys{logs = LMap}) ->
+  case lists:filter(fun ({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
+    [] -> Sys;
+    [{Pid, _Log}|_] ->
+      Sys1 = cauder_replay:replay_step(Sys, Pid),
+      replay_full_log(Sys1)
+  end.
 
 
 -spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when

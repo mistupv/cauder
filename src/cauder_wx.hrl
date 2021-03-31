@@ -150,18 +150,21 @@
 
 %% -----
 
--define(ACTION_Replay, 2130).
+-define(ACTION_Replay, 21300).
 
--define(ACTION_Replay_Steps, 2131).
--define(ACTION_Replay_Spawn, 2132).
--define(ACTION_Replay_Send, 2133).
--define(ACTION_Replay_Receive, 2134).
+-define(ACTION_Replay_Steps, 21301).
+-define(ACTION_Replay_Spawn, 21302).
+-define(ACTION_Replay_Send, 21303).
+-define(ACTION_Replay_Receive, 21304).
+-define(ACTION_Replay_Start, 21305).
 
--define(ACTION_Replay_Steps_Button, 2135).
--define(ACTION_Replay_Spawn_Button, 2136).
--define(ACTION_Replay_Send_Button, 2137).
--define(ACTION_Replay_Receive_Button, 2138).
--define(ACTION_Replay_FullLog_Button, 2139).
+
+-define(ACTION_Replay_Steps_Button, 21306).
+-define(ACTION_Replay_Spawn_Button, 21307).
+-define(ACTION_Replay_Send_Button, 21308).
+-define(ACTION_Replay_Receive_Button, 21309).
+-define(ACTION_Replay_Start_Button, 2134).
+-define(ACTION_Replay_FullLog_Button, 21311).
 
 %% -----
 

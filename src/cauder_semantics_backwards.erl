@@ -27,7 +27,6 @@
 
 step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
   {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
-
   case Entry of
     {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self orelse Label =:= node->
       P = P0#proc{
@@ -40,7 +39,7 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         mail  = Ms,
         procs = PMap#{Pid => P}
       };
-    {nodes, Bs, Es, Stk, _Nodes} ->
+    {nodes, Bs, Es, Stk, HistNodes} ->
       P = P0#proc{
             hist  = RestHist,
             stack = Stk,
@@ -49,9 +48,10 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
            },
       Sys#sys{
         mail  = Ms,
-        procs = PMap#{Pid => P}
+        procs = PMap#{Pid => P},
+        logs  = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
        };
-    {spawn, Bs, Es, Stk, Gid} ->
+    {spawn, Bs, Es, Stk, Node, Gid} ->
       P = P0#proc{
         hist  = RestHist,
         stack = Stk,
@@ -63,10 +63,14 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         from = Pid,
         to   = Gid
       },
+      Result = case cauder_utils:process_node(PMap, Gid) of
+                 false -> fail;
+                 _ -> succ
+               end,
       Sys#sys{
         mail  = Ms,
         procs = maps:remove(Gid, PMap#{Pid => P}),
-        logs  = maps:update_with(Pid, fun(Log) -> [{spawn, Gid} | Log] end, [], LMap),
+        logs  = maps:update_with(Pid, fun(Log) -> [{spawn, {Node, Result, Gid}} | Log] end, [], LMap),
         trace = lists:delete(T, Trace)
       };
     {start, success, Bs, Es, Stk, Node} ->
@@ -86,7 +90,8 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
         nodes = Nodes -- [Node],
         mail  = Ms,
         procs = PMap#{Pid => P},
-        trace = lists:delete(T, Trace)
+        trace = lists:delete(T, Trace),
+        logs  = maps:update_with(Pid, fun(Log) -> [{start, {succ, Node}} | Log] end, [], LMap)
        };
     {start, fail, Bs, Es, Stk, Node} ->
       P = P0#proc{
@@ -104,7 +109,8 @@ step(#sys{nodes = Nodes, mail = Ms, logs = LMap, trace = Trace} = Sys, Pid) ->
       Sys#sys{
         mail  = Ms,
         procs = PMap#{Pid => P},
-        trace = lists:delete(T, Trace)
+        trace = lists:delete(T, Trace),
+        logs  = maps:update_with(Pid, fun(Log) -> [{start, {fail, Node}} | Log] end, [], LMap)
        };
     {send, Bs, Es, Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
       {_Msg, OldMsgs} = cauder_utils:take_message(Ms, Uid),
@@ -198,7 +204,7 @@ process_option(#sys{ nodes = SysNodes}, #proc{node = Node, pid = Pid, hist = [{n
     true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
     false -> ?NULL_OPT
   end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, SpawnPid} | _]}) ->
+process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, _Node,SpawnPid} | _]}) ->
   try maps:get(SpawnPid, PMap) of
     Proc ->
       #proc{hist = Hist} = Proc,

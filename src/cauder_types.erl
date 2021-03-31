@@ -5,7 +5,8 @@
 -export_type([
   system/0,
   msg_id/0, message/0,
-  log_map/0, log/0, log_entry/0,
+  log_map/0, log/0, log_entry/0, log_entry_search/0,
+  fwd_opts/0,
   process_map/0, proc_id/0, process/0,
   history/0, history_entry/0,
   stack/0, stack_entry/0,
@@ -28,9 +29,19 @@
 
 -type log_map() :: #{proc_id() => log()}.
 -type log() :: [log_entry()].
--type log_entry() :: {spawn, proc_id()}
-                   | {send, msg_id()}
-                   | {'receive', msg_id()}.
+-type log_entry() :: {send, msg_id()}
+                   | {'receive', msg_id()}
+                   | {nodes, {[net_node()]}}
+                   | {start, {succ, net_node()}}
+                   | {start, {fail, net_node()}}
+                   | {spawn, {net_node(), succ, proc_id()}}
+                   | {spawn, {net_node(), fail, proc_id()}}.
+
+-type log_entry_search() :: {send, msg_id()}
+                          | {'receive', msg_id()}
+                          | {start, {succ, net_node()}}
+                          | {spawn, {'_', '_', proc_id()}}
+                          | {spawn, {net_node(), fail, '_'}}.
 
 -type process_map() :: #{proc_id() := process()}. % Not empty
 -type proc_id() :: pos_integer().
@@ -42,7 +53,7 @@
                        | {self, environment(), [abstract_expr()], stack()}
                        | {node, environment(), [abstract_expr()], stack()}
                        | {nodes, environment(), [abstract_expr()], stack(), [net_node()]}
-                       | {spawn, environment(), [abstract_expr()], stack(), proc_id()}
+                       | {spawn, environment(), [abstract_expr()], stack(), net_node(), proc_id()}
                        | {start, success, environment(), [abstract_expr()], stack(), net_node()}
                        | {start, fail, environment(), [abstract_expr()], stack(), net_node()}
                        | {send, environment(), [abstract_expr()], stack(), message()}
@@ -56,6 +67,7 @@
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.
+-type fwd_opts() :: #{atom() => term()}.
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
 
@@ -99,6 +111,7 @@
                        | af_spawn_3_call()
                        | af_spawn_4_call()
                        | af_send_call()
+                       | af_send_op_call()
                        | af_local_call()
                        | af_remote_call()
                        | af_apply()
@@ -146,6 +159,8 @@
 -type af_spawn_4_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr(), abstract_expr()}.
 
 -type af_send_call() :: {send, line(), abstract_expr(), abstract_expr()}.
+
+-type af_send_op_call() :: {send_op, line(), abstract_expr(), abstract_expr()}.
 
 -type af_local_call() :: {local_call, line(), atom(), af_args()}.
 

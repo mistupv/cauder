@@ -56,7 +56,7 @@ eval_list(Bs, [E | Es], Stk) ->
   Bindings :: cauder_types:environment(),
   Expressions :: [cauder_types:abstract_expr()],
   Stack :: cauder_types:stack(),
-  Result :: cauder_types:result().
+    Result :: cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
   case is_reducible(E, Bs) of
@@ -684,7 +684,6 @@ concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 
 is_reducible([], _)                 -> false;
 is_reducible([E | Es], Bs)          -> is_reducible(E, Bs) orelse is_reducible(Es, Bs);
-
 is_reducible({value, _, _}, _)      -> false;
 is_reducible({var, _, '_'}, _)      -> false;
 is_reducible({var, _, Name}, Bs)    -> not cauder_utils:is_temp_variable_name(Name) andalso maps:is_key(Name, Bs);

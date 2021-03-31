@@ -377,6 +377,14 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
   cauder_wx_statusbar:replay_spawn_start(Pid),
   {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Start_Button), State) ->
+  Choice = cauder_wx:find(?ACTION_Replay_Start, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Node = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:replay_start(Node),
+  cauder_wx_statusbar:replay_start_start(Node),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_start})};
+
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
   Choice = cauder_wx:find(?ACTION_Replay_Send, wxChoice),
   Idx = wxChoice:getSelection(Choice),
@@ -416,17 +424,12 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
   {noreply, refresh(State, State#wx_state{system = System, task = rollback_spawn})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Start_Button), State) ->
-  TextCtrl = cauder_wx:find(?ACTION_Rollback_Start, wxTextCtrl),
-  case list_to_atom(wxTextCtrl:getValue(TextCtrl)) of
-    '' ->
-      cauder_wx_statusbar:rollback_start_fail(),
-      {noreply, State};
-    Node ->
-      {ok, System} = cauder:rollback_start(Node),
-      cauder_wx_statusbar:rollback_start_begin(Node),
-      {noreply, refresh(State, State#wx_state{system = System, task = rollback_start})}
-  end;
-
+  Choice = cauder_wx:find(?ACTION_Rollback_Start, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Node = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:rollback_start(Node),
+  cauder_wx_statusbar:rollback_start_begin(Node),
+  {noreply, refresh(State, State#wx_state{system = System, task = rollback_start})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
   Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
@@ -597,10 +600,13 @@ handle_info({dbg, {finish, {replay_spawn, Pid}, Time, System}}, #wx_state{task =
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
+handle_info({dbg, {finish, {replay_start, Node}, Time, System}}, #wx_state{task = replay_start} = State) ->
+  cauder_wx_statusbar:replay_start_finish(Node, Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
 handle_info({dbg, {fail, replay_spawn, no_replay}}, #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
-
 
 handle_info({dbg, {finish, {replay_send, Uid}, Time, System}}, #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
@@ -609,7 +615,6 @@ handle_info({dbg, {finish, {replay_send, Uid}, Time, System}}, #wx_state{task = 
 handle_info({dbg, {fail, replay_send, no_replay}}, #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
-
 
 handle_info({dbg, {finish, {replay_receive, Uid}, Time, System}}, #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_finish(Uid, Time),
