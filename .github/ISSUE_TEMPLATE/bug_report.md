@@ -8,10 +8,12 @@ labels: bug
 <!-- PLEASE READ THE FOLLOWING INSTRUCTIONS -->
 
 <!--
-- Try to search for your issue, it may have already been answered or even fixed in the development version.
+- Try to search for your issue, it may have already been answered or even fixed
+  in the development version.
 - Check if the issue is reproducible with the latest stable version of CauDEr.
 - Clearly describe the steps necessary to reproduce the issue.
-- In case you found a solution by yourself, it could be helpful to explain how you fixed it.
+- In case you found a solution by yourself, it could be helpful to explain how
+  you fixed it.
 - Some of the section below may not be applicable, you may remove them.
 - Use English for communication
 -->
