@@ -10,22 +10,23 @@ labels: bug
 <!--
 - Try to search for your issue, it may have already been answered or even fixed in the development version.
 - Check if the issue is reproducible with the latest stable version of CauDEr.
-- It is **required** that you clearly describe the steps necessary to reproduce the issue.
+- Clearly describe the steps necessary to reproduce the issue.
 - In case you found a solution by yourself, it could be helpful to explain how you fixed it.
+- Some of the section below may not be applicable, you may remove them.
 - Use English for communication
 -->
 
-### Overview of the problem
+## Environment
 
-- **OTP/Erlang** version: [X.X.X]
-- **CauDEr** version: [X.X.X]
-- **OS**:
+- OTP/Erlang version:
+- CauDEr version:
+- Operating System:
 
-### Description
+## Description
 
 <!-- Description of the bug -->
 
-### Steps to reproduce
+## Steps to reproduce
 
 <!--
 1. First Step
@@ -33,10 +34,14 @@ labels: bug
 3. and so on...
 -->
 
-### Expected behavior
+## Expected behavior
 
 <!-- What you expected to happen -->
 
-### Actual behavior
+## Actual behavior
 
 <!-- What actually happened -->
+
+## Solution
+
+<!-- Describe the solution you found -->
