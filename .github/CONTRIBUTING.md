@@ -21,9 +21,8 @@ Issues are a quick way to point out a bug. If you find a bug in CauDEr then
 please make sure that:
 
 * There is already an open [Issue][issues].
-* The issue has not already been fixed (check the `dev` branch or look
-  for [closed Issues][issues-closed])
-  .
+* The issue has not already been fixed (check the `dev` branch or look for
+  [closed Issues][issues-closed]).
 
 When submitting a bug report explain the problem and include additional details
 to help maintainers reproduce the problem:
@@ -52,8 +51,7 @@ maintainers:
 1. Follow all instructions in [the template](PULL_REQUEST_TEMPLATE.md)
 2. Follow the [guidelines](#guidelines)
 3. After you submit your pull request, verify that
-   all [status checks][status-checks]
-   are passing.
+   all [status checks][status-checks] are passing.
    <details><summary>What if the status checks are failing?</summary>If a status
    check is failing, and you believe that the failure is unrelated to your
    change, please leave a comment on the pull request explaining why you believe
