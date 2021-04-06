@@ -20,7 +20,7 @@ official [CauDEr Mailing List][mailing-list].
 Issues are a quick way to point out a bug. If you find a bug in CauDEr then
 please make sure that:
 
-* There is already an open [Issue][issues].
+* There is not already an open [Issue][issues].
 * The issue has not already been fixed (check the `dev` branch or look for
   [closed Issues][issues-closed]).
 
@@ -33,8 +33,8 @@ to help maintainers reproduce the problem:
 * Describe the behavior you observed after following the steps and point out
   what exactly is the problem with that behavior.
 * Explain which behavior you expected to see instead and why.
-* Include screenshots and animated GIFs which show you following the described
-  steps and clearly demonstrate the problem.
+* Include screenshots and/or animated GIFs which show you following the
+  described steps and clearly demonstrate the problem.
 
 ### Pull Requests
 
@@ -50,8 +50,8 @@ maintainers:
 
 1. Follow all instructions in [the template](PULL_REQUEST_TEMPLATE.md)
 2. Follow the [guidelines](#guidelines)
-3. After you submit your pull request, verify that
-   all [status checks][status-checks] are passing.
+3. After you submit your pull request, verify that all
+   [status checks][status-checks] are passing.
    <details><summary>What if the status checks are failing?</summary>If a status
    check is failing, and you believe that the failure is unrelated to your
    change, please leave a comment on the pull request explaining why you believe
@@ -103,8 +103,9 @@ else you are doing with your repository!
 
 ### Erlang Styleguide
 
-This project mostly follows [Inaka's Erlang Coding Guidelines][inaka]. However,
-you should try to keep the style of your code similar to that of existing code.
+This project tries to follow [Inaka's Erlang Coding Guidelines][inaka]. However,
+you should also try to keep the style of your code similar to that of existing
+code.
 
 In the future we may use a linter.
 
