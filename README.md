@@ -10,10 +10,14 @@ A Causal-Consistent Reversible Debugger for Erlang.
 
 ### Core Erlang version
 
-In 2020, we decided to rewrite CauDEr to work directly with Erlang instead of Core Erlang.
-The main reasons for this change where simplicity, user-friendliness and breaking changes introduced in newer version of Erlang/OTP.
+In 2020, we decided to rewrite CauDEr to work directly with Erlang instead of
+Core Erlang. The main reasons for this change where simplicity,
+user-friendliness and breaking changes introduced in newer version of
+Erlang/OTP.
 
-The old version of CauDEr developed for Core Erlang is still available at [mistupv/cauder-core](https://github.com/mistupv/cauder-core), however it is no longer being actively maintained.
+The old version of CauDEr developed for Core Erlang is still available at
+[mistupv/cauder-core](https://github.com/mistupv/cauder-core), however it is no
+longer being actively maintained.
 
 ## Dependencies
 
@@ -90,7 +94,6 @@ Eshell V11.0  (abort with ^G)
 ⚠️ If you try to start the GUI without previously starting the debugger, it will
 fail with the following error: `{error,{not_started,cauder}}`
 
-
 ### Using the _escript_
 
     ./_build/default/bin/cauder
@@ -111,6 +114,16 @@ fail with the following error: `{error,{not_started,cauder}}`
 
 To learn how to use CauDEr you can check the
 [Wiki](https://github.com/mistupv/cauder/wiki) (Under construction!)
+
+## Mailing list
+
+Announcements as well as questions and discussion among users and developers of
+the causal consistent reversible debugger CauDEr for Erlang programs are carried
+out in the [Mailing List](https://listas.upv.es/mailman/listinfo/cauder)
+
+## Contributing
+
+Please read the [Contributing guide](.github/CONTRIBUTING.md).
 
 ## License
 
