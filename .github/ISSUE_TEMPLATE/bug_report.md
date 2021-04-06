@@ -14,7 +14,7 @@ labels: bug
 - Clearly describe the steps necessary to reproduce the issue.
 - In case you found a solution by yourself, it could be helpful to explain how
   you fixed it.
-- Some of the section below may not be applicable, you may remove them.
+- Some of the sections below may not be applicable, you may remove them.
 - Use English for communication
 -->
 
