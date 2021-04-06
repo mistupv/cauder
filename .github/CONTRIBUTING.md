@@ -76,10 +76,10 @@ CauDEr uses the [Git-Flow][git-flow] branching model which requires all Pull
 Requests to be sent to the `dev` branch; this is where the next planned version
 will be developed.
 
-The `master` branch will always contain the latest stable version and is kept
-clean, so a "hotfix" can be applied to the `master` branch to create a new
+The `main` branch will always contain the latest stable version and is kept
+clean, so a "hotfix" can be applied to the `main` branch to create a new
 version, without worrying about other features holding it up. For this reason,
-all commits need to be made to the `dev` branch, and any sent to the `master`
+all commits need to be made to the `dev` branch, and any sent to the `main`
 branch will be closed automatically. If you have multiple changes to submit,
 please place all changes into their own branch on your fork.
 
