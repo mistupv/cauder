@@ -100,6 +100,9 @@ fail with the following error: `{error,{not_started,cauder}}`
 
 ℹ️ This will block the current shell until the CauDEr window is closed.
 
+In Unix systems a symbolic link pointing to `./_build/default/bin/cauder` will
+be created in the root of the project.
+
 ### Using the release
 
     ./_build/default/reltool/cauder
