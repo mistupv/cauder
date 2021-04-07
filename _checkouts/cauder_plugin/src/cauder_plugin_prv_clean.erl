@@ -47,6 +47,7 @@ do(State) ->
     AppInfo ->
       case rebar_app_info:name(AppInfo) of
         <<"cauder">> ->
+          file:delete(filename:join(rebar_dir:root_dir(State), "cauder")),
           rebar_file_utils:rm_rf(rebar_dir:base_dir(State));
         _ ->
           ok
