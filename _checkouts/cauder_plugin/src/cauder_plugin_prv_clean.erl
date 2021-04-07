@@ -27,8 +27,8 @@ init(State) ->
       {module, ?MODULE},
       {bare, true},
       {deps, ?DEPS},
-      {desc, "Creates a release of CauDEr using reltool"},
-      {short_desc, "Creates a release of CauDEr using reltool"},
+      {desc, "Removes extra files which `rebar3 clean -a` doesn't"},
+      {short_desc, "Removes extra files which `rebar3 clean -a` doesn't"},
       {example, "rebar3 " ++ atom_to_list(?PROVIDER)},
       {opts, []}
     ]),
