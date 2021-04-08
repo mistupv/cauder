@@ -131,11 +131,15 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
   MessageQueues :: [queue:queue(message())].
 
 pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
-  lists:filtermap(fun({_, Queue}) ->
-    case queue:is_empty(Queue) of
-      true -> false;
-      false -> {true, Queue}
-    end end,      orddict:to_list(maps:get(Dest, DestMap)));
+  lists:filtermap(
+    fun({_, Queue}) ->
+      case queue:is_empty(Queue) of
+        true -> false;
+        false -> {true, Queue}
+      end
+    end,
+    orddict:to_list(maps:get(Dest, DestMap))
+  );
 pid_get(_, _) -> [].
 
 
