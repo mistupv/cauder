@@ -149,6 +149,7 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config
   case Pid of
     undefined -> ok;
     Pid ->
+      Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:pid_get(Pid, Mail)),
       lists:foldl(
         fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
           wxListCtrl:insertItem(MailArea, Row, ""),
@@ -158,7 +159,7 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config
           wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
           wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
           Row + 1
-        end, 0, cauder_mailbox:pid_get(Pid, Mail))
+        end, 0, Messages)
   end,
   wxListCtrl:thaw(MailArea),
   ok.
