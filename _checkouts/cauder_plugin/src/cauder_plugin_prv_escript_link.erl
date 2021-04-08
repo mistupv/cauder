@@ -1,4 +1,4 @@
--module(cauder_plugin_prv_clean).
+-module(cauder_plugin_prv_escript_link).
 
 %% API
 -export([init/1, do/1, format_error/1]).
@@ -27,8 +27,8 @@ init(State) ->
       {module, ?MODULE},
       {bare, true},
       {deps, ?DEPS},
-      {desc, "Removes extra files which `rebar3 clean -a` doesn't"},
-      {short_desc, "Removes extra files which `rebar3 clean -a` doesn't"},
+      {desc, "Creates a symbolic link to the escript"},
+      {short_desc, "Creates a symbolic link to the escript"},
       {example, "rebar3 " ++ atom_to_list(?PROVIDER)},
       {opts, []}
     ]),
@@ -47,8 +47,19 @@ do(State) ->
     AppInfo ->
       case rebar_app_info:name(AppInfo) of
         <<"cauder">> ->
-          file:delete(filename:join(rebar_dir:root_dir(State), "cauder")),
-          rebar_file_utils:rm_rf(rebar_dir:base_dir(State));
+          Escript = filename:join([rebar_dir:base_dir(State), "bin", "cauder"]),
+          Link = filename:join(rebar_dir:root_dir(State), "cauder"),
+          case os:type() of
+            {win32, _} ->
+              file:delete(Link);
+            {unix, _} ->
+              case file:make_symlink(Escript, Link) of
+                ok ->
+                  rebar_api:info("Created symbolic link: ~p -> ~p~n", [Link, Escript]);
+                {error, eexist} ->
+                  rebar_api:info("Symbolic link already exists~n", [])
+              end
+          end;
         _ ->
           ok
       end
