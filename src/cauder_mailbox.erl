@@ -122,13 +122,13 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
 
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the messages from `Mailbox' whose destination is the given
-%% `Destination'.
+%% @doc Returns the a list of messages queues from `Mailbox' whose destination
+%% is the given `Destination'.
 
--spec pid_get(Destination, Mailbox) -> Messages when
+-spec pid_get(Destination, Mailbox) -> MessageQueues when
   Destination :: cauder_types:proc_id(),
   Mailbox :: mailbox(),
-  Messages :: [queue:queue(message())].
+  MessageQueues :: [queue:queue(message())].
 
 pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
   lists:filtermap(fun({_, Queue}) ->
