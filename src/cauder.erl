@@ -581,8 +581,8 @@ handle_call({task, {success, Value, Time, NewSystem}}, {Pid, _}, #state{subs = S
   notifySubscribers({success, Task, Value, Time, NewSystem}, Subs),
   {reply, ok, State#state{task = undefined, system = NewSystem}};
 
-handle_call({task, {failure, Reason}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
-  notifySubscribers({failure, Task, Reason}, Subs),
+handle_call({task, {failure, Reason, Stacktrace}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
+  notifySubscribers({failure, Task, Reason, Stacktrace}, Subs),
   {reply, ok, State#state{task = undefined}};
 
 %%%=============================================================================
@@ -746,8 +746,8 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
           {_, _, _, _} = Result ->
             ok = gen_server:call(?SERVER, {task, Result})
         catch
-          error:Reason ->
-            ok = gen_server:call(?SERVER, {task, {failure, Reason}})
+          error:Reason:Stacktrace ->
+            ok = gen_server:call(?SERVER, {task, {failure, Reason, Stacktrace}})
         end
     end
   ).
