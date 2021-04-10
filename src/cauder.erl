@@ -747,7 +747,7 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
             ok = gen_server:call(?SERVER, {task, Result})
         catch
           error:Reason ->
-            ok = gen_server:call(?SERVER, {task, {failed, Reason}})
+            ok = gen_server:call(?SERVER, {task, {failure, Reason}})
         end
     end
   ).
