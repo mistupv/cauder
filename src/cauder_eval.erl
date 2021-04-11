@@ -198,7 +198,7 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     true -> eval_and_update({Bs, Fun, Stk}, {3, E});
     false ->
       Var = cauder_utils:temp_variable(Line),
-      Label = {spawn, Var, concrete(Fun)},
+      Label = {spawn, Var, Fun},
       #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
   end;
 

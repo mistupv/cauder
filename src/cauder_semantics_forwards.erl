@@ -62,7 +62,40 @@ step(#sys{mail = Mail, logs = LMap0, trace = Trace} = Sys, Pid, Sched, Mode) ->
       Sys#sys{
         procs = PMap#{Pid => P}
       };
-    {spawn, VarPid, Msg, F, As} ->
+    {spawn, VarPid, {value, Line, Fun} = FunLiteral} ->
+      {SpawnPid, NewLog} =
+        case LMap0 of
+          #{Pid := [{spawn, LogPid} | RestLog]} ->
+            {LogPid, RestLog};
+          _ ->
+            {cauder_utils:fresh_pid(), []}
+        end,
+
+      {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
+      {arity, A} = erlang:fun_info(Fun, arity),
+
+      P1 = P0#proc{
+        hist  = [{spawn, Bs0, Es0, Stk0, SpawnPid} | Hist],
+        stack = Stk,
+        env   = Bs,
+        exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
+      },
+      P2 = #proc{
+        pid   = SpawnPid,
+        exprs = [{apply_fun, Line, FunLiteral, []}],
+        spf   = {M, F, A}
+      },
+      T = #trace{
+        type = ?RULE_SPAWN,
+        from = Pid,
+        to   = SpawnPid
+      },
+      Sys#sys{
+        procs = PMap#{Pid => P1, SpawnPid => P2},
+        logs  = LMap0#{Pid => NewLog},
+        trace = [T | Trace]
+      };
+    {spawn, VarPid, M, F, As} ->
       {SpawnPid, NewLog} =
         case LMap0 of
           #{Pid := [{spawn, LogPid} | RestLog]} ->
@@ -79,8 +112,8 @@ step(#sys{mail = Mail, logs = LMap0, trace = Trace} = Sys, Pid, Sched, Mode) ->
       },
       P2 = #proc{
         pid   = SpawnPid,
-        exprs = [cauder_syntax:remote_call(Msg, F, lists:map(fun cauder_eval:abstract/1, As))],
-        spf   = {Msg, F, length(As)}
+        exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
+        spf   = {M, F, length(As)}
       },
       T = #trace{
         type = ?RULE_SPAWN,
