@@ -1120,16 +1120,19 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
           false ->
             Change =
               case {sets:size(PidSet0), sets:size(PidSet1)} of
-                {Size, Size} ->
-                  none;
                 {0, _} ->
                   {init, sets:to_list(PidSet1)};
                 {Size0, Size1} when Size0 < Size1 ->
-                  [ChangePid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
-                  {add, ChangePid};
+                  [AddedPid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
+                  {add, AddedPid};
                 {Size0, Size1} when Size0 > Size1 ->
-                  [ChangePid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
-                  {remove, ChangePid}
+                  [RemovedPid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
+                  {remove, RemovedPid};
+                {Size, Size} ->
+                  case {sets:to_list(sets:subtract(PidSet1, PidSet0)), sets:to_list(sets:subtract(PidSet0, PidSet1))} of
+                    {[], []} -> none;
+                    {[AddedPid], [RemovedPid]} -> {update, AddedPid, RemovedPid}
+                  end
               end,
             {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
             Sys1 =
