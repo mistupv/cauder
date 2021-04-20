@@ -33,24 +33,54 @@ create(Frame) ->
 
     FileMenu = create_menu(
         [
-            #menu_item{id = ?MENU_File_Open, text = "&Open...\tCtrl+O", help = ?HELP_File_Open},
+            #menu_item{
+                id = ?MENU_File_Open,
+                text = "&Open...\tCtrl+O",
+                help = ?HELP_File_Open
+            },
             separator,
-            #menu_item{id = ?MENU_File_Exit, text = "E&xit", help = ?HELP_File_Exit}
+            #menu_item{
+                id = ?MENU_File_Exit,
+                text = "E&xit",
+                help = ?HELP_File_Exit
+            }
         ]
     ),
 
     EditMenu = create_menu(
         [
-            #menu_item{id = ?MENU_Edit_Undo, text = "&Undo\tCtrl+Z", enabled = false},
-            #menu_item{id = ?MENU_Edit_Redo, text = "&Redo\tCtrl+Y", enabled = false}
+            #menu_item{
+                id = ?MENU_Edit_Undo,
+                text = "&Undo\tCtrl+Z",
+                enabled = false
+            },
+            #menu_item{
+                id = ?MENU_Edit_Redo,
+                text = "&Redo\tCtrl+Y",
+                enabled = false
+            }
         ]
     ),
 
     ViewMenu = create_menu(
         [
-            #menu_item{id = ?MENU_View_ZoomIn, text = "Zoom &In\tCtrl++", help = ?HELP_View_ZoomIn, enabled = false},
-            #menu_item{id = ?MENU_View_ZoomOut, text = "Zoom &Out\tCtrl+-", help = ?HELP_View_ZoomOut, enabled = false},
-            #menu_item{id = ?MENU_View_Zoom100, text = "Zoo&m 100%", help = ?HELP_View_Zoom100},
+            #menu_item{
+                id = ?MENU_View_ZoomIn,
+                text = "Zoom &In\tCtrl++",
+                help = ?HELP_View_ZoomIn,
+                enabled = false
+            },
+            #menu_item{
+                id = ?MENU_View_ZoomOut,
+                text = "Zoom &Out\tCtrl+-",
+                help = ?HELP_View_ZoomOut,
+                enabled = false
+            },
+            #menu_item{
+                id = ?MENU_View_Zoom100,
+                text = "Zoo&m 100%",
+                help = ?HELP_View_Zoom100
+            },
             separator,
             %% TODO Show/hide
             #menu_item{
@@ -61,10 +91,30 @@ create(Frame) ->
                 enabled = false
             },
             separator,
-            #menu_item{id = ?MENU_View_Bindings, text = "Show &Environment", help = ?HELP_View_Bindings, kind = check},
-            #menu_item{id = ?MENU_View_Stack, text = "Show S&tack", help = ?HELP_View_Stack, kind = check},
-            #menu_item{id = ?MENU_View_Log, text = "Show &Log", help = ?HELP_View_Log, kind = check},
-            #menu_item{id = ?MENU_View_History, text = "Show &History", help = ?HELP_View_History, kind = check},
+            #menu_item{
+                id = ?MENU_View_Bindings,
+                text = "Show &Environment",
+                help = ?HELP_View_Bindings,
+                kind = check
+            },
+            #menu_item{
+                id = ?MENU_View_Stack,
+                text = "Show S&tack",
+                help = ?HELP_View_Stack,
+                kind = check
+            },
+            #menu_item{
+                id = ?MENU_View_Log,
+                text = "Show &Log",
+                help = ?HELP_View_Log,
+                kind = check
+            },
+            #menu_item{
+                id = ?MENU_View_History,
+                text = "Show &History",
+                help = ?HELP_View_History,
+                kind = check
+            },
             separator,
             #menu_item{
                 id = ?MENU_View_RelevantBindings,
@@ -85,10 +135,20 @@ create(Frame) ->
                 help = ?HELP_View_ConcurrentHistory,
                 kind = radio
             },
-            #menu_item{id = ?MENU_View_FullHistory, text = "Full History", help = ?HELP_View_FullHistory, kind = radio},
+            #menu_item{
+                id = ?MENU_View_FullHistory,
+                text = "Full History",
+                help = ?HELP_View_FullHistory,
+                kind = radio
+            },
             separator,
             %% TODO Show/hide
-            #menu_item{id = ?MENU_View_Mailbox, text = "Show &Mailbox", help = ?HELP_View_Mailbox, kind = check},
+            #menu_item{
+                id = ?MENU_View_Mailbox,
+                text = "Show &Mailbox",
+                help = ?HELP_View_Mailbox,
+                kind = check
+            },
             separator,
             #menu_item{
                 id = ?MENU_View_ProcessMessages,
@@ -96,24 +156,50 @@ create(Frame) ->
                 help = ?HELP_View_ProcessMessages,
                 kind = radio
             },
-            #menu_item{id = ?MENU_View_AllMessages, text = "All Messages", help = ?HELP_View_AllMessages, kind = radio},
+            #menu_item{
+                id = ?MENU_View_AllMessages,
+                text = "All Messages",
+                help = ?HELP_View_AllMessages,
+                kind = radio
+            },
             separator,
-            #menu_item{id = ?MENU_View_StatusBar, text = "&Status Bar", help = ?HELP_View_StatusBar, kind = check}
+            #menu_item{
+                id = ?MENU_View_StatusBar,
+                text = "&Status Bar",
+                help = ?HELP_View_StatusBar,
+                kind = check
+            }
         ]
     ),
 
     RunMenu = create_menu(
         [
-            #menu_item{id = ?MENU_Run_Start, text = "St&art...", help = ?HELP_Run_Start, enabled = false},
-            #menu_item{id = ?MENU_Run_Stop, text = "St&op", help = ?HELP_Run_Stop, enabled = false}
+            #menu_item{
+                id = ?MENU_Run_Start,
+                text = "St&art...",
+                help = ?HELP_Run_Start,
+                enabled = false
+            },
+            #menu_item{
+                id = ?MENU_Run_Stop,
+                text = "St&op",
+                help = ?HELP_Run_Stop,
+                enabled = false
+            }
         ]
     ),
 
     HelpMenu = create_menu(
         [
-            #menu_item{id = ?MENU_Help_ViewHelp, text = "View &Help"},
+            #menu_item{
+                id = ?MENU_Help_ViewHelp,
+                text = "View &Help"
+            },
             separator,
-            #menu_item{id = ?MENU_Help_About, text = "&About " ?APP_NAME}
+            #menu_item{
+                id = ?MENU_Help_About,
+                text = "&About " ?APP_NAME
+            }
         ]
     ),
 

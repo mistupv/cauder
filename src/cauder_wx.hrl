@@ -259,24 +259,30 @@
 -define(DIALOG_StartSession_Title, "Start debugging session").
 
 -define(DIALOG_StartSession_ArgCount_Title, "Warming: Argument count").
--define(DIALOG_StartSession_ArgCount_Message, "Wrong number of argumments!\nExpected ~b but got ~b.").
+-define(DIALOG_StartSession_ArgCount_Message,
+    "Wrong number of argumments!\n"
+    "Expected ~b but got ~b."
+).
 
 -define(DIALOG_BadArgs_Title, "Error: Invalid arguments").
 -define(DIALOG_BadArgs_Message, "Invalid arguments!").
 
 -define(DIALOG_StopSession_Title, "Stop debugging session").
 -define(DIALOG_StopSession_Message,
-    "You are about to stop the current debugging session.\nThe current system state will be lost.\nAre you sure you want to continue?"
+    "You are about to stop the current debugging session.\n"
+    "The current system state will be lost.\nAre you sure you want to continue?"
 ).
 
 -define(DIALOG_DropFiles_Unsupported_Title, "Unsupported files").
 -define(DIALOG_DropFiles_Unsupported_Message,
-    "Some of the dropped files are not supported.\nOnly files with the extension .erl are supported."
+    "Some of the dropped files are not supported.\n"
+    "Only files with the extension .erl are supported."
 ).
 
 -define(DIALOG_DropFiles_Multiple_Title, "Multiple files").
 -define(DIALOG_DropFiles_Multiple_Message,
-    "Currently only one file can be opened at a time.\nPlease, choose one of the files:"
+    "Currently only one file can be opened at a time.\n"
+    "Please, choose one of the files:"
 ).
 
 -define(DIALOG_About, "A Causal-Consistent Reversible Debugger for Erlang.").

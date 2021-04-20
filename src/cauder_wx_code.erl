@@ -156,7 +156,7 @@ create_code(Parent) ->
     ),
 
     wxStyledTextCtrl:setLexer(CodeControl, ?wxSTC_LEX_ERLANG),
-    wxStyledTextCtrl:setKeyWords(CodeControl, 0, keyWords()),
+    wxStyledTextCtrl:setKeyWords(CodeControl, 0, key_words()),
     wxStyledTextCtrl:setMarginType(CodeControl, 0, ?wxSTC_MARGIN_NUMBER),
     wxStyledTextCtrl:setSelectionMode(CodeControl, ?wxSTC_SEL_LINES),
 
@@ -248,7 +248,7 @@ update_expression(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
 
 %%%=============================================================================
 
-keyWords() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
+key_words() -> lists:flatten(lists:join($\s, ?KEYWORDS), [0]).
 
 -spec load_code(CodeControl, Code) -> ok when
     CodeControl :: wxStyledTextCtrl:wxStyledTextCtrl(),
