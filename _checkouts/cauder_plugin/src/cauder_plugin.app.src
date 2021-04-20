@@ -1,9 +1,8 @@
-{application, cauder_plugin,
-  [
+{application, cauder_plugin, [
     {description, "Custom rebar3 plugin for CauDEr"},
     {vsn, "0.1.0"},
     {registered, []},
     {applications, [kernel, stdlib]},
     {env, []},
     {modules, []}
-  ]}.
+]}.

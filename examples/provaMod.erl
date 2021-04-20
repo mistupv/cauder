@@ -1,9 +1,9 @@
 -module(provaMod).
--export([main/0,inc/1]).
+-export([main/0, inc/1]).
 
 main() ->
-     X=prova:quad(5),
-     inc(X).
+    X = prova:quad(5),
+    inc(X).
 
 inc(X) ->
-     X+1. 
+    X + 1.
