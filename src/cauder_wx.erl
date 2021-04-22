@@ -15,6 +15,12 @@
 -define(MENU_EVENT(Id, CmdValue), #wx{id = Id, event = #wxCommand{type = command_menu_selected, commandInt = CmdValue}}).
 -define(BUTTON_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_button_clicked}}).
 
+-define(DBG_SUCCESS(Task, Time, System), {dbg, {success, Task, {}, Time, System}}).
+-define(DBG_SUCCESS(Task, Value, Time, System), {dbg, {success, Task, Value, Time, System}}).
+-define(DBG_CANCEL(Task, Value, Time, System), {dbg, {cancel, Task, Value, Time, System}}).
+-define(DBG_SUSPEND(Task, Value, System), {dbg, {suspend, Task, Value, System}}).
+-define(DBG_FAILURE(Task, Reason, Stacktrace), {dbg, {failure, Task, Reason, Stacktrace}}).
+
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -166,7 +172,7 @@ init([]) ->
   wxMenuBar:check(MenuBar, ?MENU_View_Stack, Config#config.stack),
   wxMenuBar:check(MenuBar, ?MENU_View_Log, Config#config.log),
   wxMenuBar:check(MenuBar, ?MENU_View_History, Config#config.history),
-  wxMenuBar:check(MenuBar, ?MENU_View_Mailbox, true), % Config#config.mailbox
+  wxMenuBar:check(MenuBar, ?MENU_View_Mailbox, Config#config.mailbox),
 
   case Config#config.bindings_mode of
     all -> wxMenuBar:check(MenuBar, ?MENU_View_AllBindings, true);
@@ -176,6 +182,11 @@ init([]) ->
   case Config#config.history_mode of
     full -> wxMenuBar:check(MenuBar, ?MENU_View_FullHistory, true);
     concurrent -> wxMenuBar:check(MenuBar, ?MENU_View_ConcurrentHistory, true)
+  end,
+
+  case Config#config.mailbox_mode of
+    all -> wxMenuBar:check(MenuBar, ?MENU_View_AllMessages, true);
+    process -> wxMenuBar:check(MenuBar, ?MENU_View_ProcessMessages, true)
   end,
 
   wxMenuBar:check(MenuBar, ?MENU_View_StatusBar, Config#config.status_bar),
@@ -266,7 +277,8 @@ handle_event(?MENU_EVENT(Item, Check), #wx_state{config = Config} = State) when 
       ?MENU_View_Bindings -> Config#config{bindings = Show};
       ?MENU_View_Stack -> Config#config{stack = Show};
       ?MENU_View_Log -> Config#config{log = Show};
-      ?MENU_View_History -> Config#config{history = Show}
+      ?MENU_View_History -> Config#config{history = Show};
+      ?MENU_View_Mailbox -> Config#config{mailbox = Show}
     end,
   cauder_wx_config:save(NewConfig),
   {noreply, refresh(State, State#wx_state{config = NewConfig})};
@@ -285,6 +297,15 @@ handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_His
     case Item of
       ?MENU_View_FullHistory -> Config#config{history_mode = full};
       ?MENU_View_ConcurrentHistory -> Config#config{history_mode = concurrent}
+    end,
+  cauder_wx_config:save(NewConfig),
+  {noreply, refresh(State, State#wx_state{config = NewConfig})};
+
+handle_event(?MENU_EVENT(Item), #wx_state{config = Config} = State) when ?Is_Message_Mode(Item) ->
+  NewConfig =
+    case Item of
+      ?MENU_View_AllMessages -> Config#config{mailbox_mode = all};
+      ?MENU_View_ProcessMessages -> Config#config{mailbox_mode = process}
     end,
   cauder_wx_config:save(NewConfig),
   {noreply, refresh(State, State#wx_state{config = NewConfig})};
@@ -340,15 +361,13 @@ handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_
 
 handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_Step_Button(Button) andalso Pid =/= undefined ->
   Sem = button_to_semantics(Button),
-  {ok, System} = cauder:step(Sem, Pid),
+  Spinner = cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl),
+  Steps = wxSpinCtrl:getValue(Spinner),
+  Choice = cauder_wx:find(?ACTION_Manual_Scheduler, wxChoice),
+  Scheduler = wxChoice:getClientData(Choice, wxChoice:getSelection(Choice)),
+  {ok, System} = cauder:step(Sem, Pid, Steps, Scheduler),
   cauder_wx_statusbar:step_start(Sem),
   {noreply, refresh(State, State#wx_state{system = System, task = step})};
-
-handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when ?Is_StepOver_Button(Button) andalso Pid =/= undefined ->
-  Sem = button_to_semantics(Button),
-  {ok, System} = cauder:step_over(Sem, Pid),
-  cauder_wx_statusbar:step_start(Sem),
-  {noreply, refresh(State, State#wx_state{system = System, task = step_over})};
 
 %%%=============================================================================
 
@@ -356,7 +375,9 @@ handle_event(?BUTTON_EVENT(Button), State) when ?Is_Automatic_Button(Button) ->
   Sem = button_to_semantics(Button),
   Spinner = cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl),
   Steps = wxSpinCtrl:getValue(Spinner),
-  {ok, System} = cauder:step_multiple(Sem, Steps),
+  Choice = cauder_wx:find(?ACTION_Automatic_Scheduler, wxChoice),
+  Scheduler = wxChoice:getClientData(Choice, wxChoice:getSelection(Choice)),
+  {ok, System} = cauder:step_multiple(Sem, Steps, Scheduler),
   cauder_wx_statusbar:step_start(Sem),
   {noreply, refresh(State, State#wx_state{system = System, task = step_multiple})};
 
@@ -466,7 +487,7 @@ handle_event(
     #wx_state{frame = Frame, system = #sys{procs = PMap}, pid = Pid} = State
 ) ->
   #proc{env = Bs} = maps:get(Pid, PMap),
-  IdxToKey = ets:lookup_element(?GUI_DB, ?IDX_TO_KEY, 2),
+  IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
   Key = maps:get(Idx, IdxToKey),
   Value = maps:get(Key, Bs),
   case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
@@ -518,7 +539,7 @@ handle_event(#wx{event = #wxClose{}}, State) ->
 %%%=============================================================================
 
 handle_event(Event, State) ->
-  io:format("Unhandled Event:~n~p~n", [Event]),
+  io:format("[~p:~p] Unhandled Event:~n~p~n", [?MODULE, ?LINE, Event]),
   {noreply, State}.
 
 
@@ -536,7 +557,7 @@ handle_call(noreply, _From, State) ->
   {noreply, State};
 
 handle_call(Request, _From, State) ->
-  io:format("Unhandled Call:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Call:~n~p~n", [?MODULE, ?LINE, Request]),
   {reply, ok, State}.
 
 
@@ -549,7 +570,7 @@ handle_call(Request, _From, State) ->
   NewState :: state().
 
 handle_cast(Request, State) ->
-  io:format("Unhandled Cast:~n~p~n", [Request]),
+  io:format("[~p:~p] Unhandled Cast:~n~p~n", [?MODULE, ?LINE, Request]),
   {noreply, State}.
 
 
@@ -561,7 +582,7 @@ handle_cast(Request, State) ->
   State :: state(),
   NewState :: state().
 
-handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task = load} = State) ->
+handle_info(?DBG_SUCCESS(load, {File, Module}, Time, System), #wx_state{task = load} = State) ->
   {ok, Src, _} = erl_prim_loader:get_file(File),
 
   CodeCtrl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
@@ -571,67 +592,83 @@ handle_info({dbg, {finish, {load, File, Module}, Time, System}}, #wx_state{task 
 
   {noreply, refresh(State, State#wx_state{module = Module, system = System, task = undefined})};
 
-handle_info({dbg, {finish, start, Time, System}}, #wx_state{task = start} = State) ->
+handle_info(?DBG_FAILURE(load, {compile_error, _Errors}, _Stacktrace), #wx_state{task = load} = State) ->
+  % TODO Show errors in a dialog
+
+  cauder_wx_statusbar:load_fail(),
+
+  {noreply, refresh(State, State#wx_state{task = undefined})};
+
+handle_info(?DBG_SUCCESS(start, {}, Time, System), #wx_state{task = start} = State) ->
   cauder_wx_statusbar:init_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {step, Sem, Rule}, Time, System}}, #wx_state{task = step} = State) ->
-  cauder_wx_statusbar:step_finish(Sem, Rule, Time),
+handle_info(?DBG_SUCCESS(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
+  cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {finish, {step_over, Sem, Steps}, Time, System}}, #wx_state{task = step_over} = State) ->
-  cauder_wx_statusbar:step_over_finish(Sem, Steps, Time),
+handle_info(?DBG_CANCEL(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
+  cauder_wx_statusbar:step_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {finish, {step_multiple, Sem, Steps}, Time, System}}, #wx_state{task = step_multiple} = State) ->
+handle_info(?DBG_SUSPEND(step, {Receiver, Messages}, System), #wx_state{frame = Frame, task = step} = State) ->
+  case cauder_wx_dialog:choose_message(Frame, {Receiver, Messages}) of
+    {ok, MessageId} -> cauder:resume(MessageId);
+    cancel -> cauder:cancel()
+  end,
+  {noreply, refresh(State, State#wx_state{system = System})};
+
+
+handle_info(?DBG_SUCCESS(step_multiple, {Sem, Steps}, Time, System), #wx_state{task = step_multiple} = State) ->
   cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {replay_steps, Steps}, Time, System}}, #wx_state{task = replay_steps} = State) ->
+handle_info(?DBG_SUCCESS(replay_steps, Steps, Time, System), #wx_state{task = replay_steps} = State) ->
   cauder_wx_statusbar:replay_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 
-handle_info({dbg, {finish, {replay_spawn, Pid}, Time, System}}, #wx_state{task = replay_spawn} = State) ->
+handle_info(?DBG_SUCCESS(replay_spawn, Pid, Time, System), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {finish, {replay_start, Node}, Time, System}}, #wx_state{task = replay_start} = State) ->
+handle_info(?DBG_SEUCCESS(replay_start, Node}, Time, System), #wx_state{task = replay_start} = State) ->
   cauder_wx_statusbar:replay_start_finish(Node, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_spawn, no_replay}}, #wx_state{task = replay_spawn} = State) ->
+handle_info(?DBG_FAILURE replay_spawn, no_replay), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
-handle_info({dbg, {finish, {replay_send, Uid}, Time, System}}, #wx_state{task = replay_send} = State) ->
+handle_info(?DBG_SUCCESS(replay_send, Uid}, Time, System), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_send, no_replay}}, #wx_state{task = replay_send} = State) ->
+handle_info(?DBG_FAILURE(replay_send, no_replay, _Stacktrace), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
-handle_info({dbg, {finish, {replay_receive, Uid}, Time, System}}, #wx_state{task = replay_receive} = State) ->
+
+handle_info(?DBG_SUCCESS(replay_receive, Uid, Time, System), #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, replay_receive, no_replay}}, #wx_state{task = replay_receive} = State) ->
+handle_info(?DBG_FAILURE(replay_receive, no_replay, _Stacktrace), #wx_state{task = replay_receive} = State) ->
   cauder_wx_statusbar:replay_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, replay_full_log, Time, System}}, #wx_state{task = replay_full_log} = State) ->
+handle_info(?DBG_SUCCESS(replay_full_log, Time, System), #wx_state{task = replay_full_log} = State) ->
   cauder_wx_statusbar:replay_full_log_finish(Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
 %%%=============================================================================
 
-handle_info({dbg, {finish, {rollback_steps, Steps}, Time, System}}, #wx_state{task = rollback_steps} = State) ->
+handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = rollback_steps} = State) ->
   cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
@@ -644,49 +681,49 @@ handle_info({dbg, {fail, rollback_start, no_rollback}}, #wx_state{task = rollbac
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_spawn, Pid}, Time, System}}, #wx_state{task = rollback_spawn} = State) ->
+handle_info(?DBG_SUCCESS(rollback_spawn, Pid, Time, System), #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_spawn, no_rollback}}, #wx_state{task = rollback_spawn} = State) ->
+handle_info(?DBG_FAILURE(rollback_spawn, no_rollback, _Stacktrace), #wx_state{task = rollback_spawn} = State) ->
   cauder_wx_statusbar:rollback_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_send, Uid}, Time, System}}, #wx_state{task = rollback_send} = State) ->
+handle_info(?DBG_SUCCESS(rollback_send, Uid, Time, System), #wx_state{task = rollback_send} = State) ->
   cauder_wx_statusbar:rollback_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_send, no_rollback}}, #wx_state{task = rollback_send} = State) ->
+handle_info(?DBG_FAILURE(rollback_send, no_rollback, _Stacktrace), #wx_state{task = rollback_send} = State) ->
   cauder_wx_statusbar:rollback_send_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_receive, Uid}, Time, System}}, #wx_state{task = rollback_receive} = State) ->
+handle_info(?DBG_SUCCESS(rollback_receive, Uid, Time, System), #wx_state{task = rollback_receive} = State) ->
   cauder_wx_statusbar:rollback_receive_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_receive, no_rollback}}, #wx_state{task = rollback_receive} = State) ->
+handle_info(?DBG_FAILURE(rollback_receive, no_rollback, _Stacktrace), #wx_state{task = rollback_receive} = State) ->
   cauder_wx_statusbar:rollback_receive_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
-handle_info({dbg, {finish, {rollback_variable, Name}, Time, System}}, #wx_state{task = rollback_variable} = State) ->
+handle_info(?DBG_SUCCESS(rollback_variable, Name, Time, System), #wx_state{task = rollback_variable} = State) ->
   cauder_wx_statusbar:rollback_variable_finish(Name, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {fail, rollback_variable, no_rollback}}, #wx_state{task = rollback_variable} = State) ->
+handle_info(?DBG_FAILURE(rollback_variable, no_rollback, _Stacktrace), #wx_state{task = rollback_variable} = State) ->
   cauder_wx_statusbar:rollback_variable_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
 %%%=============================================================================
 
 % TODO Handle failed tasks when the user did not start the task.
-% i.e.: given {fail, Task1, _} and #wx_state{task = Task2} then Task1 != Task2
+% i.e.: given {failure, Task1, _} and #wx_state{task = Task2} then Task1 != Task2
 
 
 handle_info(Info, State) ->
-  io:format("Unhandled Info:~n~p~n", [Info]),
+  io:format("[~p:~p] Unhandled Info:~n~p~n", [?MODULE, ?LINE, Info]),
   {noreply, State}.
 
 
@@ -806,20 +843,13 @@ refresh(OldState, NewState) ->
 
 
 -spec button_to_semantics(ButtonId) -> Semantics when
-  ButtonId :: ?ACTION_Manual_Step_Forward_Button | ?ACTION_Manual_Step_Backward_Button |
-  ?ACTION_Manual_StepOver_Forward_Button | ?ACTION_Manual_StepOver_Backward_Button |
-%%  ?STEP_INTO_FORWARD_BUTTON | ?STEP_INTO_BACKWARD_BUTTON |
-  ?ACTION_Automatic_Forward_Button | ?ACTION_Automatic_Backward_Button,
+  ButtonId :: ?ACTION_Manual_Forward_Button | ?ACTION_Manual_Backward_Button | ?ACTION_Automatic_Forward_Button | ?ACTION_Automatic_Backward_Button,
   Semantics :: ?FWD_SEM | ?BWD_SEM.
 
-button_to_semantics(?ACTION_Manual_Step_Forward_Button)      -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_Step_Backward_Button)     -> ?BWD_SEM;
-button_to_semantics(?ACTION_Manual_StepOver_Forward_Button)  -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_StepOver_Backward_Button) -> ?BWD_SEM;
-%%button_to_semantics(?STEP_INTO_FORWARD_BUTTON)  -> ?FWD_SEM;
-%%button_to_semantics(?STEP_INTO_BACKWARD_BUTTON) -> ?BWD_SEM;
-button_to_semantics(?ACTION_Automatic_Forward_Button)        -> ?FWD_SEM;
-button_to_semantics(?ACTION_Automatic_Backward_Button)       -> ?BWD_SEM.
+button_to_semantics(?ACTION_Manual_Forward_Button)     -> ?FWD_SEM;
+button_to_semantics(?ACTION_Manual_Backward_Button)    -> ?BWD_SEM;
+button_to_semantics(?ACTION_Automatic_Forward_Button)  -> ?FWD_SEM;
+button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?BWD_SEM.
 
 
 %%%=============================================================================

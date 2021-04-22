@@ -3,6 +3,7 @@
 
 -define(LOAD_START, "Loading file ~s").
 -define(LOAD_FINISH, "Loaded module ~p in ~s").
+-define(LOAD_FAIL, "Failed to load file, there are compilation errors").
 
 -define(INIT_START, "Starting system...").
 -define(INIT_FINISH, "Started system in ~s").
@@ -10,10 +11,8 @@
 -define(STOP_FINISH, "Stopped system!").
 
 -define(STEP_START, "Performing ~s steps...").
--define(STEP_FINISH, "Performed a single ~s step (~s) in ~s").
-
--define(STEP_OVER_FINISH, "Performed ~b ~s steps in ~s").
--define(STEP_INTO_FINISH, "Performed ~b ~s steps in ~s").
+-define(STEP_FINISH, "Performed ~b (of ~b) ~s steps in ~s").
+-define(STEP_SUSPEND, "Suspended execution").
 
 -define(STEP_MULTIPLE_FINISH, "Performed ~b (of ~b) ~s steps in ~s").
 

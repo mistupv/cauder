@@ -13,7 +13,7 @@
 -export([checkNodeName/1]).
 -export([stringToMFA/1, stringToExpressions/1]).
 -export([filter_options/2]).
--export([fresh_pid/0, fresh_uid/0]).
+-export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/4, gen_log_spawn/1, gen_log_start/1, clear_log/1, must_focus_log/1]).
 -export([load_replay_data/1]).
@@ -51,38 +51,6 @@ fundef_lookup({M, F, A}) ->
         false -> error
       end
   end.
-
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a tuple with the message, form the given list, that matches the
-%% given uid and a new list without this message.
-%% Returns `error' if the key is not present in the dictionary.
-
--spec take_message(Mail1, Uid) -> {Message, Mail2} | error when
-  Mail1 :: [cauder_types:message()],
-  Uid :: cauder_types:msg_id(),
-  Message :: cauder_types:message(),
-  Mail2 :: [cauder_types:message()].
-
-take_message(Mail, Uid) ->
-  case lists:partition(fun(M) -> M#msg.uid =:= Uid end, Mail) of
-    {[Message], NewMail} -> {Message, NewMail};
-    _ -> error
-  end.
-
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for a message with the given uid the given lists of messages.
-%% Returns `{ok, Message}', where `Message' is the message with the `Uid', or
-%% `error' if no message is found.
-
--spec find_message(Mail, Uid) -> {value, Message} | false when
-  Mail :: [cauder_types:message()],
-  Uid :: cauder_types:msg_id(),
-  Message :: cauder_types:message().
-
-find_message(Mail, Uid) ->
-  lists:search(fun(M) -> M#msg.uid =:= Uid end, Mail).
 
 
 %%------------------------------------------------------------------------------
@@ -175,7 +143,7 @@ find_node_parent(LMap, Node) ->
 
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
   LMap :: cauder_types:log_map(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Pid :: cauder_types:proc_id().
 
 find_msg_sender(LMap, Uid) ->
@@ -190,7 +158,7 @@ find_msg_sender(LMap, Uid) ->
 
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
   LMap :: cauder_types:log_map(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Pid :: cauder_types:proc_id().
 
 find_msg_receiver(LMap, Uid) ->
@@ -289,7 +257,7 @@ find_process_with_read(ProcessMap, Node) ->
 
 -spec find_process_with_send(ProcessMap, Uid) -> {value, Process} | false when
   ProcessMap :: cauder_types:process_map(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Process :: cauder_types:process().
 
 find_process_with_send(PMap, Uid) ->
@@ -302,7 +270,7 @@ find_process_with_send(PMap, Uid) ->
 
 -spec find_process_with_receive(ProcessMap, Uid) -> {value, Process} | false when
   ProcessMap :: cauder_types:process_map(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Process :: cauder_types:process().
 
 find_process_with_receive(PMap, Uid) ->
@@ -482,12 +450,12 @@ has_read([_ | RestHist], Node)                              -> has_read(RestHist
 
 -spec has_send(History, Uid) -> Result when
   History :: cauder_types:history(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Result :: boolean().
 
-has_send([], _)                                              -> false;
-has_send([{send, _Bs, _Es, _Stk, #msg{uid = Uid}} | _], Uid) -> true;
-has_send([_ | RestHist], Uid)                                -> has_send(RestHist, Uid).
+has_send([], _)                                                  -> false;
+has_send([{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _], Uid) -> true;
+has_send([_ | RestHist], Uid)                                    -> has_send(RestHist, Uid).
 
 
 %%------------------------------------------------------------------------------
@@ -496,12 +464,12 @@ has_send([_ | RestHist], Uid)                                -> has_send(RestHis
 
 -spec has_rec(History, Uid) -> Result when
   History :: cauder_types:history(),
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Result :: boolean().
 
-has_rec([], _)                                             -> false;
-has_rec([{rec, _Bs, _Es, _Stk, #msg{uid = Uid}} | _], Uid) -> true;
-has_rec([_ | RestHist], Uid)                               -> has_rec(RestHist, Uid).
+has_rec([], _)                                                 -> false;
+has_rec([{rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} | _], Uid) -> true;
+has_rec([_ | RestHist], Uid)                                   -> has_rec(RestHist, Uid).
 
 
 %%------------------------------------------------------------------------------
@@ -511,15 +479,6 @@ has_rec([_ | RestHist], Uid)                               -> has_rec(RestHist, 
   Pid :: cauder_types:proc_id().
 
 fresh_pid() -> ets:update_counter(?APP_DB, last_pid, 1, {last_pid, -1}).
-
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a new and unique message identifier.
-
--spec fresh_uid() -> Uid when
-  Uid :: cauder_types:msg_id().
-
-fresh_uid() -> ets:update_counter(?APP_DB, last_uid, 1, {last_uid, -1}).
 
 
 %%------------------------------------------------------------------------------
@@ -606,16 +565,14 @@ gen_log_start(Node) ->
 %% @doc Returns a roll log message about sending a message with the given
 %% information.
 
--spec gen_log_send(Pid, OtherPid, MsgValue, Uid) -> [Log] when
+-spec gen_log_send(Pid, Message) -> [Log] when
   Pid :: cauder_types:proc_id(),
-  OtherPid :: cauder_types:proc_id(),
-  MsgValue :: term(),
-  Uid :: cauder_types:msg_id(),
+  Message :: cauder_mailbox:message(),
   Log :: [string()].
 
-gen_log_send(Pid, OtherPid, MsgValue, Uid) ->
-  [["Roll send from ", cauder_pp:pid(Pid), " of ", cauder_pp:to_string(MsgValue),
-    " to ", cauder_pp:pid(OtherPid), " (", integer_to_list(Uid), ")"]].
+gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
+  [["Roll send from ", cauder_pp:pid(Pid), " of ", cauder_pp:to_string(Value),
+    " to ", cauder_pp:pid(Dest), " (", cauder_pp:to_string(Uid), ")"]].
 
 
 %%------------------------------------------------------------------------------
@@ -779,6 +736,6 @@ is_conc_item({start, success, _BS, _Es, _Stk, _Node}) -> true;
 is_conc_item({start, fail, _BS, _Es, _Stk, _Node})    -> true;
 is_conc_item({spawn, _Bs, _Es, _Stk, _Node, _Pid})    -> true;
 is_conc_item({send, _Bs, _Es, _Stk, _Msg})            -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg})             -> true.
+is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos})      -> true.
 
 

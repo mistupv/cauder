@@ -1,8 +1,11 @@
+%%%=============================================================================
+%%% App Information
+%%%=============================================================================
+
 -define(APP_NAME, "CauDEr").
--define(APP_URL, "https://github.com/mistupv/cauder-v2").
+-define(APP_URL, "https://github.com/mistupv/cauder").
 -define(APP_DB, 'cauder/database').
 
--define(ID_GAMMA, 0).
 
 -ifdef(debug).
 -define(LOG(X), io:format("{~p,~p}: ~p~n", [?MODULE, ?LINE, X])).
@@ -12,10 +15,20 @@
 -define(TO_STRING(X), "").
 -endif.
 
-%% Name of the module that defines the forwards semantics.
+
+%%%=============================================================================
+%%% Semantics
+%%%=============================================================================
+
+% Name of the module that defines the forwards semantics.
 -define(FWD_SEM, cauder_semantics_forwards).
-%% Name of the module that defines the backwards semantics.
+% Name of the module that defines the backwards semantics.
 -define(BWD_SEM, cauder_semantics_backwards).
+
+
+%%%=============================================================================
+%%% Rules
+%%%=============================================================================
 
 -define(RULE_SEQ,      seq).
 -define(RULE_SELF,     self).
@@ -26,21 +39,35 @@
 -define(RULE_SEND,     send).
 -define(RULE_RECEIVE, 'receive').
 
--define(REPLAY_DATA,  200).
-
 -define(NOT_EXP,    not_exp).
--define(NULL_RULE,  null_rule).
 -define(NULL_OPT,   null_opt).
 
--define(SCHED_RANDOM,      random).
--define(SCHED_PRIO_RANDOM, prio_random).
+
+%%%=============================================================================
+%%% Schedulers
+%%%=============================================================================
+
+-define(SCHEDULER_RoundRobin, round_robin).
+-define(SCHEDULER_FCFS, fcfs).
+-define(SCHEDULER_Random, random).
+-define(SCHEDULER_Manual, manual).
+
+
+%%%=============================================================================
+%%% Other
+%%%=============================================================================
 
 -define(CAUDER_GREEN, {34,139,34}).
+
+
+%%%=============================================================================
+%%% Records
+%%%=============================================================================
 
 % System
 -record(sys, {
   % Global mailbox
-  mail = [] :: [cauder_types:message()],
+  mail = cauder_mailbox:new() :: cauder_mailbox:mailbox(),
   % Pool of processes
   procs :: cauder_types:process_map(),
   % System log
@@ -70,13 +97,15 @@
 }).
 
 %% Message
--record(msg, {
-  % Target process identifier
-  dest :: cauder_types:proc_id(),
-  % Message
-  val :: term(),
+-record(message, {
   % UID
-  uid :: cauder_types:msg_id()
+  uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
+  % Message
+  value :: term(),
+  % Sender PID
+  src :: cauder_types:proc_id(),
+  % Receiver PID
+  dest :: cauder_types:proc_id()
 }).
 
 % Option
@@ -96,8 +125,8 @@
   to :: undefined | cauder_types:proc_id(),
   node :: undefined | cauder_types:net_node(),
   val :: undefined | term(),
-  res :: undefined | succ | fail,
-  time :: undefined | cauder_types:msg_id()
+  res :: succ | fail | undefined,
+  time :: undefined | cauder_mailbox:uid()
 }).
 
 % Replay info

@@ -9,7 +9,11 @@
 -module(cauder_semantics_forwards).
 
 %% API
--export([step/2, options/1]).
+-export([step/4, options/2]).
+
+-ifdef(EUNIT).
+-export([rdep/2]).
+-endif.
 
 -import(cauder_eval, [is_reducible/2]).
 
@@ -25,10 +29,17 @@
 %% @doc Performs a single forwards step in the process with the given Pid in the
 %% given System.
 
--spec step(System, Pid) -> NewSystem when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
-    NewSystem :: cauder_types:system().
+-spec step(System, Pid, MessageScheduler, Mode) -> NewSystem when
+  System :: cauder_types:system(),
+  Pid :: cauder_types:proc_id(),
+  MessageScheduler :: cauder_types:message_scheduler(),
+  Mode :: normal | replay,
+  NewSystem :: cauder_types:system().
+
+step(#sys{mail = Mail, logs = LMap0, trace = Trace} = Sys, Pid, Sched, Mode) ->
+  {#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+
+  #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0);
 
 step(Sys, Pid) ->
   {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),

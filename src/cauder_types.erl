@@ -11,7 +11,10 @@
   history/0, history_entry/0,
   stack/0, stack_entry/0,
   environment/0, binding/0,
-  option/0, semantics/0, rule/0,
+  option/0,
+  semantics/0,
+  process_scheduler/0, message_scheduler/0,
+  rule/0,
   trace/0,
   result/0, label/0
 ]).
@@ -24,13 +27,10 @@
 
 -type system() :: #sys{}.
 
--type msg_id() :: pos_integer().
--type message() :: #msg{}.
-
 -type log_map() :: #{proc_id() => log()}.
 -type log() :: [log_entry()].
--type log_entry() :: {send, msg_id()}
-                   | {'receive', msg_id()}
+-type log_entry() :: {send, cauder_mailbox:uid()}
+                   | {'receive', cauder_mailbox:uid()}
                    | {nodes, {[net_node()]}}
                    | {start, {succ, net_node()}}
                    | {start, {fail, net_node()}}
@@ -56,8 +56,8 @@
                        | {spawn, environment(), [abstract_expr()], stack(), net_node(), proc_id()}
                        | {start, success, environment(), [abstract_expr()], stack(), net_node()}
                        | {start, fail, environment(), [abstract_expr()], stack(), net_node()}
-                       | {send, environment(), [abstract_expr()], stack(), message()}
-                       | {rec, environment(), [abstract_expr()], stack(), message()}.
+                       | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
+                       | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
 
 -type stack() :: [stack_entry()].
 -type stack_entry() :: {mfa(), environment(), [abstract_expr()], af_variable()}
@@ -67,16 +67,19 @@
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.
--type fwd_opts() :: #{atom() => term()}.
+
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
+
+-type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
+-type message_scheduler() :: ?SCHEDULER_Random | ?SCHEDULER_Manual.
+
 -type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
 
 -type trace() :: #trace{}.
 
 -type result() :: #result{}.
-
 -type label() :: tau
-               | {spawn, af_variable(), function()}
+               | {spawn, af_variable(), af_literal()}
                | {spawn, af_variable(), module(), atom(), [term()]}
                | {spawn, af_variable(), net_node(), module(), atom(), [term()]}
                | {start, af_variable(), net_node()}

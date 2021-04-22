@@ -4,12 +4,12 @@
 -export([create/1, update/2, update_position/2]).
 %% Predefined statuses
 -export([no_process/0, no_match/0]).
--export([load_start/1, load_finish/2]).
+-export([load_start/1, load_finish/2, load_fail/0]).
 -export([init_start/0, init_finish/1]).
 -export([stop_finish/0]).
 % Manual
--export([step_start/1, step_finish/3]).
--export([step_over_finish/3, step_into_finish/3, step_multiple_finish/3]).
+-export([step_start/1, step_finish/3, step_suspend/0]).
+-export([step_multiple_finish/3]).
 % Replay
 -export([replay_steps_start/0, replay_steps_finish/2]).
 -export([replay_start_start/1, replay_start_finish/2, replay_start_fail/0]).
@@ -151,6 +151,11 @@ load_finish(Module, Time) ->
   set_text(Status).
 
 
+-spec load_fail() -> ok.
+
+load_fail() -> set_text(?LOAD_FAIL).
+
+
 %%%=============================================================================
 
 
@@ -188,41 +193,22 @@ step_start(Sem) ->
   set_text(Status).
 
 
--spec step_finish(Semantics, Rule, Time) -> ok when
+-spec step_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
   Semantics :: cauder_types:semantics(),
-  Rule :: cauder_types:rule(),
+  StepsDone :: non_neg_integer(),
+  StepsTotal :: pos_integer(),
   Time :: non_neg_integer().
 
-step_finish(Sem, Rule, Time) ->
+step_finish(Sem, {Done, Total}, Time) ->
   SemStr = semantics_to_string(Sem),
-  RuleStr = rule_to_string(Rule),
   TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_FINISH, [SemStr, RuleStr, TimeStr]),
+  Status = io_lib:format(?STEP_FINISH, [Done, Total, SemStr, TimeStr]),
   set_text(Status).
 
 
--spec step_over_finish(Semantics, Steps, Time) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer(),
-  Time :: non_neg_integer().
+-spec step_suspend() -> ok.
 
-step_over_finish(Sem, Steps, Time) ->
-  SemStr = semantics_to_string(Sem),
-  TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_OVER_FINISH, [Steps, SemStr, TimeStr]),
-  set_text(Status).
-
-
--spec step_into_finish(Semantics, Steps, Time) -> ok when
-  Semantics :: cauder_types:semantics(),
-  Steps :: pos_integer(),
-  Time :: non_neg_integer().
-
-step_into_finish(Sem, Steps, Time) ->
-  SemStr = semantics_to_string(Sem),
-  TimeStr = time_to_string(Time),
-  Status = io_lib:format(?STEP_INTO_FINISH, [Steps, SemStr, TimeStr]),
-  set_text(Status).
+step_suspend() -> set_text(?STEP_SUSPEND).
 
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
@@ -306,13 +292,13 @@ replay_start_fail() -> set_text(?REPLAY_START_FAIL).
 
 
 -spec replay_send_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 replay_send_start(Uid) -> set_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 
 
 -spec replay_send_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 replay_send_finish(Uid, Time) ->
@@ -330,13 +316,13 @@ replay_send_fail() -> set_text(?REPLAY_SEND_FAIL).
 
 
 -spec replay_receive_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 replay_receive_start(Uid) -> set_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
 
 
 -spec replay_receive_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 replay_receive_finish(Uid, Time) ->
@@ -438,13 +424,13 @@ rollback_start_fail() -> set_text(?ROLLBACK_START_FAIL).
 
 
 -spec rollback_send_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 rollback_send_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
 
 
 -spec rollback_send_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 rollback_send_finish(Uid, Time) ->
@@ -462,13 +448,13 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 
 
 -spec rollback_receive_start(Uid) -> ok when
-  Uid :: cauder_types:msg_id().
+  Uid :: cauder_mailbox:uid().
 
 rollback_receive_start(Uid) -> set_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
 
 
 -spec rollback_receive_finish(Uid, Time) -> ok when
-  Uid :: cauder_types:msg_id(),
+  Uid :: cauder_mailbox:uid(),
   Time :: non_neg_integer().
 
 rollback_receive_finish(Uid, Time) ->

@@ -16,6 +16,14 @@
 -export([remote_call/3]).
 
 
+-ifdef(EUNIT).
+-export([pattern/1]).
+-export([guard_test/1]).
+-export([gexpr/1]).
+-export([expr/1]).
+-endif.
+
+
 %%------------------------------------------------------------------------------
 %% @doc Transforms a list of abstract clauses to the custom CauDEr
 %% representation.
@@ -50,25 +58,41 @@ patterns([P0 | Ps]) ->
 patterns([]) -> [].
 
 
-pattern({integer, Anno, I})               -> {value, ln(Anno), I};
-pattern({char, Anno, I})                  -> {value, ln(Anno), I};
-pattern({float, Anno, F})                 -> {value, ln(Anno), F};
-pattern({atom, Anno, A})                  -> {value, ln(Anno), A};
-pattern({string, Anno, S})                -> {value, ln(Anno), S};
-pattern({nil, Anno})                      -> {value, ln(Anno), []};
-pattern({var, Anno, V})                   -> {var, ln(Anno), V};
-pattern({cons, Anno, H, T})               -> {cons, ln(Anno), pattern(H), pattern(T)};
-pattern({tuple, Anno, Es})                -> {tuple, ln(Anno), pattern_list(Es)};
-pattern({match, Anno, Pat1, Pat2})        -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
-pattern({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-pattern({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-pattern({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-pattern({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-pattern({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-pattern({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I}.
+pattern({var, Anno, V})                       -> {var, ln(Anno), V};
+pattern({atom, Anno, A})                      -> {value, ln(Anno), A};
+pattern({integer, Anno, I})                   -> {value, ln(Anno), I};
+pattern({char, Anno, I})                      -> {value, ln(Anno), I};
+pattern({float, Anno, F})                     -> {value, ln(Anno), F};
+pattern({string, Anno, S})                    -> {value, ln(Anno), S};
+pattern({nil, Anno})                          -> {value, ln(Anno), []};
+pattern({cons, Anno, H0, T0}) ->
+  case {pattern(H0), pattern(T0)} of
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
+    {H1, T1} -> {cons, ln(Anno), H1, T1}
+  end;
+pattern({tuple, Anno, Es0}) ->
+  Es1 = pattern_list(Es0),
+  try lists:map(fun get_value/1, Es1) of
+    Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
+  catch
+    error:function_clause -> {tuple, ln(Anno), Es1}
+  end;
 
 %% TODO Patterns - Map & Bit String
-%% TODO Patterns - Evaluate compile-time expressions.
+
+pattern({match, Anno, Pat1, Pat2})            -> {match, ln(Anno), pattern(Pat1), pattern(Pat2)};
+
+%% Evaluate compile-time expressions.
+pattern({op, _, '++', {nil, _}, R})           -> pattern(R);
+pattern({op, _, '++', {cons, Anno, H, T}, R}) -> pattern({cons, Anno, H, {op, Anno, '++', T, R}});
+pattern({op, _, '++', {string, Anno, L}, R})  -> pattern(string_to_conses(Anno, L, R));
+
+pattern({op, _, _, _} = Op)                   -> pattern(erl_eval:partial_eval(Op));
+pattern({op, _, _, _, _} = Op)                -> pattern(erl_eval:partial_eval(Op)).
+
+
+string_to_conses(Anno, Cs, Tail) ->
+  lists:foldr(fun(C, T) -> {cons, Anno, {char, Anno, C}, T} end, Tail, Cs).
 
 
 pattern_list([P0 | Ps]) ->
@@ -88,18 +112,6 @@ and_guard([G0 | Gs]) ->
   [G1 | and_guard(Gs)];
 and_guard([]) -> [].
 
-
-guard_test({var, _, _} = V)    -> V; % Boolean var
-guard_test({atom, Anno, true}) -> {value, ln(Anno), true};
-%% All other constants at this level means false.
-guard_test({atom, Anno, _})    -> {value, ln(Anno), false};
-guard_test({integer, Anno, _}) -> {value, ln(Anno), false};
-guard_test({char, Anno, _})    -> {value, ln(Anno), false};
-guard_test({float, Anno, _})   -> {value, ln(Anno), false};
-guard_test({string, Anno, _})  -> {value, ln(Anno), false};
-guard_test({nil, Anno})        -> {value, ln(Anno), false};
-guard_test({cons, Anno, _, _}) -> {value, ln(Anno), false};
-guard_test({tuple, Anno, _})   -> {value, ln(Anno), false};
 
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, self}}, []}) ->
   {self, ln(Anno)};
@@ -124,30 +136,42 @@ guard_test({op, Anno, Op, L0, R0}) ->
   L1 = gexpr(L0),
   R1 = gexpr(R0),
   {op, ln(Anno), Op, [L1, R1]};
-guard_test(_)                  -> error(guard_expr).
+
+guard_test({var, _, _} = V)    -> V; % Boolean var
+guard_test({atom, Anno, true}) -> {value, ln(Anno), true};
+
+%% All other constants at this level means false.
+guard_test({atom, Anno, _})    -> {value, ln(Anno), false};
+guard_test({integer, Anno, _}) -> {value, ln(Anno), false};
+guard_test({char, Anno, _})    -> {value, ln(Anno), false};
+guard_test({float, Anno, _})   -> {value, ln(Anno), false};
+guard_test({string, Anno, _})  -> {value, ln(Anno), false};
+guard_test({nil, Anno})        -> {value, ln(Anno), false};
+guard_test({cons, Anno, _, _}) -> {value, ln(Anno), false};
+guard_test({tuple, Anno, _})   -> {value, ln(Anno), false}.
+
+%% TODO Guard test - Map & Bit String
 
 
-gexpr({integer, Anno, I})               -> {value, ln(Anno), I};
-gexpr({char, Anno, I})                  -> {value, ln(Anno), I};
-gexpr({float, Anno, F})                 -> {value, ln(Anno), F};
-gexpr({atom, Anno, A})                  -> {value, ln(Anno), A};
-gexpr({string, Anno, S})                -> {value, ln(Anno), S};
-gexpr({nil, Anno})                      -> {value, ln(Anno), []};
-gexpr({var, Anno, V})                   -> {var, ln(Anno), V};
+gexpr({var, Anno, V})     -> {var, ln(Anno), V};
+gexpr({atom, Anno, A})    -> {value, ln(Anno), A};
+gexpr({integer, Anno, I}) -> {value, ln(Anno), I};
+gexpr({char, Anno, I})    -> {value, ln(Anno), I};
+gexpr({float, Anno, F})   -> {value, ln(Anno), F};
+gexpr({string, Anno, S})  -> {value, ln(Anno), S};
+gexpr({nil, Anno})        -> {value, ln(Anno), []};
 gexpr({cons, Anno, H0, T0}) ->
   case {gexpr(H0), gexpr(T0)} of
-    {{value, Line, H1}, {value, Line, T1}} -> {value, Line, [H1 | T1]};
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
     {H1, T1} -> {cons, ln(Anno), H1, T1}
   end;
 gexpr({tuple, Anno, Es0}) ->
   Es1 = gexpr_list(Es0),
-  {tuple, ln(Anno), Es1};
-gexpr({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-gexpr({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-gexpr({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-gexpr({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
+  try lists:map(fun get_value/1, Es1) of
+    Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
+  catch
+    error:function_clause -> {tuple, ln(Anno), Es1}
+  end;
 
 %% TODO Guards - Map & Bit String
 
@@ -175,8 +199,7 @@ gexpr({op, Anno, Op, L0, R0}) ->
   check_guard_op(Op, 2, [comp, bool, arith]),
   L1 = gexpr(L0),
   R1 = gexpr(R0),
-  {op, ln(Anno), Op, [L1, R1]};
-gexpr(_)                                -> error(guard_expr).
+  {op, ln(Anno), Op, [L1, R1]}.
 
 
 gexpr_list([E0 | Es]) ->
@@ -191,21 +214,21 @@ exprs([E0 | Es]) ->
 exprs([]) -> [].
 
 
-expr({var, Anno, V})                   -> {var, ln(Anno), V};
-expr({integer, Anno, I})               -> {value, ln(Anno), I};
-expr({char, Anno, I})                  -> {value, ln(Anno), I};
-expr({float, Anno, F})                 -> {value, ln(Anno), F};
-expr({atom, Anno, A})                  -> {value, ln(Anno), A};
-expr({string, Anno, S})                -> {value, ln(Anno), S};
-expr({nil, Anno})                      -> {value, ln(Anno), []};
+expr({var, Anno, V})     -> {var, ln(Anno), V};
+expr({integer, Anno, I}) -> {value, ln(Anno), I};
+expr({char, Anno, I})    -> {value, ln(Anno), I};
+expr({float, Anno, F})   -> {value, ln(Anno), F};
+expr({atom, Anno, A})    -> {value, ln(Anno), A};
+expr({string, Anno, S})  -> {value, ln(Anno), S};
+expr({nil, Anno})        -> {value, ln(Anno), []};
 expr({cons, Anno, H0, T0}) ->
   case {expr(H0), expr(T0)} of
-    {{value, Line, H1}, {value, Line, T1}} -> {value, Line, [H1 | T1]};
+    {{value, _, H1}, {value, _, T1}} -> {value, ln(Anno), [H1 | T1]};
     {H1, T1} -> {cons, ln(Anno), H1, T1}
   end;
 expr({tuple, Anno, Es0}) ->
   Es1 = expr_list(Es0),
-  try lists:map(fun({value, _, V}) -> V end, Es1) of
+  try lists:map(fun get_value/1, Es1) of
     Es2 -> {value, ln(Anno), list_to_tuple(Es2)}
   catch
     error:function_clause -> {tuple, ln(Anno), Es1}
@@ -264,12 +287,6 @@ expr({match, Anno, P0, E0}) ->
   E1 = expr(E0),
   P1 = pattern(P0),
   {match, ln(Anno), P1, E1};
-expr({op, _, '-', {integer, Anno, I}}) -> {value, ln(Anno), -I};
-expr({op, _, '+', {integer, Anno, I}}) -> {value, ln(Anno), I};
-expr({op, _, '-', {char, Anno, I}})    -> {value, ln(Anno), -I};
-expr({op, _, '+', {char, Anno, I}})    -> {value, ln(Anno), I};
-expr({op, _, '-', {float, Anno, I}})   -> {value, ln(Anno), -I};
-expr({op, _, '+', {float, Anno, I}})   -> {value, ln(Anno), I};
 expr({op, Anno, Op, A0}) ->
   A1 = expr(A0),
   {op, ln(Anno), Op, [A1]};
@@ -328,7 +345,7 @@ ln(Anno) -> erl_anno:line(Anno).
 check_guard_bif(Name, Arity) ->
   case erl_internal:guard_bif(Name, Arity) of
     true -> ok;
-    false -> error(guard_expr)
+    false -> exception(error, guard_expr)
   end.
 
 
@@ -336,8 +353,30 @@ check_guard_op(Op, Arity, AllowedTypes) ->
   Type = erl_internal:op_type(Op, Arity),
   case lists:member(Type, AllowedTypes) of
     true -> ok;
-    false -> error(guard_expr)
+    false -> exception(error, guard_expr)
   end.
+
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the Erlang term represented by the given `AbstractLiteral'.
+
+-spec get_value(AbstractLiteral) -> Term when
+  AbstractLiteral :: cauder_types:af_literal(),
+  Term :: term().
+
+get_value({value, _, V}) -> V.
+
+
+%%%=============================================================================
+
+
+-spec exception(Class, Reason) -> no_return() when
+  Class :: error | exit | throw,
+  Reason :: term().
+
+exception(Class, Reason) ->
+  % TODO Add additional info: current line, module, etc.
+  erlang:Class(Reason).
 
 
 %%%=============================================================================
