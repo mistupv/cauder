@@ -36,12 +36,8 @@
   Mode :: normal | replay,
   NewSystem :: cauder_types:system().
 
-step(#sys{mail = Mail, logs = LMap0, trace = Trace} = Sys, Pid, Sched, Mode) ->
-  {#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
 
-  #result{env = Bs, exprs = Es, stack = Stk, label = Label} = cauder_eval:seq(Bs0, Es0, Stk0);
-
-step(Sys, Pid) ->
+step(Sys, Pid, Sched, Mode) ->
   {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),
   #result{label = Label, exprs = Es} = Result = cauder_eval:seq(Bs0, Es0, Stk0),
   #sys{nodes = Nodes, logs = LMap} = Sys,
@@ -53,6 +49,14 @@ step(Sys, Pid) ->
       case extract_log(LMap, Pid, nodes) of
         {found, {nodes, _}, NewLog} -> fwd_nodes(P0, Result, Sys, #{new_log => NewLog});
         not_found                   -> fwd_nodes(P0, Result, Sys, #{})
+      end;
+    {spawn, VarPid, {value, _Line, Fun} = FunLiteral} ->
+      {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
+      CLabel = {spawn, VarPid, Node, M, F, []},
+      case extract_log(LMap, Pid, spawn) of
+        {found, {spawn, _N, succ, NewPid}, NewLog} ->
+          fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
+        not_found                                  -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral})
       end;
     {spawn, VarPid, M, F, As} ->
       CLabel = {spawn, VarPid, Node, M, F, As},
@@ -78,7 +82,7 @@ step(Sys, Pid) ->
         {_, false}                             -> fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N});
         {_, true}                              -> fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N})
       end;
-    {start, VarNode, Host, NewName} ->
+    {start, _, Host, NewName} ->
       N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
       case {extract_log(LMap, Pid, start), lists:member(N, Nodes)} of
         {{found, {start, succ, N}, NewLog}, _} -> fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
@@ -92,25 +96,23 @@ step(Sys, Pid) ->
         not_found            -> fwd_send(P0, Result, Sys, #{})
       end;
     {rec, VarBody, _Cs} when Es == [VarBody] ->
-      case extract_log(LMap, Pid, 'receive') of
-        {found, {'receive', Uid}, NewLog} -> fwd_rec(P0, Result, Sys, #{new_log => NewLog, uid => Uid});
-        not_found                         -> fwd_rec(P0, Result, Sys, #{})
-      end
+      fwd_rec(P0, Result, Sys, #{ mode => Mode, sched => Sched})
   end.
 
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the forwards evaluation options for the given System.
 
--spec options(System) -> Options when
-    System :: cauder_types:system(),
+-spec options(System, Mode) -> Options when
+    System  :: cauder_types:system(),
+    Mode    :: normal | replay,
     Options :: [cauder_types:option()].
 
-options(#sys{procs = PMap} = Sys) ->
+options(#sys{procs = PMap} = Sys, Mode) ->
   lists:foldl(
     fun
       (#proc{exprs = E, pid = Pid} = P, Opts) ->
-                 case expression_option(E, P, Sys) of
+        case expression_option(E, P, Mode, Sys) of
                    ?NOT_EXP -> Opts;
                    Rule ->
                      Opt = #opt{
@@ -129,20 +131,65 @@ options(#sys{procs = PMap} = Sys) ->
 %%% Internal functions
 %%%=============================================================================
 
+rdep(Pid, LMap0) ->
+  LMap = remove_dependents_spawn(Pid, LMap0),
+  DropEmpty =
+    fun
+      (_, []) -> false;
+    (_, _) -> true
+                 end,
+maps:filter(DropEmpty, LMap).
+
+remove_dependents_spawn(Pid0, LMap0) when is_map_key(Pid0, LMap0) ->
+  lists:foldl(
+    fun entry_dependents/2,
+    maps:remove(Pid0, LMap0),
+    maps:get(Pid0, LMap0));
+remove_dependents_spawn(_Pid, LMap) -> LMap.
+
+remove_dependents_receive(Uid0, LMap0) ->
+  RemoveAfterReceive =
+    fun(Pid0, LMap1) ->
+      {Independent, Dependent} = lists:splitwith(fun(Entry) -> Entry =/= {'receive', Uid0} end, maps:get(Pid0, LMap1)),
+      case Dependent of
+        [] -> LMap1;
+        _ ->
+          LMap = lists:foldl(
+            fun entry_dependents/2,
+            maps:put(Pid0, Independent, LMap1),
+            Dependent),
+          throw(LMap)
+      end
+    end,
+  try
+    lists:foldl(
+      RemoveAfterReceive,
+      LMap0,
+      maps:keys(LMap0))
+  catch
+    throw:LMap -> LMap
+  end.
+
+entry_dependents({spawn, Pid}, LMap)      -> remove_dependents_spawn(Pid, LMap);
+entry_dependents({send, Uid}, LMap)       -> remove_dependents_receive(Uid, LMap);
+entry_dependents({'receive', _Uid}, LMap) -> LMap.
+
+
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation option for the given Expression, in the given
 %% System.
 %%
 
--spec expression_option(Expr, Proc, Sys) -> Rule when
+-spec expression_option(Expr, Proc, Mode, Sys) -> Rule when
     Expr :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
     Proc :: cauder_types:proc(),
     Sys  :: cauder_types:sys(),
+    Mode :: normal | replay,
     Rule :: cauder_types:rule() | ?NOT_EXP.
 
-expression_option(E, P, Sys) when not is_list(E) ->
-  expression_option([E], P, Sys);
-expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Sys) ->
+expression_option(E, P, Mode, Sys) when not is_list(E) ->
+  expression_option([E], P, Mode, Sys);
+expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Mode, Sys) ->
   case is_reducible(E0, Bs) of
     false ->
       case {Es0, Stk} of
@@ -156,43 +203,44 @@ expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Sys) ->
         {'make_fun', _, _, _}      -> ?RULE_SEQ;
         {self, _}                  -> ?RULE_SELF;
         {node, _}                  -> ?RULE_NODE;
-        {tuple, _, Es}             -> expression_option(Es, Proc, Sys);
-        {nodes, _}                 -> check_reducibility([], Proc, Sys, nodes);
-        {cons, _, H, T}            -> check_reducibility([H] ++ T, Proc, Sys, cons);
-        {'case', _, E, _}          -> check_reducibility([E], Proc, Sys, 'case');
-        {'receive', _, Cs}         -> check_reducibility([Cs], Proc, Sys, 'receive');
-        {bif, _, _, _, As}         -> check_reducibility([As], Proc, Sys, bif);
-        {spawn, _, F}              -> check_reducibility([F], Proc, Sys, spawn);
-        {spawn, _, M, F, As}       -> check_reducibility([M,F,As], Proc, Sys, spawn);
-        {spawn, _, N, M, F, As}    -> check_reducibility([N,M,F,As], Proc, Sys, spawn);
-        {start, _, N}              -> check_reducibility([N], Proc, Sys, start);
-        {start, _, H, N}           -> check_reducibility([H, N], Proc, Sys, start);
-        {send, _, L, R}            -> check_reducibility([L, R], Proc, Sys, send);
-        {send_op, _, L, R}         -> check_reducibility([L, R], Proc, Sys, send);
-        {local_call, _, _, As}     -> check_reducibility([As], Proc, Sys, local_call);
-        {remote_call, _, _, _, As} -> check_reducibility([As], Proc, Sys, remote_call);
-        {apply, _, M, F, As}       -> check_reducibility([M, F, As], Proc, Sys, apply);
-        {apply_fun, _, Fun, As}    -> check_reducibility([Fun, As], Proc, Sys, apply_fun);
-        {match, _, P, E}           -> check_reducibility([P, E], Proc, Sys, match);
-        {op, _, _, Es}             -> check_reducibility([Es], Proc, Sys, op);
-        {'andalso', _, L, R}       -> check_reducibility([L,R], Proc, Sys, 'andalso');
-        {'orelse', _, L, R}        -> check_reducibility([L,R], Proc, Sys, 'orelse')
+        {tuple, _, Es}             -> expression_option(Es, Proc, Mode, Sys);
+        {nodes, _}                 -> check_reducibility([], Proc, Mode, Sys, nodes);
+        {cons, _, H, T}            -> check_reducibility([H,T], Proc, Mode, Sys, cons);
+        {'case', _, E, _}          -> check_reducibility([E], Proc, Mode, Sys, 'case');
+        {'receive', _, Cs}         -> check_reducibility([Cs], Proc, Mode, Sys, {'receive', Mode});
+        {bif, _, _, _, As}         -> check_reducibility([As], Proc, Mode, Sys, bif);
+        {spawn, _, F}              -> check_reducibility([F], Proc, Mode, Sys, spawn);
+        {spawn, _, M, F, As}       -> check_reducibility([M,F,As], Proc, Mode, Sys, spawn);
+        {spawn, _, N, M, F, As}    -> check_reducibility([N,M,F,As], Proc, Mode, Sys, spawn);
+        {start, _, N}              -> check_reducibility([N], Proc, Mode, Sys, start);
+        {start, _, H, N}           -> check_reducibility([H, N], Proc, Mode, Sys, start);
+        {send, _, L, R}            -> check_reducibility([L, R], Proc, Mode, Sys, send);
+        {send_op, _, L, R}         -> check_reducibility([L, R], Proc, Mode, Sys, send);
+        {local_call, _, _, As}     -> check_reducibility([As], Proc, Mode, Sys, local_call);
+        {remote_call, _, _, _, As} -> check_reducibility([As], Proc, Mode, Sys, remote_call);
+        {apply, _, M, F, As}       -> check_reducibility([M, F, As], Proc, Mode, Sys, apply);
+        {apply_fun, _, Fun, As}    -> check_reducibility([Fun, As], Proc, Mode, Sys, apply_fun);
+        {match, _, P, E}           -> check_reducibility([P, E], Proc, Mode, Sys, match);
+        {op, _, _, Es}             -> check_reducibility([Es], Proc, Mode, Sys, op);
+        {'andalso', _, L, R}       -> check_reducibility([L,R], Proc, Mode, Sys, 'andalso');
+        {'orelse', _, L, R}        -> check_reducibility([L,R], Proc, Mode, Sys, 'orelse')
       end
   end.
 
-check_reducibility([], _, _, send)                                   -> ?RULE_SEND;
-check_reducibility([], _, _, send_op)                                -> ?RULE_SEND;
-check_reducibility([], _, _, local_call)                             -> ?RULE_SEQ;
-check_reducibility([], _, _, remote_call)                            -> ?RULE_SEQ;
-check_reducibility([], _, _, apply)                                  -> ?RULE_SEQ;
-check_reducibility([], _, _, apply_fun)                              -> ?RULE_SEQ;
-check_reducibility([], _, _, match)                                  -> ?RULE_SEQ;
-check_reducibility([], _, _, op)                                     -> ?RULE_SEQ;
-check_reducibility([], _, _, 'andalso')                              -> ?RULE_SEQ;
-check_reducibility([], _, _, 'orelse')                               -> ?RULE_SEQ;
-check_reducibility([], _, _, 'case')                                 -> ?RULE_SEQ;
-check_reducibility([], _, _, bif)                                    -> ?RULE_SEQ;
-check_reducibility([], #proc{node = Node, pid = Pid}, #sys{logs = LMap, nodes = Nodes}, nodes) ->
+
+check_reducibility([], _, _, _, send)                                   -> ?RULE_SEND;
+check_reducibility([], _, _, _, send_op)                                -> ?RULE_SEND;
+check_reducibility([], _, _, _, local_call)                             -> ?RULE_SEQ;
+check_reducibility([], _, _, _, remote_call)                            -> ?RULE_SEQ;
+check_reducibility([], _, _, _, apply)                                  -> ?RULE_SEQ;
+check_reducibility([], _, _, _, apply_fun)                              -> ?RULE_SEQ;
+check_reducibility([], _, _, _, match)                                  -> ?RULE_SEQ;
+check_reducibility([], _, _, _, op)                                     -> ?RULE_SEQ;
+check_reducibility([], _, _, _, 'andalso')                              -> ?RULE_SEQ;
+check_reducibility([], _, _, _, 'orelse')                               -> ?RULE_SEQ;
+check_reducibility([], _, _, _, 'case')                                 -> ?RULE_SEQ;
+check_reducibility([], _, _, _, bif)                                    -> ?RULE_SEQ;
+check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{logs = LMap, nodes = Nodes}, nodes) ->
   SNodes = Nodes -- [Node],
   Log = extract_log(LMap, Pid, nodes),
   case Log of
@@ -200,17 +248,20 @@ check_reducibility([], #proc{node = Node, pid = Pid}, #sys{logs = LMap, nodes = 
     {found, {nodes, {LogNodes}}, _} when LogNodes =:= SNodes -> ?RULE_NODES;
     _ -> ?NOT_EXP
   end;
-check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, #sys{logs = LMap, mail = Mail}, 'receive') ->
+check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{logs = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
   IsMatch =
-    case extract_log(LMap, Pid, 'receive') of
-      not_found -> cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail) =/= nomatch;
-      {found, {'receive', Uid}, _} -> cauder_eval:match_rec_uid(Cs, Bs, Uid, Mail) =/= nomatch
+    case Mode of
+      normal -> cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, ?SCHEDULER_Random, Sys) =/= nomatch;
+      replay ->
+        Log = maps:get(Pid, LMap, []),
+        [{'receive', Uid} | _] = Log,
+        cauder_eval:match_rec_uid(Cs, Bs, Uid, Mail) =/= nomatch
     end,
   case IsMatch of
-    true -> ?RULE_RECEIVE;
+    true  -> ?RULE_RECEIVE;
     false -> ?NOT_EXP
   end;
-check_reducibility([], #proc{pid = Pid}, #sys{logs = LMap, nodes = Nodes}, spawn) ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{logs = LMap, nodes = Nodes}, spawn) ->
   Log = extract_log(LMap, Pid, spawn),
   case Log of
     not_found -> ?RULE_START;
@@ -220,7 +271,7 @@ check_reducibility([], #proc{pid = Pid}, #sys{logs = LMap, nodes = Nodes}, spawn
         {_, _}        -> ?RULE_START
       end
   end;
-check_reducibility([], #proc{pid = Pid}, #sys{logs = LMap, nodes = Nodes}, start) ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{logs = LMap, nodes = Nodes}, start) ->
   Log = extract_log(LMap, Pid, start),
   case Log of
     not_found -> ?RULE_START;
@@ -235,10 +286,11 @@ check_reducibility([], #proc{pid = Pid}, #sys{logs = LMap, nodes = Nodes}, start
         _                     -> ?RULE_START
       end
   end;
-check_reducibility([H|T], #proc{env = Bs} = P, Sys, ExprType) ->
+
+check_reducibility([H|T], #proc{env = Bs} = P, Mode, Sys, ExprType) ->
   case is_reducible(H,Bs) of
-    true  -> expression_option(H, P, Sys);
-    false -> check_reducibility(T, P, Sys, ExprType)
+    true  -> expression_option(H, P, Mode, Sys);
+    false -> check_reducibility(T, P, Mode, Sys, ExprType)
   end.
 
 extract_log(LMap, Pid, nodes) ->
@@ -264,13 +316,8 @@ extract_log(LMap, Pid, send) ->
     #{Pid := [{send, LogUid} | RestLog]} ->
       {found, LogUid, RestLog};
     _ -> not_found
-  end;
-extract_log(LMap, Pid, 'receive') ->
-  case LMap of
-    #{Pid := [{'receive', LogUid} | RestLog]} ->
-      {found, {'receive', LogUid} , RestLog};
-    _ -> not_found
   end.
+
 
 -spec fwd_tau(Proc, Result, Sys) -> NewSystem when
     Proc      :: cauder_types:proc(),
@@ -364,6 +411,7 @@ fwd_nodes(#proc{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, ex
 fwd_spawn_s(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
             #result{label = {spawn, VarPid, N, M, F, As}, env = Bs, exprs = Es, stack = Stk},
             #sys{logs = LMap, procs = PMap, trace = Trace} = Sys, Opts) ->
+  Inline = maps:get(inline, Opts, false),
   NewLog = case maps:get(new_log, Opts, not_found) of
              not_found -> [];
              NLog  -> NLog
@@ -378,12 +426,24 @@ fwd_spawn_s(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} 
          env   = Bs,
          exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
         },
-  P2 = #proc{
-          node  = N,
-          pid   = SpawnPid,
-          exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
-          spf   = {M, F, length(As)}
-         },
+  P2 = case Inline of
+         false ->
+           #proc{
+              node  = N,
+              pid   = SpawnPid,
+              exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
+              spf   = {M, F, length(As)}
+             };
+         true ->
+           {_, Line, Fun} = FunLiteral = maps:get(fun_literal, Opts, error_fun_inline),
+           {arity, A} = erlang:fun_info(Fun, arity),
+           #proc{
+              node  = N,
+              pid   = SpawnPid,
+              exprs = [{apply_fun, Line, FunLiteral, []}],
+              spf   = {M, F, A}
+             }
+       end,
   T = #trace{
          type = ?RULE_SPAWN,
          from = Pid,
@@ -513,22 +573,22 @@ fwd_start_f(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} 
 
 fwd_send(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
          #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}},
-         #sys{mail = Ms, logs = LMap, procs = PMap, trace = Trace} = Sys, Opts) ->
+         #sys{mail = Mail, logs = LMap, procs = PMap, trace = Trace} = Sys, Opts) ->
   NewLog = case maps:get(new_log, Opts, not_found) of
              not_found -> [];
              NLog      -> NLog
            end,
-  Uid = case maps:get(uid, Opts, not_found) of
-          not_found -> cauder_utils:fresh_uid();
-          _Uid      -> _Uid
-        end,
-  M = #msg{
+  M = #message{
+         src = Pid,
          dest = Dest,
-         val  = Val,
-         uid  = Uid
+         value  = Val
         },
+  UM = case maps:get(uid, Opts, not_found) of
+          not_found -> M;
+          _Uid       -> M#message{uid = _Uid}
+        end,
   P = P0#proc{
-        hist  = [{send, Bs0, Es0, Stk0, M} | Hist],
+        hist  = [{send, Bs0, Es0, Stk0, UM} | Hist],
         stack = Stk,
         env   = Bs,
         exprs = Es
@@ -538,10 +598,10 @@ fwd_send(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P
          from = Pid,
          to   = Dest,
          val  = Val,
-         time = Uid
+         time = UM#message.uid
         },
   Sys#sys{
-    mail  = [M | Ms],
+    mail  = cauder_mailbox:add(UM, Mail),
     procs = PMap#{Pid => P},
     logs  = LMap#{Pid => NewLog},
     trace = [T | Trace]
@@ -556,18 +616,34 @@ fwd_send(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P
 
 fwd_rec(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
         #result{env = Bs, stack = Stk, label = {rec, _, Cs}},
-        #sys{mail = Ms, logs = LMap, procs = PMap, trace = Trace} = Sys, Opts) ->
-  NewLog = case maps:get(new_log, Opts, not_found) of
-             not_found -> [];
-             NLog      -> NLog
+        #sys{mail = Mail, logs = LMap0, procs = PMap, trace = Trace} = Sys, Opts) ->
+  Mode = case maps:get(mode, Opts, not_found) of
+             not_found -> error(mode_not_found);
+             _Mode     -> _Mode
            end,
-  Uid = case maps:get(uid, Opts, not_found) of
-          not_found -> cauder_utils:fresh_uid();
-          _Uid      -> _Uid
+  Sched = case maps:get(sched, Opts, not_found) of
+          not_found -> error(sched_not_found);
+          _Sched    -> _Sched
         end,
-  {{Bs1, Es1, M = #msg{dest = Pid, val = Val, uid = Uid}, Ms1}, NewLog} = {cauder_eval:match_rec_uid(Cs, Bs, Uid, Ms), NewLog},
+  {{Bs1, Es1, {Msg, QPos}, Mail1}, LMap1} =
+    case Mode of
+      normal ->
+        {_, _, {#message{uid = Uid}, _}, _} = Match = cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys),
+        LMap =
+          case maps:get(Pid, LMap0, []) of
+            %% If the chosen message is the same specified in the log don't invalidate the log
+            [{'receive', Uid} | RestLog] -> maps:put(Pid, RestLog, LMap0);
+            _ -> rdep(Pid, LMap0)
+          end,
+        {Match, LMap};
+      replay ->
+        #{Pid := [{'receive', LogUid} | RestLog]} = LMap0,
+        Match = cauder_eval:match_rec_uid(Cs, Bs, LogUid, Mail),
+        LMap = LMap0#{Pid => RestLog},
+        {Match, LMap}
+    end,
   P = P0#proc{
-        hist  = [{rec, Bs0, Es0, Stk0, M} | Hist],
+        hist  = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist],
         stack = Stk,
         env   = cauder_utils:merge_bindings(Bs, Bs1),
         exprs = Es1
@@ -575,12 +651,12 @@ fwd_rec(#proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0
   T = #trace{
          type = ?RULE_RECEIVE,
          from = Pid,
-         val  = Val,
-         time = Uid
+         val  = Msg#message.value,
+         time = Msg#message.uid
         },
   Sys#sys{
-    mail  = Ms1,
+    mail  = Mail1,
     procs = PMap#{Pid => P},
-    logs  = LMap#{Pid => NewLog},
+    logs  = LMap1,
     trace = [T | Trace]
    }.

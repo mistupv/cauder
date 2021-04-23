@@ -123,8 +123,8 @@ rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) 
       Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_nodes(Pid)},
       ?LOG("ROLLing back NODES" ++ ?TO_STRING(Nodes)),
       rollback_nodes(Sys, Pid, Nodes);
-    {send, _Bs, _E, _Stk, #msg{dest = Dest, val = Val, uid = Uid}} ->
-      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Dest, Val, Uid)},
+    {send, _Bs, _E, _Stk, #message{dest = Dest, uid = Uid} = Msg} ->
+      Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
       ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
       rollback_send(Sys, Pid, Dest, Uid);
     _ ->
@@ -221,7 +221,8 @@ rollback_nodes(#sys{nodes = SysNodes, procs = PMap} = Sys0, Pid, Nodes) ->
   #proc{node = Node} = maps:get(Pid, PMap),
   ProcViewOfNodes = SysNodes -- [Node],
   [FirstNode | _] = ProcViewOfNodes -- Nodes,
-  rollback_until_start(Sys0, Pid, FirstNode).
+  {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_start(PMap, FirstNode),
+  rollback_until_start(Sys0, ParentPid, FirstNode).
 
 
 -spec rollback_spawn(System, Pid, SpawnPid) -> NewSystem when

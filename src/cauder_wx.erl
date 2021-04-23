@@ -50,7 +50,8 @@ start() ->
     _ ->
       case wx_object:start({local, ?SERVER}, ?MODULE, [], []) of
         {error, _} = Error -> Error;
-        Window -> {ok, wx_object:get_pid(Window), Window}
+        Window ->
+          {ok, wx_object:get_pid(Window), Window}
       end
   end.
 
@@ -399,6 +400,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
   {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Start_Button), State) ->
+  io:format("Ciao~n"),
   Choice = cauder_wx:find(?ACTION_Replay_Start, wxChoice),
   Idx = wxChoice:getSelection(Choice),
   Node = wxChoice:getClientData(Choice, Idx),
@@ -636,15 +638,15 @@ handle_info(?DBG_SUCCESS(replay_spawn, Pid, Time, System), #wx_state{task = repl
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info(?DBG_SEUCCESS(replay_start, Node}, Time, System), #wx_state{task = replay_start} = State) ->
+handle_info(?DBG_SUCCESS(replay_start, Node, Time, System), #wx_state{task = replay_start} = State) ->
   cauder_wx_statusbar:replay_start_finish(Node, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info(?DBG_FAILURE replay_spawn, no_replay), #wx_state{task = replay_spawn} = State) ->
+handle_info(?DBG_FAILURE(replay_spawn, no_replay, _Stacktrace), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
 
-handle_info(?DBG_SUCCESS(replay_send, Uid}, Time, System), #wx_state{task = replay_send} = State) ->
+handle_info(?DBG_SUCCESS(replay_send, Uid, Time, System), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
@@ -672,7 +674,7 @@ handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = 
   cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
-handle_info({dbg, {finish, {rollback_start, Node}, Time, System}}, #wx_state{task = rollback_start} = State) ->
+handle_info(?DBG_SUCCESS(rollback_start, Node, Time, System), #wx_state{task = rollback_start} = State) ->
   cauder_wx_statusbar:rollback_start_finish(Node, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 

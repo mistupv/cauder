@@ -514,20 +514,6 @@ semantics_to_string(?FWD_SEM) -> "forward";
 semantics_to_string(?BWD_SEM) -> "backward".
 
 
--spec rule_to_string(Rule) -> String when
-  Rule :: cauder_types:rule(),
-  String :: string().
-
-rule_to_string(?RULE_SEQ)     -> "Seq";
-rule_to_string(?RULE_SELF)    -> "Self";
-rule_to_string(?RULE_NODE)    -> "Node";
-rule_to_string(?RULE_NODES)   -> "Nodes";
-rule_to_string(?RULE_SPAWN)   -> "Spawn";
-rule_to_string(?RULE_START)   -> "Start";
-rule_to_string(?RULE_SEND)    -> "Send";
-rule_to_string(?RULE_RECEIVE) -> "Receive".
-
-
 -spec time_to_string(Time) -> String when
   Time :: non_neg_integer(),
   String :: string().

@@ -828,7 +828,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
       #{spawn := SpawnPids, send := SendUids, rec := ReceiveUids, start := StartNodes} =
         lists:foldl(
           fun
-            ({spawn = K, _Bs, _Es, _Stk, V}, Map) ->
+            ({spawn = K, _Bs, _Es, _Stk, _Node, V}, Map) ->
               maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
             ({K, _Bs, _Es, _Stk, #message{uid = V}}, Map) when K =:= send orelse K =:= rec ->
               maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map);
@@ -850,7 +850,6 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
       populate_choice(ReceiveChoice, ReceiveUids),
       populate_choice(StartChoice, StartNodes),
 
-
       wxChoice:enable(SpawnChoice, [{enable, not wxChoice:isEmpty(SpawnChoice)}]),
       wxButton:disable(cauder_wx:find(?ACTION_Rollback_Spawn_Button, wxButton)),
 
@@ -860,7 +859,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
       wxChoice:enable(ReceiveChoice, [{enable, not wxChoice:isEmpty(ReceiveChoice)}]),
       wxButton:disable(cauder_wx:find(?ACTION_Rollback_Receive_Button, wxButton)),
 
-      wxChoice:enable(ReceiveChoice, [{enable, not wxChoice:isEmpty(StartChoice)}]),
+      wxChoice:enable(StartChoice, [{enable, not wxChoice:isEmpty(StartChoice)}]),
       wxButton:disable(cauder_wx:find(?ACTION_Rollback_Start_Button, wxButton)),
 
       ok
@@ -879,17 +878,11 @@ populate_choice(Choice, Items) ->
   wxChoice:clear(Choice),
   lists:foreach(
     fun
-      (Item) ->
-        case Item of
-          {_Node, _Res, Pid} ->
-            wxChoice:append(Choice, io_lib:format("~p", [Pid]), Pid);
-          {succ, NodeName} ->
-            wxChoice:append(Choice, io_lib:format("~p", [NodeName]), NodeName);
-          {fail, _} ->
-            ko;
-          _ ->
-          wxChoice:append(Choice, io_lib:format("~p", [Item]), Item)
-        end
+      ({_Node, _Res, Pid}) -> wxChoice:append(Choice, io_lib:format("~p", [Pid]), Pid);
+      ({succ, NodeName})   -> wxChoice:append(Choice, io_lib:format("~p", [NodeName]), NodeName);
+      ({fail, _})          -> nothing;
+      ({Item, ClientData}) -> wxChoice:append(Choice, Item, ClientData);
+      (Item)               -> wxChoice:append(Choice, io_lib:format("~p", [Item]), Item)
     end,
     Items
   ),

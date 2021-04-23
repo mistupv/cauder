@@ -6,7 +6,6 @@
 -module(cauder_utils).
 
 -export([fundef_lookup/1]).
--export([take_message/2, find_message/2]).
 -export([find_spawn_log/2, find_spawn_parent/2, find_node_parent/2, find_msg_sender/2, find_msg_receiver/2]).
 -export([find_process_with_future_reads/2,find_process_with_spawn/2, find_process_with_failed_spawn/2, find_process_with_start/2, find_process_on_node/2, find_process_with_failed_start/2, find_process_with_read/2, find_process_with_send/2, find_process_with_receive/2, find_process_with_variable/2, process_node/2]).
 -export([merge_bindings/2]).
@@ -15,7 +14,7 @@
 -export([filter_options/2]).
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
--export([gen_log_nodes/1, gen_log_send/4, gen_log_spawn/1, gen_log_start/1, clear_log/1, must_focus_log/1]).
+-export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1, clear_log/1, must_focus_log/1]).
 -export([load_replay_data/1]).
 -export([current_line/1, is_dead/1]).
 -export([is_conc_item/1]).
@@ -224,7 +223,11 @@ find_process_with_failed_spawn(LMap, Node) ->
     Process :: cauder_types:proc_id().
 
 find_process_with_future_reads(LMap, Node) ->
-  lists:search(fun(L) ->  not will_always_read(L, Node) end, maps:values(LMap)).
+  lists:search(fun(Key) ->
+                   L = maps:get(Key, LMap),
+                   not will_always_read(L, Node) /= false
+               end
+              , maps:keys(LMap)).
 
 
 %%------------------------------------------------------------------------------
@@ -380,9 +383,9 @@ filter_options(Options, Pid) ->
   Pid :: cauder_types:proc_id(),
   Result :: boolean().
 
-has_spawn([], _)                                   -> false;
-has_spawn([{spawn, _Bs, _Es, _Stk, Pid} | _], Pid) -> true;
-has_spawn([_ | RestHist], Pid)                     -> has_spawn(RestHist, Pid).
+has_spawn([], _)                                          -> false;
+has_spawn([{spawn, _Bs, _Es, _Stk, _Node, Pid} | _], Pid) -> true;
+has_spawn([_ | RestHist], Pid)                            -> has_spawn(RestHist, Pid).
 
 
 %%------------------------------------------------------------------------------

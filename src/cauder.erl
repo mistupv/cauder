@@ -12,13 +12,13 @@
 %% API
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
 -export([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
--export([load_file/1, init_system/3, init_system/1, stop_system/0]).
+-export([load_file/1, init_system/4, init_system/1, stop_system/0]).
 -export([suspend_task/3, resume_task/0]).
 -export([eval_opts/1]).
 -export([step/4]).
 -export([step_multiple/3]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_start/1, replay_receive/1, replay_full_log/0]).
--export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_receive/1, rollback_variable/1]).
+-export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_start/1, rollback_receive/1, rollback_variable/1]).
 -export([resume/1, cancel/0]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
@@ -947,9 +947,8 @@ task_replay_spawn(Pid, Sys0) ->
 
 -spec task_replay_start(Node, System) -> task_result(Node) when
     Node :: cauder_types:net_node(),
-    System :: cauder_types:system(),
-    Time :: non_neg_integer(),
-    NewSystem :: cauder_types:system().
+    System :: cauder_types:system().
+
 
 task_replay_start(Node, Sys0) ->
   {Time, Sys1} =
@@ -1036,9 +1035,7 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
 
 -spec task_rollback_start(Node, System) -> task_result(Node) when
     Node :: cauder_types:net_node(),
-    System :: cauder_types:system(),
-    Time :: non_neg_integer(),
-    NewSystem :: cauder_types:system().
+    System :: cauder_types:system().
 
 task_rollback_start(Node, Sys0) ->
   {Time, Sys1} =
@@ -1198,7 +1195,8 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
           end,
         PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
         case sets:is_empty(PidSet1) of
-          true -> throw({Sys0, Step});
+          true ->
+            throw({Sys0, Step});
           false ->
             Change =
               case {sets:size(PidSet0), sets:size(PidSet1)} of

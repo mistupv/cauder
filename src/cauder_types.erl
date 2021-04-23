@@ -4,7 +4,6 @@
 
 -export_type([
   system/0,
-  msg_id/0, message/0,
   log_map/0, log/0, log_entry/0, log_entry_search/0,
   fwd_opts/0,
   process_map/0, proc_id/0, process/0,
@@ -37,8 +36,8 @@
                    | {spawn, {net_node(), succ, proc_id()}}
                    | {spawn, {net_node(), fail, proc_id()}}.
 
--type log_entry_search() :: {send, msg_id()}
-                          | {'receive', msg_id()}
+-type log_entry_search() :: {send, cauder_mailbox:uid()}
+                          | {'receive', cauder_mailbox:uid()}
                           | {start, {succ, net_node()}}
                           | {spawn, {'_', '_', proc_id()}}
                           | {spawn, {net_node(), fail, '_'}}.
@@ -67,7 +66,7 @@
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.
-
+-type fwd_opts() :: #{atom() => term()}.
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
 
 -type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.

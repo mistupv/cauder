@@ -159,7 +159,7 @@
 -define(ACTION_Replay_Spawn_Button, 21307).
 -define(ACTION_Replay_Send_Button, 21308).
 -define(ACTION_Replay_Receive_Button, 21309).
--define(ACTION_Replay_Start_Button, 2134).
+-define(ACTION_Replay_Start_Button, 21310).
 -define(ACTION_Replay_FullLog_Button, 21311).
 
 %% -----
@@ -182,17 +182,18 @@
 
 %% ----- System Info Panel ----- %%
 
--define(SYSTEM_NodesAndMail, 2200).
--define(SYSTEM_NodesAndMail_Nodes, 0).
--define(SYSTEM_NodesAndMail_Mail, 1).
+-define(SYSTEM_Panel, 2200).
 
+-define(SYSTEM_NodesAndMail, 2201).
+-define(SYSTEM_NodesAndMail_Nodes, 2202).
+-define(SYSTEM_NodesAndMail_Mail, 2203).
 
 -define(SYSTEM_Notebook, 2210).
--define(SYSTEM_Notebook_Trace, 2).
--define(SYSTEM_Notebook_RollLog, 3).
+-define(SYSTEM_Notebook_Trace, 2211).
+-define(SYSTEM_Notebook_RollLog, 2212).
 
--define(SYSTEM_Trace, 2211).
--define(SYSTEM_RollLog, 2212).
+-define(SYSTEM_Trace, 2220).
+-define(SYSTEM_RollLog, 2221).
 
 
 %% ----- Process Info Panel ----- %%

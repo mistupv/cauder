@@ -93,9 +93,9 @@ replay_step(#sys{logs = LMap} = Sys, Pid) ->
     [] ->
       case maps:get(Pid, LMap) of
         [{spawn, {Node, succ, Pid}} | _] -> replay_spawn(Sys, '_', {spawn, {Node, succ, Pid}});
-        [{start, {succ, Node}}|_] -> replay_start(Sys, Node);
-        [{send, Uid} | _] -> replay_send(Sys, Uid);
-        [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
+        [{start, {succ, Node}}|_]        -> replay_start(Sys, Node);
+        [{send, Uid} | _]                -> replay_send(Sys, Uid);
+        [{'receive', Uid} | _]           -> replay_receive(Sys, Uid)
       end;
     _ -> cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_Random, replay)
   end.
@@ -205,9 +205,9 @@ replay_receive(#sys{logs = LMap} = Sys, Uid) ->
   NewSystem :: cauder_types:system().
 
 replay_until_spawn(Sys0, ParentPid, Pid) ->
-  #sys{logs = #{ParentPid := ParentLog}} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
-  case cauder_utils:find_spawn_parent(#{ParentPid => ParentLog}, Pid) of
-    false -> Sys1;
+  #sys{procs = PMap} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
+  case maps:is_key(Pid, PMap) of
+    true -> Sys1;
     _ -> replay_until_spawn_1(Sys1, ParentPid, Pid)
   end.
 

@@ -68,7 +68,7 @@ update(OldState, NewState) ->
   Window :: wxWindow:wxWindow().
 
 create_mail(Parent) ->
-  Win = wxPanel:new(Parent, [{winid, ?SYSTEM_Mail_Panel}]),
+  Win = wxPanel:new(Parent),
 
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
@@ -158,13 +158,13 @@ update_mail(
     #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}) ->
   ok;
 update_mail(_, #wx_state{config = #config{mailbox = false}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), false),
+  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), false),
   ok;
 update_mail(_, #wx_state{system = undefined}) ->
   wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl)),
   ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mode = all}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), true),
+  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), true),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
   MailArea = cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
@@ -182,9 +182,9 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mo
   wxListCtrl:thaw(MailArea),
   ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox_mode = process}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), true),
+  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), true),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  MailArea = cauder_wx:find(?SYSTEM_Mail_Control, wxListCtrl),
+  MailArea = cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   case Pid of
