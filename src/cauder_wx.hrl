@@ -184,16 +184,18 @@
 
 -define(SYSTEM_Panel, 2200).
 
--define(SYSTEM_NodesAndMail, 2201).
--define(SYSTEM_NodesAndMail_Nodes, 2202).
--define(SYSTEM_NodesAndMail_Mail, 2203).
+-define(SYSTEM_Notebook_NodesAndMail, 2201).
+-define(SYSTEM_Notebook_Tab_Nodes, 0). % Tab index
+-define(SYSTEM_Notebook_Tab_Mail, 1). % Tab index
 
--define(SYSTEM_Notebook, 2210).
--define(SYSTEM_Notebook_Trace, 2211).
--define(SYSTEM_Notebook_RollLog, 2212).
+-define(SYSTEM_Notebook_TraceAndRollLog, 2202).
+-define(SYSTEM_Notebook_Tab_Trace, 0). % Tab index
+-define(SYSTEM_Notebook_Tab_RollLog, 1). % Tab index
 
--define(SYSTEM_Trace, 2220).
--define(SYSTEM_RollLog, 2221).
+-define(SYSTEM_Nodes, 2210).
+-define(SYSTEM_Mail, 2211).
+-define(SYSTEM_Trace, 2212).
+-define(SYSTEM_RollLog, 2213).
 
 
 %% ----- Process Info Panel ----- %%

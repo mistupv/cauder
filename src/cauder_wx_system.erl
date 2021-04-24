@@ -28,17 +28,17 @@ create(Parent) ->
 
   Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-  NodesAndMail = wxNotebook:new(Win, ?SYSTEM_NodesAndMail),
-  wxNotebook:addPage(NodesAndMail, create_nodes(NodesAndMail), "Nodes"),
-  wxNotebook:addPage(NodesAndMail, create_mail(NodesAndMail), "Mailbox"),
-  wxSizer:add(Sizer, NodesAndMail, Expand),
+  NotebookNodesAndMail = wxNotebook:new(Win, ?SYSTEM_Notebook_NodesAndMail),
+  wxNotebook:addPage(NotebookNodesAndMail, create_nodes(NotebookNodesAndMail), "Nodes"),
+  wxNotebook:addPage(NotebookNodesAndMail, create_mail(NotebookNodesAndMail), "Mailbox"),
+  wxSizer:add(Sizer, NotebookNodesAndMail, Expand),
 
   wxSizer:addSpacer(Sizer, 5),
 
-  Notebook = wxNotebook:new(Win, ?SYSTEM_Notebook),
-  wxNotebook:addPage(Notebook, create_trace(Notebook), "Trace"),
-  wxNotebook:addPage(Notebook, create_roll_log(Notebook), "Roll Log"),
-  wxSizer:add(Sizer, Notebook, Expand),
+  NotebookTraceAndRollLog = wxNotebook:new(Win, ?SYSTEM_Notebook_TraceAndRollLog),
+  wxNotebook:addPage(NotebookTraceAndRollLog, create_trace(NotebookTraceAndRollLog), "Trace"),
+  wxNotebook:addPage(NotebookTraceAndRollLog, create_roll_log(NotebookTraceAndRollLog), "Roll Log"),
+  wxSizer:add(Sizer, NotebookTraceAndRollLog, Expand),
 
   Win.
 
@@ -73,7 +73,7 @@ create_mail(Parent) ->
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
 
-  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_NodesAndMail_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
   wxBoxSizer:add(Sizer, MailArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
   Item = wxListItem:new(),
@@ -116,7 +116,7 @@ create_nodes(Parent) ->
   Sizer = wxBoxSizer:new(?wxHORIZONTAL),
   wxPanel:setSizer(Win, Sizer),
 
-  NodesArea = wxTextCtrl:new(Win, ?SYSTEM_NodesAndMail_Nodes, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
+  NodesArea = wxTextCtrl:new(Win, ?SYSTEM_Nodes, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
   wxBoxSizer:add(Sizer, NodesArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
@@ -133,8 +133,8 @@ update_nodes(#wx_state{system = #sys{nodes = Nodes}}, #wx_state{system = #sys{no
 update_nodes(_, #wx_state{system = undefined}) ->
   ok;
 update_nodes(_, #wx_state{system = #sys{nodes = Nodes}}) ->
-  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_NodesAndMail_Nodes, wxNotebook), ?SYSTEM_Notebook_Trace),
-  NodesArea = cauder_wx:find(?SYSTEM_NodesAndMail_Nodes, wxTextCtrl),
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_NodesAndMail, wxNotebook), ?SYSTEM_Notebook_Tab_Nodes),
+  NodesArea = cauder_wx:find(?SYSTEM_Nodes, wxTextCtrl),
   wxTextCtrl:freeze(NodesArea),
   wxTextCtrl:clear(NodesArea),
 
@@ -157,16 +157,12 @@ update_mail(
     #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}},
     #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}) ->
   ok;
-update_mail(_, #wx_state{config = #config{mailbox = false}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), false),
-  ok;
 update_mail(_, #wx_state{system = undefined}) ->
-  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl)),
+  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail, wxListCtrl)),
   ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mode = all}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), true),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  MailArea = cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl),
+  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   lists:foldl(
@@ -182,9 +178,8 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mo
   wxListCtrl:thaw(MailArea),
   ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox_mode = process}}) ->
-  show_and_resize(cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxPanel), true),
   Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-  MailArea = cauder_wx:find(?SYSTEM_NodesAndMail_Mail, wxListCtrl),
+  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
   wxListCtrl:freeze(MailArea),
   wxListCtrl:deleteAllItems(MailArea),
   case Pid of
@@ -242,7 +237,7 @@ update_trace(_, #wx_state{system = #sys{trace = []}}) ->
   wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
   ok;
 update_trace(_, #wx_state{system = #sys{trace = Trace}}) ->
-  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_Trace),
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
   TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
   wxListBox:freeze(TraceArea),
   wxListBox:clear(TraceArea),
@@ -286,42 +281,9 @@ update_roll_log(_, #wx_state{system = #sys{roll = []}}) ->
   wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
   ok;
 update_roll_log(_, #wx_state{system = #sys{roll = RollLog}}) ->
-  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog),
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_RollLog),
   RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
   wxListBox:freeze(RollLogArea),
   wxListBox:clear(RollLogArea),
   lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog),
   wxListBox:thaw(RollLogArea).
-
-
-%%%=============================================================================
-
-
--spec show_and_resize(Panel, Show) -> ok when
-  Panel :: wxPanel:wxPanel(),
-  Show :: boolean().
-
-show_and_resize(Panel, Show) ->
-  case wxPanel:isShown(Panel) of
-    Show -> ok;
-    _ ->
-      wxPanel:show(Panel, [{show, Show}]),
-
-      % -----
-
-      SystemPanel = cauder_wx:find(?SYSTEM_Panel, wxPanel),
-      SystemSizer = wx:typeCast(wxPanel:getSizer(SystemPanel), wxSizer),
-
-      [Top, Spacer, Bottom] = wxSizer:getChildren(SystemSizer),
-
-      ShowTop = wxSizerItem:isShown(Top),
-      ShowBottom = wxSizerItem:isShown(Bottom),
-
-      wxSizerItem:show(Spacer, ShowTop and ShowBottom),
-
-      % -----
-
-      wxPanel:layout(SystemPanel),
-      ok
-  end.
-

@@ -279,7 +279,7 @@ handle_event(?MENU_EVENT(Item, Check), #wx_state{config = Config} = State) when 
       ?MENU_View_Stack -> Config#config{stack = Show};
       ?MENU_View_Log -> Config#config{log = Show};
       ?MENU_View_History -> Config#config{history = Show};
-      ?MENU_View_Mailbox -> Config#config{mailbox = Show}
+      ?MENU_View_Mailbox -> Config#config{mailbox = true} % TODO
     end,
   cauder_wx_config:save(NewConfig),
   {noreply, refresh(State, State#wx_state{config = NewConfig})};
