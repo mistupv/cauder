@@ -120,14 +120,11 @@ replay_spawn(#sys{logs = LMap} = Sys, _, {spawn, {_, fail, Pid}})->
      {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
      false -> Sys
      end;
-replay_spawn(#sys{nodes = Nodes, logs = LMap} = Sys, _, {spawn, {Node, succ, Pid}}) ->
-  NodeExists = lists:member(Node, Nodes),
-  ProcParent = cauder_utils:find_spawn_parent(LMap, Pid),
-  case {NodeExists, ProcParent} of
-    {false, _} -> replay_start(Sys, Node);
-    {true, {value, ParentPid}} -> replay_until_spawn(Sys, ParentPid, Pid);
-    _ -> Sys
-  end.
+replay_spawn(Sys0, _, {spawn, {Node, succ, Pid}}) ->
+  #sys{logs = LMap} = Sys = replay_start(Sys0, Node),
+  {value, ProcParent} = cauder_utils:find_spawn_parent(LMap, Pid),
+  replay_until_spawn(Sys, ProcParent, Pid).
+
 
 
 %%------------------------------------------------------------------------------
