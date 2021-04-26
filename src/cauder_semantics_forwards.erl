@@ -58,6 +58,17 @@ step(Sys, Pid, Sched, Mode) ->
           fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
         not_found                                  -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral})
       end;
+    {spawn, VarPid, N, {value, _Line, Fun} = FunLiteral} ->
+      {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
+      CLabel = {spawn, VarPid, N, M, F, []},
+      case {extract_log(LMap, Pid, spawn), lists:member(N, Nodes)} of
+        {{found, {spawn, _N, succ, NewPid}, NewLog}, _} ->
+          fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
+        {{found, {spawn, _N, fail, NewPid}, NewLog}, _} ->
+          fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
+        {_, true} -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral});
+        {_, false} -> fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{})
+      end;
     {spawn, VarPid, M, F, As} ->
       CLabel = {spawn, VarPid, Node, M, F, As},
       case extract_log(LMap, Pid, spawn) of
@@ -210,6 +221,7 @@ expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Mode, Sys) ->
         {'receive', _, Cs}         -> check_reducibility([Cs], Proc, Mode, Sys, {'receive', Mode});
         {bif, _, _, _, As}         -> check_reducibility([As], Proc, Mode, Sys, bif);
         {spawn, _, F}              -> check_reducibility([F], Proc, Mode, Sys, spawn);
+        {spawn, _, N, F}           -> check_reducibility([N, F], Proc, Mode, Sys, spawn);
         {spawn, _, M, F, As}       -> check_reducibility([M,F,As], Proc, Mode, Sys, spawn);
         {spawn, _, N, M, F, As}    -> check_reducibility([N,M,F,As], Proc, Mode, Sys, spawn);
         {start, _, N}              -> check_reducibility([N], Proc, Mode, Sys, start);

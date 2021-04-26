@@ -210,6 +210,19 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
       #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
   end;
 
+expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3, E});
+    false ->
+      case is_reducible(Fun, Bs) of
+        true -> eval_and_update({Bs, Fun, Stk}, {4, E});
+        false ->
+          Var = cauder_utils:temp_variable(Line),
+          Label = {spawn, Var, concrete(N), Fun},
+          #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+      end
+  end;
+
 expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
   case is_reducible(M, Bs) of
     true -> eval_and_update({Bs, M, Stk}, {3, E});
