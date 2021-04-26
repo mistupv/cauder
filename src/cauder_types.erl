@@ -79,6 +79,7 @@
 -type result() :: #result{}.
 -type label() :: tau
                | {spawn, af_variable(), af_literal()}
+               | {spawn, af_variable(), net_node(), af_literal()}
                | {spawn, af_variable(), module(), atom(), [term()]}
                | {spawn, af_variable(), net_node(), module(), atom(), [term()]}
                | {start, af_variable(), net_node()}
@@ -110,6 +111,7 @@
                        | af_start_1_call()
                        | af_start_2_call()
                        | af_spawn_1_call()
+                       | af_spawn_2_call()
                        | af_spawn_3_call()
                        | af_spawn_4_call()
                        | af_send_call()
@@ -155,6 +157,8 @@
 -type af_start_2_call() :: {start, line(), abstract_expr(), abstract_expr()}.
 
 -type af_spawn_1_call() :: {spawn, line(), abstract_expr()}.
+
+-type af_spawn_2_call() :: {spawn, line(), abstract_expr(), abstract_expr()}.
 
 -type af_spawn_3_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr()}.
 
