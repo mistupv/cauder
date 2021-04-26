@@ -56,18 +56,19 @@ step(Sys, Pid, Sched, Mode) ->
       case extract_log(LMap, Pid, spawn) of
         {found, {spawn, _N, succ, NewPid}, NewLog} ->
           fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
-        not_found                                  -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral})
+        not_found -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral})
       end;
     {spawn, VarPid, N, {value, _Line, Fun} = FunLiteral} ->
       {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
       CLabel = {spawn, VarPid, N, M, F, []},
-      case {extract_log(LMap, Pid, spawn), lists:member(N, Nodes)} of
-        {{found, {spawn, _N, succ, NewPid}, NewLog}, _} ->
+      case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
+        {{found, {spawn, _N, succ, NewPid}, NewLog}, _, _} ->
           fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
-        {{found, {spawn, _N, fail, NewPid}, NewLog}, _} ->
+        {{found, {spawn, _N, fail, NewPid}, NewLog}, _, _} ->
           fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog, inline => true, fun_literal => FunLiteral});
-        {_, true} -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral});
-        {_, false} -> fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{})
+        {_, 'nonode@nohost', _} -> fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{});
+        {_, _, true} -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral});
+        {_, _, false} -> fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{})
       end;
     {spawn, VarPid, M, F, As} ->
       CLabel = {spawn, VarPid, Node, M, F, As},
@@ -77,29 +78,32 @@ step(Sys, Pid, Sched, Mode) ->
         not_found                                  -> fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{})
       end;
     {spawn, _VarPid, N, _M, _F, _As} ->
-      case {extract_log(LMap, Pid, spawn) ,lists:member(N, Nodes)} of
-        {{found, {spawn, _N, fail, NewPid}, NewLog}, _} -> fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-        {{found, {spawn, _N, succ, NewPid}, NewLog}, _} -> fwd_spawn_s(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-        {_, false}                                      -> fwd_spawn_f(P0, Result, Sys, #{});
-        {_, true}                                       -> fwd_spawn_s(P0, Result, Sys, #{})
+      case {extract_log(LMap, Pid, spawn), Node,lists:member(N, Nodes)} of
+        {{found, {spawn, _N, fail, NewPid}, NewLog}, _, _} -> fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
+        {{found, {spawn, _N, succ, NewPid}, NewLog}, _, _} -> fwd_spawn_s(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
+        {_, 'nonode@nohost', _}                            -> fwd_spawn_f(P0, Result, Sys, #{});
+        {_, _, false}                                      -> fwd_spawn_f(P0, Result, Sys, #{});
+        {_, _, true}                                       -> fwd_spawn_s(P0, Result, Sys, #{})
       end;
     {start, VarNode, NewName} ->
       [_Name, Host] = string:split(atom_to_list(Node), "@"),
       N = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
       CLabel = {start, VarNode, list_to_atom(Host), NewName},
-      case {extract_log(LMap, Pid, start), lists:member(N, Nodes)} of
-        {{found, {start, succ, N}, NewLog}, _} -> fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-        {{found, {start, fail, N}, NewLog}, _} -> fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-        {_, false}                             -> fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N});
-        {_, true}                              -> fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N})
+      case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
+        {{found, {start, succ, N}, NewLog}, _, _} -> fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
+        {{found, {start, fail, N}, NewLog}, _, _} -> fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
+        {_, 'nonode@nohost', _}                   -> error(no_alive);
+        {_, _, false}                             -> fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N});
+        {_, _, true}                              -> fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N})
       end;
     {start, _, Host, NewName} ->
       N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
-      case {extract_log(LMap, Pid, start), lists:member(N, Nodes)} of
-        {{found, {start, succ, N}, NewLog}, _} -> fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
-        {{found, {start, fail, N}, NewLog}, _} -> fwd_start_f(P0, Result, Sys, #{node => N, new_log => NewLog});
-        {_, false}                             -> fwd_start_s(P0, Result, Sys, #{node => N});
-        {_, true}                              -> fwd_start_f(P0, Result, Sys, #{node => N})
+      case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
+        {{found, {start, succ, N}, NewLog}, _, _} -> fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
+        {{found, {start, fail, N}, NewLog}, _, _} -> fwd_start_f(P0, Result, Sys, #{node => N, new_log => NewLog});
+        {_, 'nonode@nohost', _}                   -> error(no_alive);
+        {_, _, false}                             -> fwd_start_s(P0, Result, Sys, #{node => N});
+        {_, _, true}                              -> fwd_start_f(P0, Result, Sys, #{node => N})
       end;
     {send, _Dest, _Val} ->
       case extract_log(LMap, Pid, send) of

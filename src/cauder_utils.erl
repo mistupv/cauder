@@ -329,10 +329,10 @@ stringToMFA(String) ->
 %% @doc Given an atom that represents a node checks that the format is correct.
 %% Returns `error' if the format of the atom is not a valid Erlang node name.
 
--spec checkNodeName(NodeName) -> ok | error when
+-spec checkNodeName(NodeName) -> ok | error | not_provided when
     NodeName :: cauder_types:net_node().
 
-checkNodeName([]) -> error;
+checkNodeName([]) -> not_provided;
 checkNodeName(NodeName) ->
   case string:split(NodeName, "@") of
     [Name, Host] when length(Name) > 0, length(Host) > 0 ->

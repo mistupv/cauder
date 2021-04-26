@@ -147,6 +147,7 @@ start_session(Parent, MFAs) ->
                     N1 = wxTextCtrl:getValue(NodeName),
                     case cauder_utils:checkNodeName(N1) of
                       ok -> ReturnPid ! {manual, {M1, F1, N1, Args}};
+                      not_provided -> ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
                       error ->
                         Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
                         Options = [{caption, ?DIALOG_StartSession_NodeName_Title}, {style, ?wxICON_WARNING}],

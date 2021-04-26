@@ -618,6 +618,11 @@ handle_call({task, {success, Value, Time, NewSystem}}, {Pid, _}, #state{subs = S
   notifySubscribers({success, Task, Value, Time, NewSystem}, Subs),
   {reply, ok, State#state{task = undefined, system = NewSystem}};
 
+handle_call({task, {failure, no_alive, Stacktrace}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
+  notifySubscribers({failure, Task, no_alive, Stacktrace}, Subs),
+  cauder_wx:show_error("tried to start a node in a non-distributed system"),
+  {reply, ok, State#state{task = undefined}};
+
 handle_call({task, {failure, Reason, Stacktrace}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
   notifySubscribers({failure, Task, Reason, Stacktrace}, Subs),
   {reply, ok, State#state{task = undefined}};

@@ -276,6 +276,9 @@
 -define(DIALOG_StopSession_Title, "Stop debugging session").
 -define(DIALOG_StopSession_Message, "You are about to stop the current debugging session.\nThe current system state will be lost.\nAre you sure you want to continue?").
 
+-define(DIALOG_Exception_Raised_Title, "Exception raised").
+-define(DIALOG_Exception_Raised_Message, "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted").
+
 -define(DIALOG_DropFiles_Unsupported_Title, "Unsupported files").
 -define(DIALOG_DropFiles_Unsupported_Message, "Some of the dropped files are not supported.\nOnly files with the extension .erl are supported.").
 
