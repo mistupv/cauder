@@ -5,6 +5,9 @@
 % TODO Remove exports, do all work inside update/2
 -export([load_code/2, zoom_in/1, zoom_out/1, zoom_reset/1, update_margin/1, update_buttons/2]).
 
+% TODO Remove when migrating to JavaFX
+-elvis([{elvis_style, macro_names, #{regex => "^((wx)?[A-Z][A-Z_0-9]+)$"}}]).
+
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
