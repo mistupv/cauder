@@ -9,6 +9,8 @@
 %% wx_object callbacks
 -export([init/1, handle_event/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-ignore_xref([start/0, stop/1]).
+
 -define(SERVER, ?MODULE).
 
 -define(MENU_EVENT(Id), #wx{id = Id, event = #wxCommand{type = command_menu_selected}}).

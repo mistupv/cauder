@@ -26,6 +26,9 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
+-ignore_xref([main/0, main/1, start/0, start_link/0, stop/0]).
+-ignore_xref([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
+
 -define(SERVER, ?MODULE).
 
 -include("cauder.hrl").
