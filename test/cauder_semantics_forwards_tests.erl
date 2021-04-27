@@ -2,6 +2,8 @@
 
 -import(cauder_semantics_forwards, [rdep/2]).
 
+-elvis([{elvis_style, dont_repeat_yourself, disable}]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 rdep_test_() ->

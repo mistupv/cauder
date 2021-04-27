@@ -2,6 +2,8 @@
 
 -import(cauder_mailbox, [new/0, add/2, delete/2, pid_get/2, uid_take/2, uid_member/2, to_list/1]).
 
+-elvis([{elvis_style, dont_repeat_yourself, disable}]).
+
 -include("cauder.hrl").
 -include_lib("eunit/include/eunit.hrl").
 

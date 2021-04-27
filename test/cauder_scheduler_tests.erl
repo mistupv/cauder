@@ -2,6 +2,8 @@
 
 -import(cauder_scheduler, [scheduler_round_robin/2, scheduler_fcfs/2]).
 
+-elvis([{elvis_style, dont_repeat_yourself, disable}]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 scheduler_round_robin_test_() ->

@@ -2,6 +2,8 @@
 
 -import(cauder_syntax, [pattern/1, guard_test/1, gexpr/1, expr/1]).
 
+-elvis([{elvis_style, dont_repeat_yourself, disable}]).
+
 -include_lib("eunit/include/eunit.hrl").
 
 -define(_assertPattern(Expect, String), fun() -> ?_assertEqual(Expect, pattern(parse(String))) end).
