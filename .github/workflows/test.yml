@@ -48,12 +48,29 @@ jobs:
             ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-plt-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
           restore-keys: |
             ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-plt-
+      - name: Cache Hex packages
+        uses: actions/cache@v2.1.4
+        with:
+          path: |
+            ~/.cache/rebar3/hex/hexpm/packages
+          key: |
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+          restore-keys: |
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-hex-
       - name: 'Compile'
         run: rebar3 compile
-      - name: 'Tests'
-        run: rebar3 do eunit, ct
       - name: 'Dialyzer'
         run: rebar3 dialyzer
+      - name: 'XRef'
+        run: rebar3 xref
+      - name: 'Lint'
+        run: rebar3 lint
+      - name: 'Check Formatting'
+        run: rebar3 fmt --check
+      - name: 'EUnit Tests'
+        run: rebar3 eunit
+      - name: 'Common Tests'
+        run: rebar3 ct
 
   macos:
     name: 'Test (macOS)'
@@ -74,8 +91,10 @@ jobs:
         run: brew install rebar3
       - name: 'Compile'
         run: rebar3 compile
-      - name: 'Tests'
-        run: rebar3 do eunit, ct
+      - name: 'EUnit Tests'
+        run: rebar3 eunit
+      - name: 'Common Tests'
+        run: rebar3 ct
 
   windows:
     name: 'Test (Windows)'
@@ -109,5 +128,7 @@ jobs:
       #  run: choco install rebar3
       - name: 'Compile'
         run: .\rebar3 compile
-      - name: 'Tests'
-        run: .\rebar3 do eunit, ct
+      - name: 'EUnit Tests'
+        run: .\rebar3 eunit
+      - name: 'Common Tests'
+        run: .\rebar3 ct
