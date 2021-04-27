@@ -2,8 +2,6 @@
 
 %% API
 -export([create/1, update/2]).
-% TODO Remove exports, do all work inside update/2
--export([update_bindings/2, update_stack/2, update_log/2, update_history/2]).
 
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").

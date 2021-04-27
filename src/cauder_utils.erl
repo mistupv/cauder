@@ -9,13 +9,13 @@
 -export([find_spawn_parent/2, find_msg_sender/2, find_msg_receiver/2]).
 -export([find_process_with_spawn/2, find_process_with_send/2, find_process_with_receive/2, find_process_with_variable/2]).
 -export([merge_bindings/2]).
--export([string_to_mfa/1, string_to_expressions/1]).
+-export([string_to_expressions/1]).
 -export([filter_options/2]).
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
--export([gen_log_send/2, gen_log_spawn/1, clear_log/1, must_focus_log/1]).
+-export([gen_log_send/2, gen_log_spawn/1]).
 -export([load_replay_data/1]).
--export([current_line/1, is_dead/1]).
+-export([is_dead/1]).
 -export([is_conc_item/1]).
 
 -include("cauder.hrl").
@@ -179,17 +179,6 @@ merge_bindings(Bs1, Bs2) ->
     ).
 
 %%------------------------------------------------------------------------------
-%% @doc Converts the given string into a MFA tuple.
-
--spec string_to_mfa(String) -> MFA when
-    String :: string(),
-    MFA :: mfa().
-
-string_to_mfa(String) ->
-    [M, F, A] = string:lexemes(String, ":/"),
-    {list_to_atom(M), list_to_atom(F), list_to_integer(A)}.
-
-%%------------------------------------------------------------------------------
 %% @doc Converts the given string into a list of abstract expressions.
 %% Returns `error' if the string does not represent a valid Erlang expression.
 
@@ -348,31 +337,6 @@ gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
         ]
     ].
 
-%%------------------------------------------------------------------------------
-%% @doc Returns the given system but with an empty roll log.
-
--spec clear_log(System) -> NewSystem when
-    System :: cauder_types:system(),
-    NewSystem :: cauder_types:system().
-
-clear_log(System) -> System#sys{roll = []}.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns whether the roll log tab must be shown or not.
-%%
-%% @todo Change name, move and refactor
-
--spec must_focus_log(System) -> FocusLog when
-    System :: cauder_types:system(),
-    FocusLog :: boolean().
-
-must_focus_log(System) ->
-    Trace = System#sys.roll,
-    case Trace of
-        [] -> false;
-        _ -> true
-    end.
-
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
@@ -454,15 +418,6 @@ parse_call(Call) ->
         _Err ->
             error({parse_error, Call})
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns the line of the current expression of the given process.
-
--spec current_line(Process) -> Line when
-    Process :: cauder_types:process(),
-    Line :: non_neg_integer().
-
-current_line(#proc{exprs = [E | _]}) -> element(2, E).
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether a process has finished execution or not.

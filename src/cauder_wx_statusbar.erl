@@ -3,12 +3,11 @@
 %% API
 -export([create/1, update/2, update_position/2]).
 %% Predefined statuses
--export([no_process/0, no_match/0]).
 -export([load_start/1, load_finish/2, load_fail/0]).
 -export([init_start/0, init_finish/1]).
 -export([stop_finish/0]).
 % Manual
--export([step_start/1, step_finish/3, step_suspend/0]).
+-export([step_start/1, step_finish/3]).
 -export([step_multiple_finish/3]).
 % Replay
 -export([replay_steps_start/0, replay_steps_finish/2]).
@@ -114,9 +113,9 @@ set_visibility(Visible) ->
 %%% Predefined statuses
 %%%=============================================================================
 
-no_process() -> set_text(?NO_PROCESS).
+%no_process() -> set_text(?NO_PROCESS).
 
-no_match() -> set_text(?NO_MATCH).
+%no_match() -> set_text(?NO_MATCH).
 
 %%%=============================================================================
 
@@ -182,9 +181,9 @@ step_finish(Sem, {Done, Total}, Time) ->
     Status = io_lib:format(?STEP_FINISH, [Done, Total, SemStr, TimeStr]),
     set_text(Status).
 
--spec step_suspend() -> ok.
+%-spec step_suspend() -> ok.
 
-step_suspend() -> set_text(?STEP_SUSPEND).
+%step_suspend() -> set_text(?STEP_SUSPEND).
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
     Semantics :: cauder_types:semantics(),
