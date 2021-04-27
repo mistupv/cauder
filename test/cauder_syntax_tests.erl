@@ -285,12 +285,12 @@ expr_test_() ->
                     {clause, 2, [], [[{op, 2, '>', [{var, 2, 'X'}, {var, 2, 'Y'}]}]], [{value, 3, true}]},
                     {clause, 4, [], [[{value, 4, true}]], [{value, 5, false}]}
                 ]},
-                "if\n"
-                "                     X > Y ->\n"
-                "                       true;\n"
-                "                     true -> % works as an 'else' branch\n"
-                "                       false\n"
-                "                   end"
+                "if\n"
+                "    X > Y ->\n"
+                "        true;\n"
+                "    true -> % works as an 'else' branch\n"
+                "        false\n"
+                "end"
             ),
 
             % case expressions
@@ -317,14 +317,14 @@ expr_test_() ->
                         [], [{value, 5, true}]},
                     {clause, 6, [{var, 6, '_Else'}], [], [{value, 7, false}]}
                 ]},
-                "case Signal of\n"
-                "                     {signal, _What, _From, _To} ->\n"
-                "                       true;\n"
-                "                     {signal, _What, _To} ->\n"
-                "                       true;\n"
-                "                     _Else ->\n"
-                "                       false\n"
-                "                   end"
+                "case Signal of\n"
+                "    {signal, _What, _From, _To} ->\n"
+                "        true;\n"
+                "    {signal, _What, _To} ->\n"
+                "        true;\n"
+                "    _Else ->\n"
+                "        false\n"
+                "end"
             ),
 
             % send expressions
@@ -342,14 +342,14 @@ expr_test_() ->
                         {local_call, 7, wait_for_onhook, []}
                     ]}
                 ]},
-                "receive\n"
-                "                     onhook ->\n"
-                "                       disconnect(),\n"
-                "                       idle();\n"
-                "                     {connect, B} ->\n"
-                "                       B ! {busy, self()},\n"
-                "                       wait_for_onhook()\n"
-                "                   end"
+                "receive\n"
+                "    onhook ->\n"
+                "        disconnect(),\n"
+                "        idle();\n"
+                "    {connect, B} ->\n"
+                "        B ! {busy, self()},\n"
+                "        wait_for_onhook()\n"
+                "end"
             ),
 
             % fun expressions
