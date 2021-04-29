@@ -103,11 +103,28 @@ else you are doing with your repository!
 
 ### Erlang Styleguide
 
-This project tries to follow [Inaka's Erlang Coding Guidelines][inaka]. However,
-you should also try to keep the style of your code similar to that of existing
-code.
+This project uses two tools to maintain a consistent coding style:
 
-In the future we may use a linter.
+#### [`erlfmt`][erlfmt]
+
+`erlfmt` is an automated code formatter for Erlang. It allows you to focus on
+what the code does, instead of what it looks like.
+
+To format your code you can type:
+
+```shell
+rebar3 fmt
+```
+
+#### [`elvis`][elvis]
+
+`elvis` is a style reviewer for Erlang.
+
+To review your code you can type:
+
+```shell
+rebar3 lint
+```
 
 ### Keep your fork up-to-date
 
@@ -117,7 +134,7 @@ repository as well, so that you can "sync" the two, making sure that your
 repository includes any other contributions that have been merged by us into the
 shared repo:
 
-```
+```shell
 git remote add upstream https://github.com/mistupv/cauder.git
 ```
 
@@ -125,7 +142,7 @@ Then synchronizing is done by pulling from us and pushing to you. This is
 normally done locally, so that you can resolve any merge conflicts. For
 instance, to synchronize `dev` branches:
 
-```
+```shell
 git pull upstream dev
 git push origin dev
 ```
@@ -140,4 +157,5 @@ before you submit a pull request.
 [status-checks]: https://help.github.com/articles/about-status-checks/
 [erlang]: https://www.erlang.org/downloads/23.0
 [git-flow]: http://nvie.com/posts/a-successful-git-branching-model/
-[inaka]: https://github.com/inaka/erlang_guidelines
+[erlfmt]: https://github.com/WhatsApp/erlfmt
+[elvis]: https://github.com/inaka/elvis
