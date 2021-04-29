@@ -160,7 +160,6 @@
 -define(ACTION_Replay_Receive, 21304).
 -define(ACTION_Replay_Start, 21305).
 
-
 -define(ACTION_Replay_Steps_Button, 21306).
 -define(ACTION_Replay_Spawn_Button, 21307).
 -define(ACTION_Replay_Send_Button, 21308).
@@ -191,12 +190,16 @@
 -define(SYSTEM_Panel, 2200).
 
 -define(SYSTEM_Notebook_NodesAndMail, 2201).
--define(SYSTEM_Notebook_Tab_Nodes, 0). % Tab index
--define(SYSTEM_Notebook_Tab_Mail, 1). % Tab index
+% Tab index
+-define(SYSTEM_Notebook_Tab_Nodes, 0).
+% Tab index
+-define(SYSTEM_Notebook_Tab_Mail, 1).
 
 -define(SYSTEM_Notebook_TraceAndRollLog, 2202).
--define(SYSTEM_Notebook_Tab_Trace, 0). % Tab index
--define(SYSTEM_Notebook_Tab_RollLog, 1). % Tab index
+% Tab index
+-define(SYSTEM_Notebook_Tab_Trace, 0).
+% Tab index
+-define(SYSTEM_Notebook_Tab_RollLog, 1).
 
 -define(SYSTEM_Nodes, 2210).
 -define(SYSTEM_Mail, 2211).
@@ -285,7 +288,9 @@
 ).
 
 -define(DIALOG_Exception_Raised_Title, "Exception raised").
--define(DIALOG_Exception_Raised_Message, "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted").
+-define(DIALOG_Exception_Raised_Message,
+    "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted"
+).
 
 -define(DIALOG_DropFiles_Unsupported_Title, "Unsupported files").
 -define(DIALOG_DropFiles_Unsupported_Message,
