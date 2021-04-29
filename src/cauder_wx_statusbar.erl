@@ -11,7 +11,7 @@
 -export([step_multiple_finish/3]).
 % Replay
 -export([replay_steps_start/0, replay_steps_finish/2]).
--export([replay_start_start/1, replay_start_finish/2, replay_start_fail/0]).
+-export([replay_start_start/1, replay_start_finish/2]).
 -export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
 -export([replay_send_start/1, replay_send_finish/2, replay_send_fail/0]).
 -export([replay_receive_start/1, replay_receive_finish/2, replay_receive_fail/0]).
@@ -248,10 +248,6 @@ replay_start_finish(Node, Time) ->
     TimeStr = time_to_string(Time),
     Status = io_lib:format(?REPLAY_START_FINISH, [Node, TimeStr]),
     set_text(Status).
-
--spec replay_start_fail() -> ok.
-
-replay_start_fail() -> set_text(?REPLAY_START_FAIL).
 
 %%%=============================================================================
 

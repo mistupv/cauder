@@ -6,7 +6,7 @@
 -module(cauder_pp).
 
 -export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
--export([pid/1, pp_node/1, to_string/1, pp_nodes/1]).
+-export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
