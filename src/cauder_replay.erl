@@ -5,8 +5,20 @@
 
 -module(cauder_replay).
 
--export([can_replay_step/2, can_replay_spawn/2, can_replay_start/2, can_replay_send/2, can_replay_receive/2]).
--export([replay_step/2, replay_spawn/3, replay_start/2, replay_send/2, replay_receive/2]).
+-export([
+    can_replay_step/2,
+    can_replay_spawn/2,
+    can_replay_start/2,
+    can_replay_send/2,
+    can_replay_receive/2
+]).
+-export([
+    replay_step/2,
+    replay_spawn/3,
+    replay_start/2,
+    replay_send/2,
+    replay_receive/2
+]).
 
 -include("cauder.hrl").
 

@@ -13,7 +13,14 @@
     can_rollback_receive/2,
     can_rollback_variable/2
 ]).
--export([rollback_step/2, rollback_spawn/2, rollback_start/2, rollback_send/2, rollback_receive/2, rollback_variable/2]).
+-export([
+    rollback_step/2,
+    rollback_spawn/2,
+    rollback_start/2,
+    rollback_send/2,
+    rollback_receive/2,
+    rollback_variable/2
+]).
 
 -include("cauder.hrl").
 
