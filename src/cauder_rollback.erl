@@ -30,9 +30,6 @@
     Pid :: cauder_types:proc_id(),
     CanRollback :: boolean().
 
-%can_rollback_step(#sys{procs = #{Pid := #proc{hist = Hist}}}, Pid) when Hist =/= []                        -> true; % TODO Doesn't compile: variable 'Pid' is unbound
-%can_rollback_step(#sys{procs = PMap}, Pid) when is_map_key(Pid, PMap), map_get(Pid, PMap)#proc.hist =/= [] -> true; % TODO Doesn't compile: syntax error before: '#'
-
 can_rollback_step(#sys{procs = PMap}, Pid) when is_map_key(Pid, PMap) ->
     #proc{hist = Hist} = maps:get(Pid, PMap),
     Hist =/= [];

@@ -208,7 +208,7 @@ create_manual(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_manual(#wx_state{task = Action, system = System, pid = Pid}, #wx_state{task = Action, system = System, pid = Pid}) ->
+update_manual(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_manual(_, #wx_state{task = Action}) when Action =/= undefined ->
     wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
@@ -526,7 +526,7 @@ create_replay(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_replay(#wx_state{task = Action, system = System, pid = Pid}, #wx_state{task = Action, system = System, pid = Pid}) ->
+update_replay(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
@@ -784,11 +784,7 @@ create_rollback(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_rollback(#wx_state{task = Action, system = System, pid = Pid}, #wx_state{
-    task = Action,
-    system = System,
-    pid = Pid
-}) ->
+update_rollback(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),

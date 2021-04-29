@@ -556,40 +556,24 @@ handle_call({unsubscribe, Sub}, _From, #state{subs = Subs} = State) ->
     {reply, ok, State#state{subs = lists:delete(Sub, Subs)}};
 %%%=============================================================================
 
-handle_call(
-    {task, {suspend, Receiver, Messages, NewSystem}},
-    {Pid, _},
-    #state{subs = Subs, task = {Task, Pid, running}} = State
-) ->
-    notifySubscribers({suspend, Task, {Receiver, Messages}, NewSystem}, Subs),
+handle_call({task, {suspend, Receiver, Messages, NewSystem}}, {Pid, _}, #state{task = {Task, Pid, running}} = State) ->
+    notify_subscribers({suspend, Task, {Receiver, Messages}, NewSystem}, State#state.subs),
     {reply, ok, State#state{task = {Task, Pid, suspended}, system = NewSystem}};
-handle_call({task, resume}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, suspended}} = State) ->
-    notifySubscribers({resume, Task}, Subs),
+handle_call({task, resume}, {Pid, _}, #state{task = {Task, Pid, suspended}} = State) ->
+    notify_subscribers({resume, Task}, State#state.subs),
     {reply, ok, State#state{task = {Task, Pid, running}}};
-handle_call(
-    {task, {cancel, Value, Time, NewSystem}},
-    {Pid, _},
-    #state{subs = Subs, task = {Task, Pid, suspended}} = State
-) ->
-    notifySubscribers({cancel, Task, Value, Time, NewSystem}, Subs),
+handle_call({task, {cancel, Value, Time, NewSystem}}, {Pid, _}, #state{task = {Task, Pid, suspended}} = State) ->
+    notify_subscribers({cancel, Task, Value, Time, NewSystem}, State#state.subs),
     {reply, ok, State#state{task = undefined, system = NewSystem}};
-handle_call(
-    {task, {success, Value, Time, NewSystem}},
-    {Pid, _},
-    #state{subs = Subs, task = {Task, Pid, running}} = State
-) ->
-    notifySubscribers({success, Task, Value, Time, NewSystem}, Subs),
+handle_call({task, {success, Value, Time, NewSystem}}, {Pid, _}, #state{task = {Task, Pid, running}} = State) ->
+    notify_subscribers({success, Task, Value, Time, NewSystem}, State#state.subs),
     {reply, ok, State#state{task = undefined, system = NewSystem}};
-handle_call(
-    {task, {failure, no_alive, Stacktrace}},
-    {Pid, _},
-    #state{subs = Subs, task = {Task, Pid, running}} = State
-) ->
-    notifySubscribers({failure, Task, no_alive, Stacktrace}, Subs),
+handle_call({task, {failure, no_alive, Stacktrace}}, {Pid, _}, #state{task = {Task, Pid, running}} = State) ->
+    notify_subscribers({failure, Task, no_alive, Stacktrace}, State#state.subs),
     cauder_wx:show_error("tried to start a node in a non-distributed system"),
     {reply, ok, State#state{task = undefined}};
-handle_call({task, {failure, Reason, Stacktrace}}, {Pid, _}, #state{subs = Subs, task = {Task, Pid, running}} = State) ->
-    notifySubscribers({failure, Task, Reason, Stacktrace}, Subs),
+handle_call({task, {failure, Reason, Stacktrace}}, {Pid, _}, #state{task = {Task, Pid, running}} = State) ->
+    notify_subscribers({failure, Task, Reason, Stacktrace}, State#state.subs),
     {reply, ok, State#state{task = undefined}};
 %%%=============================================================================
 
@@ -603,10 +587,8 @@ handle_call({user, cancel}, _From, #state{task = {_, Pid, suspended}} = State) -
 
 handle_call({user, {get, {entry_points, Module}}}, _From, State) ->
     Defs = ets:match_object(?APP_DB, {{Module, '_', '_', '_'}, '_'}),
-    SortedDefs = lists:sort(
-        fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end,
-        Defs
-    ),
+    LineComparator = fun({_, [{_, LineA, _, _, _} | _]}, {_, [{_, LineB, _, _, _} | _]}) -> LineA =< LineB end,
+    SortedDefs = lists:sort(LineComparator, Defs),
     % TODO Only allow to start system from an exported function?
     EntryPoints = lists:map(fun({{M, F, A, _}, _}) -> {M, F, A} end, SortedDefs),
     {reply, EntryPoints, State};
@@ -616,7 +598,7 @@ handle_call({user, {get, path}}, _From, State) ->
     {reply, ets:lookup_element(?APP_DB, path, 2), State};
 %%%=============================================================================
 
-handle_call({user, stop}, {FromPid, _}, #state{subs = Subs, system = System, task = Task} = State) ->
+handle_call({user, stop}, {FromPid, _}, #state{system = System, task = Task} = State) ->
     case Task of
         {_, Pid, _} -> exit(Pid, kill);
         undefined -> ok
@@ -625,7 +607,7 @@ handle_call({user, stop}, {FromPid, _}, #state{subs = Subs, system = System, tas
     ets:delete(?APP_DB, last_uid),
     ets:delete(?APP_DB, last_var),
     % TODO Add dialog when UI receives this message
-    [Sub ! {dbg, stop} || Sub <- Subs, Sub =/= FromPid],
+    [Sub ! {dbg, stop} || Sub <- State#state.subs, Sub =/= FromPid],
     {reply, {ok, System}, State#state{system = undefined, task = undefined}};
 %%%=============================================================================
 
@@ -676,7 +658,7 @@ handle_call(Request, _From, State) ->
     io:format("[~p:~p] Unhandled Call:~n~p~n", [?MODULE, ?LINE, Request]),
     {reply, ok, State}.
 
-notifySubscribers(Message, Subs) ->
+notify_subscribers(Message, Subs) ->
     lists:foreach(fun(Sub) -> Sub ! {dbg, Message} end, Subs).
 
 %%------------------------------------------------------------------------------
@@ -757,11 +739,13 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
 
 suspend_task(Receiver, Messages, System) ->
     ok = gen_server:call(?SERVER, {task, {suspend, Receiver, Messages, System}}),
-    timer:tc(fun() ->
-        receive
-            Msg -> Msg
+    timer:tc(
+        fun() ->
+            receive
+                Msg -> Msg
+            end
         end
-    end).
+    ).
 
 resume_task() ->
     ok = gen_server:call(?SERVER, {task, resume}).
@@ -839,8 +823,7 @@ task_start(LogPath, undefined) ->
     StepsDone :: non_neg_integer().
 
 task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
-    {Time, {Completion, Sys1, StepsDone}} =
-        timer:tc(fun() -> step(Sem, Scheduler, Sys0, Pid, Steps) end),
+    {Time, {Completion, Sys1, StepsDone}} = timer:tc(fun() -> step(Sem, Scheduler, Sys0, Pid, Steps) end),
 
     {Completion, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
@@ -852,12 +835,7 @@ task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
     StepsDone :: non_neg_integer().
 
 task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
-    {Time, {Sys1, StepsDone}} =
-        timer:tc(
-            fun() ->
-                step_multiple(Sem, Scheduler, Sys0, Steps)
-            end
-        ),
+    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> step_multiple(Sem, Scheduler, Sys0, Steps) end),
 
     {success, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
@@ -870,12 +848,7 @@ task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
     StepsDone :: non_neg_integer().
 
 task_replay_steps({Pid, Steps}, Sys0) ->
-    {Time, {Sys1, StepsDone}} =
-        timer:tc(
-            fun() ->
-                replay_steps(Sys0, Pid, Steps, 0)
-            end
-        ),
+    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> replay_steps(Sys0, Pid, Steps, 0) end),
 
     {success, {StepsDone, Steps}, Time, Sys1}.
 
@@ -951,12 +924,7 @@ task_replay_receive(Uid, Sys0) ->
     System :: cauder_types:system().
 
 task_replay_full_log([], Sys0) ->
-    {Time, Sys1} =
-        timer:tc(
-            fun() ->
-                replay_full_log(Sys0)
-            end
-        ),
+    {Time, Sys1} = timer:tc(fun() -> replay_full_log(Sys0) end),
 
     {success, {}, Time, Sys1}.
 
@@ -969,12 +937,7 @@ task_replay_full_log([], Sys0) ->
     StepsDone :: non_neg_integer().
 
 task_rollback_steps({Pid, Steps}, Sys0) ->
-    {Time, {Sys1, StepsDone}} =
-        timer:tc(
-            fun() ->
-                rollback_steps(Sys0, Pid, Steps, 0)
-            end
-        ),
+    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> rollback_steps(Sys0, Pid, Steps, 0) end),
 
     {success, {StepsDone, Steps}, Time, Sys1}.
 
@@ -1076,40 +1039,36 @@ task_rollback_variable(Name, Sys0) ->
     StepsDone :: non_neg_integer().
 
 step(Sem, Scheduler, Sys, Pid, Steps) ->
-    try
-        lists:foldl(
-            fun(Step, {Sys0}) ->
-                case Sem of
-                    ?FWD_SEM ->
-                        Opts = cauder_semantics_forwards:options(Sys0, normal),
-                        CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
-                        case CanStep of
-                            false ->
-                                throw({success, Sys0, Step});
-                            true ->
-                                try
-                                    Sys1 = cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal),
-                                    {Sys1}
-                                catch
-                                    throw:cancel -> throw({cancel, Sys0, Step})
-                                end
-                        end;
-                    ?BWD_SEM ->
-                        Opts = cauder_semantics_backwards:options(Sys0),
-                        CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
-                        case CanStep of
-                            false ->
-                                throw({success, Sys0, Step});
-                            true ->
-                                Sys1 = cauder_semantics_backwards:step(Sys0, Pid),
+    DoStep =
+        fun(Step, {Sys0}) ->
+            case Sem of
+                ?FWD_SEM ->
+                    Opts = cauder_semantics_forwards:options(Sys0, normal),
+                    CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
+                    case CanStep of
+                        false ->
+                            throw({success, Sys0, Step});
+                        true ->
+                            try
+                                Sys1 = cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal),
                                 {Sys1}
-                        end
-                end
-            end,
-            {Sys},
-            lists:seq(0, Steps - 1)
-        )
-    of
+                            catch
+                                throw:cancel -> throw({cancel, Sys0, Step})
+                            end
+                    end;
+                ?BWD_SEM ->
+                    Opts = cauder_semantics_backwards:options(Sys0),
+                    CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
+                    case CanStep of
+                        false ->
+                            throw({success, Sys0, Step});
+                        true ->
+                            Sys1 = cauder_semantics_backwards:step(Sys0, Pid),
+                            {Sys1}
+                    end
+            end
+        end,
+    try lists:foldl(DoStep, {Sys}, lists:seq(0, Steps - 1)) of
         {Sys1} -> {success, Sys1, Steps}
     catch
         throw:{_, _, _} = Result -> Result
@@ -1124,54 +1083,50 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
     StepsDone :: non_neg_integer().
 
 step_multiple(Sem, Scheduler, Sys, Steps) ->
-    try
-        SchedFun = cauder_scheduler:get(Scheduler),
-        lists:foldl(
-            fun(Step, {Sys0, PidSet0, PidQueue0}) ->
-                Opts =
-                    case Sem of
-                        ?FWD_SEM -> cauder_semantics_forwards:options(Sys0, normal);
-                        ?BWD_SEM -> cauder_semantics_backwards:options(Sys0)
-                    end,
-                PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
-                case sets:is_empty(PidSet1) of
-                    true ->
-                        throw({Sys0, Step});
-                    false ->
-                        Change =
-                            case {sets:size(PidSet0), sets:size(PidSet1)} of
-                                {0, _} ->
-                                    {init, sets:to_list(PidSet1)};
-                                {Size0, Size1} when Size0 < Size1 ->
-                                    [AddedPid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
-                                    {add, AddedPid};
-                                {Size0, Size1} when Size0 > Size1 ->
-                                    [RemovedPid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
-                                    {remove, RemovedPid};
-                                {Size, Size} ->
-                                    case
-                                        {
-                                            sets:to_list(sets:subtract(PidSet1, PidSet0)),
-                                            sets:to_list(sets:subtract(PidSet0, PidSet1))
-                                        }
-                                    of
-                                        {[], []} -> none;
-                                        {[AddedPid], [RemovedPid]} -> {update, AddedPid, RemovedPid}
-                                    end
-                            end,
-                        {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
-                        Sys1 =
-                            case Sem of
-                                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
-                                ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
-                            end,
-                        {Sys1, PidSet1, PidQueue1}
-                end
-            end,
-            {Sys, sets:new(), queue:new()},
-            lists:seq(0, Steps - 1)
-        )
-    of
+    SchedFun = cauder_scheduler:get(Scheduler),
+    DoStep =
+        fun(Step, {Sys0, PidSet0, PidQueue0}) ->
+            Opts =
+                case Sem of
+                    ?FWD_SEM -> cauder_semantics_forwards:options(Sys0, normal);
+                    ?BWD_SEM -> cauder_semantics_backwards:options(Sys0)
+                end,
+            PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
+            case sets:is_empty(PidSet1) of
+                true ->
+                    throw({Sys0, Step});
+                false ->
+                    Change =
+                        case {sets:size(PidSet0), sets:size(PidSet1)} of
+                            {0, _} ->
+                                {init, sets:to_list(PidSet1)};
+                            {Size0, Size1} when Size0 < Size1 ->
+                                [AddedPid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
+                                {add, AddedPid};
+                            {Size0, Size1} when Size0 > Size1 ->
+                                [RemovedPid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
+                                {remove, RemovedPid};
+                            {Size, Size} ->
+                                case
+                                    {
+                                        sets:to_list(sets:subtract(PidSet1, PidSet0)),
+                                        sets:to_list(sets:subtract(PidSet0, PidSet1))
+                                    }
+                                of
+                                    {[], []} -> none;
+                                    {[AddedPid], [RemovedPid]} -> {update, AddedPid, RemovedPid}
+                                end
+                        end,
+                    {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
+                    Sys1 =
+                        case Sem of
+                            ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                            ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+                        end,
+                    {Sys1, PidSet1, PidQueue1}
+            end
+        end,
+    try lists:foldl(DoStep, {Sys, sets:new(), queue:new()}, lists:seq(0, Steps - 1)) of
         {Sys1, _, _} -> {Sys1, Steps}
     catch
         throw:{Sys1, StepsDone} -> {Sys1, StepsDone}

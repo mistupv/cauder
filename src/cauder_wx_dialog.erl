@@ -134,23 +134,20 @@ start_session(Parent, MFAs) ->
     StartButton = wxButton:new(Dialog, ?wxID_OK, [{label, "Start"}]),
     wxBoxSizer:add(Buttons, StartButton),
 
-    wxButton:connect(
-        StartButton,
-        command_button_clicked,
-        [
-            {callback, fun(_, _) ->
-                case wxRadioButton:getValue(ManualRadio) of
-                    true ->
-                        {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
-                        case cauder_utils:stringToExpressions(wxTextCtrl:getValue(ArgsCtrl)) of
-                            error ->
-                                Message = ?DIALOG_BadArgs_Message,
-                                Options = [{caption, ?DIALOG_BadArgs_Title}, {style, ?wxICON_ERROR}],
-                                wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options));
-                            Args ->
-                                case length(Args) of
-                                    A1 ->
-                                        N1 = wxTextCtrl:getValue(NodeName),
+    Callback =
+        fun(_, _) ->
+            case wxRadioButton:getValue(ManualRadio) of
+                true ->
+                    {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
+                    case cauder_utils:string_to_expressions(wxTextCtrl:getValue(ArgsCtrl)) of
+                        error ->
+                            Message = ?DIALOG_BadArgs_Message,
+                            Options = [{caption, ?DIALOG_BadArgs_Title}, {style, ?wxICON_ERROR}],
+                            wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options));
+                        Args ->
+                            case length(Args) of
+                                A1 ->
+                                    N1 = wxTextCtrl:getValue(NodeName),
                                         case cauder_utils:checkNodeName(N1) of
                                             ok ->
                                                 ReturnPid ! {manual, {M1, F1, N1, Args}};
@@ -164,21 +161,20 @@ start_session(Parent, MFAs) ->
                                                 ],
                                                 wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
                                         end;
-                                    Count ->
-                                        Message = io_lib:format(?DIALOG_StartSession_ArgCount_Message, [A1, Count]),
-                                        Options = [
-                                            {caption, ?DIALOG_StartSession_ArgCount_Title},
-                                            {style, ?wxICON_WARNING}
-                                        ],
-                                        wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
-                                end
-                        end;
-                    false ->
-                        ReturnPid ! {replay, wxDirPickerCtrl:getPath(TracePicker)}
-                end
-            end}
-        ]
-    ),
+                                Count ->
+                                    Message = io_lib:format(?DIALOG_StartSession_ArgCount_Message, [A1, Count]),
+                                    Options = [
+                                        {caption, ?DIALOG_StartSession_ArgCount_Title},
+                                        {style, ?wxICON_WARNING}
+                                    ],
+                                    wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
+                            end
+                    end;
+                false ->
+                    ReturnPid ! {replay, wxDirPickerCtrl:getPath(TracePicker)}
+            end
+        end,
+    wxButton:connect(StartButton, command_button_clicked, [{callback, Callback}]),
 
     wxBoxSizer:addSpacer(Buttons, ?SPACER_MEDIUM),
 
@@ -318,7 +314,7 @@ edit_binding(Parent, {Key, Value}) ->
     case wxDialog:showModal(Dialog) of
         ?wxID_OK ->
             Str = wxTextCtrl:getValue(ValueText),
-            case cauder_utils:stringToExpressions(Str) of
+            case cauder_utils:string_to_expressions(Str) of
                 [{value, _, NewValue}] -> {Key, NewValue};
                 _ -> cancel
             end;

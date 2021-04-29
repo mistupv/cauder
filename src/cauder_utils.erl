@@ -22,7 +22,7 @@
 ]).
 -export([merge_bindings/2]).
 -export([checkNodeName/1]).
--export([stringToMFA/1, stringToExpressions/1]).
+-export([string_to_mfa/1, string_to_expressions/1]).
 -export([filter_options/2]).
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
@@ -318,11 +318,11 @@ merge_bindings(Bs1, Bs2) ->
 %%------------------------------------------------------------------------------
 %% @doc Converts the given string into a MFA tuple.
 
--spec stringToMFA(String) -> MFA when
+-spec string_to_mfa(String) -> MFA when
     String :: string(),
     MFA :: mfa().
 
-stringToMFA(String) ->
+string_to_mfa(String) ->
     [M, F, A] = string:lexemes(String, ":/"),
     {list_to_atom(M), list_to_atom(F), list_to_integer(A)}.
 
@@ -347,13 +347,13 @@ checkNodeName(NodeName) ->
 %% @doc Converts the given string into a list of abstract expressions.
 %% Returns `error' if the string does not represent a valid Erlang expression.
 
--spec stringToExpressions(String) -> Expressions | error when
+-spec string_to_expressions(String) -> Expressions | error when
     String :: string(),
     Expressions :: [cauder_types:abstract_expr()].
 
-stringToExpressions([]) ->
+string_to_expressions([]) ->
     [];
-stringToExpressions(String) ->
+string_to_expressions(String) ->
     case erl_scan:string(String ++ ".") of
         {ok, Tokens, _} ->
             case erl_parse:parse_exprs(Tokens) of
