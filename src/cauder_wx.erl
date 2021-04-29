@@ -50,7 +50,8 @@ start() ->
     _ ->
       case wx_object:start({local, ?SERVER}, ?MODULE, [], []) of
         {error, _} = Error -> Error;
-        Window -> {ok, wx_object:get_pid(Window), Window}
+        Window ->
+          {ok, wx_object:get_pid(Window), Window}
       end
   end.
 
@@ -398,6 +399,15 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
   cauder_wx_statusbar:replay_spawn_start(Pid),
   {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 
+handle_event(?BUTTON_EVENT(?ACTION_Replay_Start_Button), State) ->
+  io:format("Ciao~n"),
+  Choice = cauder_wx:find(?ACTION_Replay_Start, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Node = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:replay_start(Node),
+  cauder_wx_statusbar:replay_start_start(Node),
+  {noreply, refresh(State, State#wx_state{system = System, task = replay_start})};
+
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Send_Button), State) ->
   Choice = cauder_wx:find(?ACTION_Replay_Send, wxChoice),
   Idx = wxChoice:getSelection(Choice),
@@ -435,6 +445,14 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Spawn_Button), State) ->
   {ok, System} = cauder:rollback_spawn(Pid),
   cauder_wx_statusbar:rollback_spawn_start(Pid),
   {noreply, refresh(State, State#wx_state{system = System, task = rollback_spawn})};
+
+handle_event(?BUTTON_EVENT(?ACTION_Rollback_Start_Button), State) ->
+  Choice = cauder_wx:find(?ACTION_Rollback_Start, wxChoice),
+  Idx = wxChoice:getSelection(Choice),
+  Node = wxChoice:getClientData(Choice, Idx),
+  {ok, System} = cauder:rollback_start(Node),
+  cauder_wx_statusbar:rollback_start_begin(Node),
+  {noreply, refresh(State, State#wx_state{system = System, task = rollback_start})};
 
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
   Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
@@ -620,10 +638,13 @@ handle_info(?DBG_SUCCESS(replay_spawn, Pid, Time, System), #wx_state{task = repl
   cauder_wx_statusbar:replay_spawn_finish(Pid, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 
+handle_info(?DBG_SUCCESS(replay_start, Node, Time, System), #wx_state{task = replay_start} = State) ->
+  cauder_wx_statusbar:replay_start_finish(Node, Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
 handle_info(?DBG_FAILURE(replay_spawn, no_replay, _Stacktrace), #wx_state{task = replay_spawn} = State) ->
   cauder_wx_statusbar:replay_spawn_fail(),
   {noreply, refresh(State, State#wx_state{task = undefined})};
-
 
 handle_info(?DBG_SUCCESS(replay_send, Uid, Time, System), #wx_state{task = replay_send} = State) ->
   cauder_wx_statusbar:replay_send_finish(Uid, Time),
@@ -652,6 +673,14 @@ handle_info(?DBG_SUCCESS(replay_full_log, Time, System), #wx_state{task = replay
 handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = rollback_steps} = State) ->
   cauder_wx_statusbar:rollback_steps_finish(Steps, Time),
   {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
+handle_info(?DBG_SUCCESS(rollback_start, Node, Time, System), #wx_state{task = rollback_start} = State) ->
+  cauder_wx_statusbar:rollback_start_finish(Node, Time),
+  {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+
+handle_info({dbg, {fail, rollback_start, no_rollback}}, #wx_state{task = rollback_start} = State) ->
+  cauder_wx_statusbar:rollback_start_fail(),
+  {noreply, refresh(State, State#wx_state{task = undefined})};
 
 
 handle_info(?DBG_SUCCESS(rollback_spawn, Pid, Time, System), #wx_state{task = rollback_spawn} = State) ->
@@ -742,8 +771,8 @@ start_session(#wx_state{module = Module}) ->
   Frame = cauder_wx:find(?FRAME, wxFrame),
   EntryPoints = cauder:get_entry_points(Module),
   case cauder_wx_dialog:start_session(Frame, EntryPoints) of
-    {manual, {Mod, Fun, Args}} ->
-      ok = cauder:init_system(Mod, Fun, Args),
+    {manual, {Mod, Fun, Node, Args}} ->
+      ok = cauder:init_system(Mod, Fun, Node, Args),
       cauder_wx_statusbar:init_start(),
       true;
     {replay, Path} ->

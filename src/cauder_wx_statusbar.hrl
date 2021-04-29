@@ -23,6 +23,10 @@
 -define(REPLAY_SPAWN_FINISH, "Replayed the spawning of the process with PID ~p in ~s").
 -define(REPLAY_SPAWN_FAIL, "Could not replay the spawning of that process").
 
+-define(REPLAY_START_START, "Replaying the starting of node ~p...").
+-define(REPLAY_START_FINISH, "Replayed the starting of node ~p in ~s").
+-define(REPLAY_START_FAIL, "Could not replay the starting of that node").
+
 -define(REPLAY_SEND_START, "Replaying the sending of the message with UID ~p...").
 -define(REPLAY_SEND_FINISH, "Replayed the sending of the message with UID ~p in ~s").
 -define(REPLAY_SEND_FAIL, "Could not replay the sending of that message").
@@ -40,6 +44,10 @@
 -define(ROLLBACK_SPAWN_START, "Rolling back the spawning of the process with PID ~p...").
 -define(ROLLBACK_SPAWN_FINISH, "Rolled back the spawning of the process with PID ~p in ~s").
 -define(ROLLBACK_SPAWN_FAIL, "Could not rollback the spawning of that process").
+
+-define(ROLLBACK_START_BEGIN, "Rolling back the start of the node with name ~p...").
+-define(ROLLBACK_START_FINISH, "Rolled back the starting of the node with name ~p in ~s").
+-define(ROLLBACK_START_FAIL, "Could not rollback the start of that node").
 
 -define(ROLLBACK_SEND_START, "Rolling back the sending of the message with UID ~p...").
 -define(ROLLBACK_SEND_FINISH, "Rolled back the sending of the message with UID ~p in ~s").

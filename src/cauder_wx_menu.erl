@@ -68,7 +68,7 @@ create(Frame) ->
       #menu_item{id = ?MENU_View_ConcurrentHistory, text = "Concurrent History", help = ?HELP_View_ConcurrentHistory, kind = radio},
       #menu_item{id = ?MENU_View_FullHistory, text = "Full History", help = ?HELP_View_FullHistory, kind = radio},
       separator,
-      #menu_item{id = ?MENU_View_Mailbox, text = "Show &Mailbox", help = ?HELP_View_Mailbox, kind = check}, %% TODO Show/hide
+      #menu_item{id = ?MENU_View_Mailbox, text = "Show &Mailbox", help = ?HELP_View_Mailbox, kind = check, enabled = false}, %% TODO Show/hide
       separator,
       #menu_item{id = ?MENU_View_ProcessMessages, text = "Current Process Messages", help = ?HELP_View_ProcessMessages, kind = radio},
       #menu_item{id = ?MENU_View_AllMessages, text = "All Messages", help = ?HELP_View_AllMessages, kind = radio},
@@ -79,7 +79,7 @@ create(Frame) ->
 
   RunMenu = create_menu(
     [
-      #menu_item{id = ?MENU_Run_Start, text = "St&art...", help = ?HELP_Run_Start, enabled = false},
+      #menu_item{id = ?MENU_Run_Start, text = "St&art...\tCtrl+S", help = ?HELP_Run_Start, enabled = false},
       #menu_item{id = ?MENU_Run_Stop, text = "St&op", help = ?HELP_Run_Stop, enabled = false}
     ]
   ),

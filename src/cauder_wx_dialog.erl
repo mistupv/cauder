@@ -16,11 +16,12 @@
 %% @doc Shows a dialog where the use can choose the execution mode, with the
 %% required information in each case.
 
--spec start_session(Parent, EntryPoints) -> {manual, {Module, Function, Args}} | {replay, TracePath} | false when
+-spec start_session(Parent, EntryPoints) -> {manual, {Module, Function, NodeName, Args}} | {replay, TracePath} | false when
   Parent :: wxWindow:wxWindow(),
   EntryPoints :: [mfa()],
   Module :: module(),
   Function :: atom(),
+  NodeName :: cauder_types:net_node(),
   Args :: cauder_types:af_args(),
   TracePath :: file:filename().
 
@@ -66,9 +67,21 @@ start_session(Parent, MFAs) ->
 
   wxBoxSizer:addSpacer(ManualSizer, ?SPACER_SMALL),
 
+  ArgsLabel = wxStaticText:new(ManualPanel, ?wxID_ANY, "Arguments: "),
+  wxBoxSizer:add(ManualSizer, ArgsLabel),
+
   ArgsCtrl = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
   wxBoxSizer:add(ManualSizer, ArgsCtrl),
 
+  wxBoxSizer:addSpacer(ManualSizer, ?SPACER_SMALL),
+
+  NodeLabel = wxStaticText:new(ManualPanel, ?wxID_ANY, "Node name: "),
+  wxBoxSizer:add(ManualSizer, NodeLabel),
+
+  NodeName = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
+  wxBoxSizer:add(ManualSizer, NodeName),
+
+  
   Index = wxChoice:getSelection(FunChoice),
   {_, _, Arity} = wxChoice:getClientData(FunChoice, Index),
   wxTextCtrl:enable(ArgsCtrl, [{enable, Arity > 0}]),
@@ -78,7 +91,7 @@ start_session(Parent, MFAs) ->
   ReplayRadio = wxRadioButton:new(Dialog, ?wxID_ANY, "Replay"),
   wxFlexGridSizer:add(Grid, ReplayRadio, [{flag, ?wxALIGN_CENTER_VERTICAL}]),
 
-  %% Replay Panel
+    %% Replay Panel
 
   ReplayPanel = wxPanel:new(Dialog),
   wxFlexGridSizer:add(Grid, ReplayPanel, [{flag, ?wxEXPAND}]),
@@ -87,7 +100,7 @@ start_session(Parent, MFAs) ->
   wxPanel:setSizer(ReplayPanel, ReplaySizer),
 
   BasePath = cauder:get_path(),
-  TracePath = filename:join(BasePath, "trace"),
+  TracePath = filename:join(BasePath, "results"),
   PickerPath =
     case filelib:is_dir(TracePath) of
       true -> TracePath;
@@ -131,7 +144,15 @@ start_session(Parent, MFAs) ->
               Args ->
                 case length(Args) of
                   A1 ->
-                    ReturnPid ! {manual, {M1, F1, Args}};
+                    N1 = wxTextCtrl:getValue(NodeName),
+                    case cauder_utils:checkNodeName(N1) of
+                      ok -> ReturnPid ! {manual, {M1, F1, N1, Args}};
+                      not_provided -> ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
+                      error ->
+                        Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
+                        Options = [{caption, ?DIALOG_StartSession_NodeName_Title}, {style, ?wxICON_WARNING}],
+                        wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
+                    end;
                   Count ->
                     Message = io_lib:format(?DIALOG_StartSession_ArgCount_Message, [A1, Count]),
                     Options = [{caption, ?DIALOG_StartSession_ArgCount_Title}, {style, ?wxICON_WARNING}],

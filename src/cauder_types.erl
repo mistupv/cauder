@@ -4,7 +4,8 @@
 
 -export_type([
   system/0,
-  log_map/0, log/0, log_entry/0,
+  log_map/0, log/0, log_entry/0, log_entry_search/0,
+  fwd_opts/0,
   process_map/0, proc_id/0, process/0,
   history/0, history_entry/0,
   stack/0, stack_entry/0,
@@ -27,18 +28,33 @@
 
 -type log_map() :: #{proc_id() => log()}.
 -type log() :: [log_entry()].
--type log_entry() :: {spawn, proc_id()}
-                   | {send, cauder_mailbox:uid()}
-                   | {'receive', cauder_mailbox:uid()}.
+-type log_entry() :: {send, cauder_mailbox:uid()}
+                   | {'receive', cauder_mailbox:uid()}
+                   | {nodes, {[net_node()]}}
+                   | {start, {succ, net_node()}}
+                   | {start, {fail, net_node()}}
+                   | {spawn, {net_node(), succ, proc_id()}}
+                   | {spawn, {net_node(), fail, proc_id()}}.
+
+-type log_entry_search() :: {send, cauder_mailbox:uid()}
+                          | {'receive', cauder_mailbox:uid()}
+                          | {start, {succ, net_node()}}
+                          | {spawn, {'_', '_', proc_id()}}
+                          | {spawn, {net_node(), fail, '_'}}.
 
 -type process_map() :: #{proc_id() := process()}. % Not empty
 -type proc_id() :: pos_integer().
+-type net_node() :: atom().
 -type process() :: #proc{}.
 
 -type history() :: [history_entry()].
 -type history_entry() :: {tau, environment(), [abstract_expr()], stack()}
                        | {self, environment(), [abstract_expr()], stack()}
-                       | {spawn, environment(), [abstract_expr()], stack(), proc_id()}
+                       | {node, environment(), [abstract_expr()], stack()}
+                       | {nodes, environment(), [abstract_expr()], stack(), [net_node()]}
+                       | {spawn, environment(), [abstract_expr()], stack(), net_node(), proc_id()}
+                       | {start, success, environment(), [abstract_expr()], stack(), net_node()}
+                       | {start, fail, environment(), [abstract_expr()], stack(), net_node()}
                        | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
                        | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
 
@@ -50,21 +66,27 @@
 -type binding() :: {atom(), term()}.
 
 -type option() :: #opt{}.
-
+-type fwd_opts() :: #{atom() => term()}.
 -type semantics() :: ?FWD_SEM | ?BWD_SEM.
 
 -type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
 -type message_scheduler() :: ?SCHEDULER_Random | ?SCHEDULER_Manual.
 
--type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_SPAWN | ?RULE_SEND | ?RULE_RECEIVE.
+-type rule() :: ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
 
 -type trace() :: #trace{}.
 
 -type result() :: #result{}.
 -type label() :: tau
                | {spawn, af_variable(), af_literal()}
+               | {spawn, af_variable(), net_node(), af_literal()}
                | {spawn, af_variable(), module(), atom(), [term()]}
+               | {spawn, af_variable(), net_node(), module(), atom(), [term()]}
+               | {start, af_variable(), net_node()}
+               | {start, af_variable(), atom(), atom()}
                | {self, af_variable()}
+               | {node, af_variable()}
+               | {nodes, af_variable()}
                | {send, proc_id(), term()}
                | {rec, af_variable(), af_clause_seq()}.
 
@@ -84,9 +106,16 @@
                        | af_make_fun()
                        | af_bif_call()
                        | af_self_call()
+                       | af_node_call()
+                       | af_nodes_call()
+                       | af_start_1_call()
+                       | af_start_2_call()
                        | af_spawn_1_call()
+                       | af_spawn_2_call()
                        | af_spawn_3_call()
+                       | af_spawn_4_call()
                        | af_send_call()
+                       | af_send_op_call()
                        | af_local_call()
                        | af_remote_call()
                        | af_apply()
@@ -119,11 +148,25 @@
 
 -type af_self_call() :: {self, line()}.
 
+-type af_node_call() :: {node, line()}.
+
+-type af_nodes_call() :: {nodes, line()}.
+
+-type af_start_1_call() :: {start, line(), abstract_expr()}.
+
+-type af_start_2_call() :: {start, line(), abstract_expr(), abstract_expr()}.
+
 -type af_spawn_1_call() :: {spawn, line(), abstract_expr()}.
+
+-type af_spawn_2_call() :: {spawn, line(), abstract_expr(), abstract_expr()}.
 
 -type af_spawn_3_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr()}.
 
+-type af_spawn_4_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr(), abstract_expr()}.
+
 -type af_send_call() :: {send, line(), abstract_expr(), abstract_expr()}.
+
+-type af_send_op_call() :: {send_op, line(), abstract_expr(), abstract_expr()}.
 
 -type af_local_call() :: {local_call, line(), atom(), af_args()}.
 
@@ -166,7 +209,9 @@
                        | af_unary_arith_op(af_guard_test())
                        | af_short_circuit_op(af_guard_test())
                        | af_guard_call()
-                       | af_self_call().
+                       | af_self_call()
+                       | af_node_call()
+                       | af_nodes_call().
 
 -type af_guard_call() :: {'bif', line(), erlang, atom(), [af_guard_test()]}.
 

@@ -56,7 +56,7 @@ eval_list(Bs, [E | Es], Stk) ->
   Bindings :: cauder_types:environment(),
   Expressions :: [cauder_types:abstract_expr()],
   Stack :: cauder_types:stack(),
-  Result :: cauder_types:result().
+    Result :: cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
   case is_reducible(E, Bs) of
@@ -193,6 +193,14 @@ expr(Bs, {self, Line}, Stk) ->
   Var = cauder_utils:temp_variable(Line),
   #result{env = Bs, exprs = [Var], stack = Stk, label = {self, Var}};
 
+expr(Bs, {node, Line}, Stk) ->
+  Var = cauder_utils:temp_variable(Line),
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {node, Var}};
+
+expr(Bs, {nodes, Line}, Stk) ->
+  Var = cauder_utils:temp_variable(Line),
+  #result{env = Bs, exprs = [Var], stack = Stk, label = {nodes, Var}};
+
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
   case is_reducible(Fun, Bs) of
     true -> eval_and_update({Bs, Fun, Stk}, {3, E});
@@ -200,6 +208,19 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
       Var = cauder_utils:temp_variable(Line),
       Label = {spawn, Var, Fun},
       #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+  end;
+
+expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3, E});
+    false ->
+      case is_reducible(Fun, Bs) of
+        true -> eval_and_update({Bs, Fun, Stk}, {4, E});
+        false ->
+          Var = cauder_utils:temp_variable(Line),
+          Label = {spawn, Var, concrete(N), Fun},
+          #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+      end
   end;
 
 expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
@@ -216,6 +237,50 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
               Label = {spawn, Var, concrete(M), concrete(F), concrete(As)},
               #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
           end
+      end
+  end;
+
+expr(Bs, E = {spawn, Line, N, M, F, As}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3, E});
+    false ->
+      case is_reducible(M, Bs) of
+        true -> eval_and_update({Bs, M, Stk}, {4, E});
+        false ->
+          case is_reducible(F, Bs) of
+            true -> eval_and_update({Bs, F, Stk}, {5, E});
+            false ->
+              case is_reducible(As, Bs) of
+                true -> eval_and_update({Bs, As, Stk}, {6, E});
+                false ->
+                  Var = cauder_utils:temp_variable(Line),
+                  Label = {spawn, Var, concrete(N), concrete(M), concrete(F), concrete(As)},
+                  #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+              end
+          end
+      end
+  end;
+
+
+expr(Bs, E = {start, Line, N}, Stk) ->
+  case is_reducible(N, Bs) of
+    true -> eval_and_update({Bs, N, Stk}, {3,E});
+    false ->
+      Var = cauder_utils:temp_variable(Line),
+      Label = {start, Var, concrete(N)},
+      #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+  end;
+
+expr(Bs, E = {start, Line, H, N}, Stk) ->
+  case is_reducible(H, Bs) of
+    true -> eval_and_update({Bs, H, Stk}, {3,E});
+    false ->
+      case is_reducible(N, Bs) of
+        true -> eval_and_update({Bs, N, Stk}, {4,E});
+        false ->
+          Var = cauder_utils:temp_variable(Line),
+          Label = {start, Var, concrete(H), concrete(N)},
+          #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
       end
   end;
 
@@ -672,7 +737,6 @@ concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 
 is_reducible([], _)                 -> false;
 is_reducible([E | Es], Bs)          -> is_reducible(E, Bs) orelse is_reducible(Es, Bs);
-
 is_reducible({value, _, _}, _)      -> false;
 is_reducible({var, _, '_'}, _)      -> false;
 is_reducible({var, _, Name}, Bs)    -> not cauder_utils:is_temp_variable_name(Name) andalso maps:is_key(Name, Bs);

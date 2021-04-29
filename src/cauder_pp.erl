@@ -6,7 +6,7 @@
 -module(cauder_pp).
 
 -export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
--export([pid/1, to_string/1]).
+-export([pid/1, pp_node/1, to_string/1, pp_nodes/1]).
 
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
@@ -17,13 +17,13 @@
   Process :: cauder_types:process(),
   String :: string().
 
-process(#proc{pid = Pid, spf = {M, F, A}} = Proc) ->
+process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
   Icon =
     case cauder_utils:is_dead(Proc) of
       true -> ?ICON_DEAD;
       false -> ?ICON_ALIVE
     end,
-  lists:flatten(Icon ++ io_lib:format(" PID: ~p - ~s:~s/~p", [Pid, M, F, A])).
+  lists:flatten(Icon ++ io_lib:format("Node: ~p  PID: ~p - ~s:~s/~p", [Node, Pid, M, F, A])).
 
 
 %%%=============================================================================
@@ -32,10 +32,13 @@ process(#proc{pid = Pid, spf = {M, F, A}} = Proc) ->
 -spec log_entry(LogEntry) -> String when
   LogEntry :: cauder_types:log_entry(),
   String :: string().
-
-log_entry({spawn, Pid})     -> "spawn(" ++ green(to_string(Pid)) ++ ")";
-log_entry({send, Uid})      -> "send(" ++ red(to_string(Uid)) ++ ")";
-log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")".
+log_entry({nodes, {Nodes}})             -> "nodes(" ++ to_string(Nodes) ++ ")";
+log_entry({spawn, {Node,fail,Pid}})     -> "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_entry({spawn, {Node,succ,Pid}})     -> "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_entry({send, Uid})                  -> "send(" ++ red(to_string(Uid)) ++ ")";
+log_entry({'receive', Uid})             -> "rec(" ++ blue(to_string(Uid)) ++ ")";
+log_entry({start, {succ, NodeName}})    -> "start(" ++ green(to_string(NodeName)) ++ ")";
+log_entry({start, {fail, NodeName}})    -> "start(" ++ red(to_string(NodeName)) ++ ")".
 
 
 %%%=============================================================================
@@ -45,9 +48,12 @@ log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")".
   HistoryEntry :: cauder_types:history_entry(),
   String :: string().
 
-history_entry({tau, _Bs, _Es, _Stk})                                -> "seq";
-history_entry({self, _Bs, _Es, _Stk})                               -> "self";
-history_entry({spawn, _Bs, _Es, _Stk, Pid})                         -> "spawn(" ++ green(to_string(Pid)) ++ ")";
+history_entry({tau, _Bs, _Es, _Stk})                              -> "seq";
+history_entry({self, _Bs, _Es, _Stk})                             -> "self";
+history_entry({nodes, _Bs, _Es, _Stk, Nodes})                     -> "nodes(" ++ pp_nodes(Nodes) ++ ")";
+history_entry({spawn, _Bs, _Es, _Stk, Node, Pid})                 -> "spawn(" ++ to_string(Node) ++ ", " ++ to_string(Pid) ++ ")";
+history_entry({start, success, _Bs, _Es, _Stk, Node})             -> "start(" ++ green(to_string(Node)) ++ ")";
+history_entry({start, fail, _Bs, _Es, _Stk, Node})                -> "start(" ++ red(to_string(Node)) ++ ")";
 history_entry({send, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}}) -> "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
 history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos})  -> "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")".
 
@@ -84,6 +90,10 @@ trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Ui
   io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
 trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
   io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
+trace_entry(#trace{type = ?RULE_START, from = From, res = succ, node = Node}) ->
+  io_lib:format("~s starts ~s", [pid(From), Node]);
+trace_entry(#trace{type = ?RULE_START, from = From, res = fail, node = Node}) ->
+  io_lib:format("Warning: ~s tried to start ~s and failed", [pid(From), Node]);
 trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
   io_lib:format("~s receives ~p (~p)", [pid(From), Val, Uid]).
 
@@ -98,12 +108,26 @@ trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
 pid(Pid) -> "Proc. " ++ to_string(Pid).
 
 
+-spec pp_node(Node) -> String when
+  Node :: cauder_types:net_node(),
+  String :: string().
+
+pp_node(Node) -> "Node " ++ to_string(Node).
+
 -spec to_string(Term) -> String when
   Term :: term(),
   String :: string().
 
 to_string(Term) -> io_lib:format("~p", [Term]).
 
+-spec pp_nodes(Nodes) -> String when
+    Nodes :: [cauder_types:net_node()],
+    String :: string().
+
+pp_nodes([]) -> "[]";
+pp_nodes(Nodes) ->
+  [FirstNode | RemNodes] = lists:map(fun(Node) -> to_string(Node) end, Nodes),
+  "[" ++ lists:foldl(fun(Node, AccIn) -> Node ++ ", " ++ AccIn end, FirstNode, RemNodes) ++ "]".
 
 red(Text) -> [{?wxRED, Text}].
 green(Text) -> [{?CAUDER_GREEN, Text}].
