@@ -21,7 +21,7 @@
     process_node/2
 ]).
 -export([merge_bindings/2]).
--export([checkNodeName/1]).
+-export([check_node_name/1]).
 -export([string_to_expressions/1]).
 -export([filter_options/2]).
 -export([fresh_pid/0]).
@@ -319,12 +319,12 @@ merge_bindings(Bs1, Bs2) ->
 %% @doc Given an atom that represents a node checks that the format is correct.
 %% Returns `error' if the format of the atom is not a valid Erlang node name.
 
--spec checkNodeName(NodeName) -> ok | error | not_provided when
+-spec check_node_name(NodeName) -> ok | error | not_provided when
     NodeName :: cauder_types:net_node().
 
-checkNodeName([]) ->
+check_node_name([]) ->
     not_provided;
-checkNodeName(NodeName) ->
+check_node_name(NodeName) ->
     case string:split(NodeName, "@") of
         [Name, Host] when length(Name) > 0, length(Host) > 0 ->
             ok;

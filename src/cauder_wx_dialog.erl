@@ -148,7 +148,7 @@ start_session(Parent, MFAs) ->
                             case length(Args) of
                                 A1 ->
                                     N1 = wxTextCtrl:getValue(NodeName),
-                                        case cauder_utils:checkNodeName(N1) of
+                                        case cauder_utils:check_node_name(N1) of
                                             ok ->
                                                 ReturnPid ! {manual, {M1, F1, N1, Args}};
                                             not_provided ->
