@@ -148,19 +148,19 @@ start_session(Parent, MFAs) ->
                             case length(Args) of
                                 A1 ->
                                     N1 = wxTextCtrl:getValue(NodeName),
-                                        case cauder_utils:check_node_name(N1) of
-                                            ok ->
-                                                ReturnPid ! {manual, {M1, F1, N1, Args}};
-                                            not_provided ->
-                                                ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
-                                            error ->
-                                                Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
-                                                Options = [
-                                                    {caption, ?DIALOG_StartSession_NodeName_Title},
-                                                    {style, ?wxICON_WARNING}
-                                                ],
-                                                wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
-                                        end;
+                                    case cauder_utils:check_node_name(N1) of
+                                        ok ->
+                                            ReturnPid ! {manual, {M1, F1, N1, Args}};
+                                        not_provided ->
+                                            ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
+                                        error ->
+                                            Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
+                                            Options = [
+                                                {caption, ?DIALOG_StartSession_NodeName_Title},
+                                                {style, ?wxICON_WARNING}
+                                            ],
+                                            wxMessageDialog:showModal(wxMessageDialog:new(Dialog, Message, Options))
+                                    end;
                                 Count ->
                                     Message = io_lib:format(?DIALOG_StartSession_ArgCount_Message, [A1, Count]),
                                     Options = [
