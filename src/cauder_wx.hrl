@@ -32,13 +32,13 @@
 
 -define(FRAME, 500).
 
--define(FRAME_SIZE_INIT, {900, 800}).
+-define(FRAME_SIZE_INIT, {1250, 775}).
 
 -define(ZOOM_MIN, -10).
 -define(ZOOM_MAX, 20).
 -define(ZOOM_DEFAULT, (?ZOOM_MIN + ?FONT_SIZE_APPARENT_DEFAULT - ?FONT_SIZE_MIN)).
 
--define(FONT_SIZE_MIN, 7).
+-define(FONT_SIZE_MIN, 10).
 % Change if you want a different initial font size
 -define(FONT_SIZE_APPARENT_DEFAULT, 9).
 % DO NOT CHANGE. This is the actual default font size taking into account zoom levels
@@ -152,48 +152,56 @@
 
 %% -----
 
--define(ACTION_Replay, 2150).
+-define(ACTION_Replay, 21300).
 
--define(ACTION_Replay_Steps, 2151).
--define(ACTION_Replay_Spawn, 2152).
--define(ACTION_Replay_Send, 2153).
--define(ACTION_Replay_Receive, 2154).
+-define(ACTION_Replay_Steps, 21301).
+-define(ACTION_Replay_Spawn, 21302).
+-define(ACTION_Replay_Send, 21303).
+-define(ACTION_Replay_Receive, 21304).
+-define(ACTION_Replay_Start, 21305).
 
--define(ACTION_Replay_Steps_Button, 2155).
--define(ACTION_Replay_Spawn_Button, 2156).
--define(ACTION_Replay_Send_Button, 2157).
--define(ACTION_Replay_Receive_Button, 2158).
--define(ACTION_Replay_FullLog_Button, 2159).
+
+-define(ACTION_Replay_Steps_Button, 21306).
+-define(ACTION_Replay_Spawn_Button, 21307).
+-define(ACTION_Replay_Send_Button, 21308).
+-define(ACTION_Replay_Receive_Button, 21309).
+-define(ACTION_Replay_Start_Button, 21310).
+-define(ACTION_Replay_FullLog_Button, 21311).
 
 %% -----
 
 -define(ACTION_Rollback, 2170).
 
--define(ACTION_Rollback_Steps, 2171).
--define(ACTION_Rollback_Spawn, 2172).
--define(ACTION_Rollback_Send, 2173).
--define(ACTION_Rollback_Receive, 2174).
--define(ACTION_Rollback_Variable, 2175).
+-define(ACTION_Rollback_Steps, 2141).
+-define(ACTION_Rollback_Spawn, 2142).
+-define(ACTION_Rollback_Send, 2143).
+-define(ACTION_Rollback_Receive, 2144).
+-define(ACTION_Rollback_Variable, 2145).
+-define(ACTION_Rollback_Start, 2146).
 
--define(ACTION_Rollback_Steps_Button, 2176).
--define(ACTION_Rollback_Spawn_Button, 2177).
--define(ACTION_Rollback_Send_Button, 2178).
--define(ACTION_Rollback_Receive_Button, 2179).
--define(ACTION_Rollback_Variable_Button, 2180).
+-define(ACTION_Rollback_Steps_Button, 2147).
+-define(ACTION_Rollback_Spawn_Button, 2148).
+-define(ACTION_Rollback_Send_Button, 2149).
+-define(ACTION_Rollback_Receive_Button, 2150).
+-define(ACTION_Rollback_Variable_Button, 2151).
+-define(ACTION_Rollback_Start_Button, 2152).
 
 %% ----- System Info Panel ----- %%
 
 -define(SYSTEM_Panel, 2200).
 
--define(SYSTEM_Mail_Panel, 2201).
--define(SYSTEM_Mail_Control, 2202).
+-define(SYSTEM_Notebook_NodesAndMail, 2201).
+-define(SYSTEM_Notebook_Tab_Nodes, 0). % Tab index
+-define(SYSTEM_Notebook_Tab_Mail, 1). % Tab index
 
--define(SYSTEM_Notebook, 2210).
--define(SYSTEM_Notebook_Trace, 0).
--define(SYSTEM_Notebook_RollLog, 1).
+-define(SYSTEM_Notebook_TraceAndRollLog, 2202).
+-define(SYSTEM_Notebook_Tab_Trace, 0). % Tab index
+-define(SYSTEM_Notebook_Tab_RollLog, 1). % Tab index
 
--define(SYSTEM_Trace, 2211).
--define(SYSTEM_RollLog, 2212).
+-define(SYSTEM_Nodes, 2210).
+-define(SYSTEM_Mail, 2211).
+-define(SYSTEM_Trace, 2212).
+-define(SYSTEM_RollLog, 2213).
 
 %% ----- Process Info Panel ----- %%
 
@@ -258,6 +266,9 @@
 
 -define(DIALOG_StartSession_Title, "Start debugging session").
 
+-define(DIALOG_StartSession_NodeName_Title, "Warning: Node name").
+-define(DIALOG_StartSession_NodeName_Message, "Node name not correct, the node name must be of the form 'name@host'").
+
 -define(DIALOG_StartSession_ArgCount_Title, "Warming: Argument count").
 -define(DIALOG_StartSession_ArgCount_Message,
     "Wrong number of argumments!\n"
@@ -272,6 +283,9 @@
     "You are about to stop the current debugging session.\n"
     "The current system state will be lost.\nAre you sure you want to continue?"
 ).
+
+-define(DIALOG_Exception_Raised_Title, "Exception raised").
+-define(DIALOG_Exception_Raised_Message, "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted").
 
 -define(DIALOG_DropFiles_Unsupported_Title, "Unsupported files").
 -define(DIALOG_DropFiles_Unsupported_Message,

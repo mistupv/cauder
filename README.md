@@ -127,6 +127,15 @@ be created in the root of the project.
 
 ℹ️ This script will start CauDEr in detached mode.
 
+## Creating a log
+
+To run CauDEr in replay mode you will first need to create a log, for that
+purpose you can use the [Tracer](https://github.com/mistupv/tracer) tool.
+
+**NOTE:** You should use the version of tracer from branch
+[`with_dbg`](https://github.com/mistupv/tracer/tree/with_dbg) for logs to work
+with the current version of CauDEr. 
+
 ## Screenshot
 
 ![CauDEr screenshot](screenshot.png)

@@ -7,274 +7,283 @@
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 
+
 %%%=============================================================================
 %%% API
 %%%=============================================================================
+
 
 %%------------------------------------------------------------------------------
 %% @doc Creates the <i>system info</i> panel and populates it.
 
 -spec create(Parent) -> Window when
-    Parent :: wxWindow:wxWindow(),
-    Window :: wxWindow:wxWindow().
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create(Parent) ->
-    Win = wxPanel:new(Parent, [{winid, ?SYSTEM_Panel}]),
+  Win = wxPanel:new(Parent, [{winid, ?SYSTEM_Panel}]),
 
-    Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "System Info"}]),
-    wxWindow:setSizer(Win, Sizer),
+  Sizer = wxStaticBoxSizer:new(?wxVERTICAL, Win, [{label, "System Info"}]),
+  wxWindow:setSizer(Win, Sizer),
 
-    Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
+  Expand = [{proportion, 1}, {flag, ?wxEXPAND}],
 
-    wxSizer:add(Sizer, create_mail(Win), Expand),
+  NotebookNodesAndMail = wxNotebook:new(Win, ?SYSTEM_Notebook_NodesAndMail),
+  wxNotebook:addPage(NotebookNodesAndMail, create_nodes(NotebookNodesAndMail), "Nodes"),
+  wxNotebook:addPage(NotebookNodesAndMail, create_mail(NotebookNodesAndMail), "Mailbox"),
+  wxSizer:add(Sizer, NotebookNodesAndMail, Expand),
 
-    wxSizer:addSpacer(Sizer, 5),
+  wxSizer:addSpacer(Sizer, 5),
 
-    Notebook = wxNotebook:new(Win, ?SYSTEM_Notebook),
-    wxNotebook:addPage(Notebook, create_trace(Notebook), "Trace"),
-    wxNotebook:addPage(Notebook, create_roll_log(Notebook), "Roll Log"),
-    wxSizer:add(Sizer, Notebook, Expand),
+  NotebookTraceAndRollLog = wxNotebook:new(Win, ?SYSTEM_Notebook_TraceAndRollLog),
+  wxNotebook:addPage(NotebookTraceAndRollLog, create_trace(NotebookTraceAndRollLog), "Trace"),
+  wxNotebook:addPage(NotebookTraceAndRollLog, create_roll_log(NotebookTraceAndRollLog), "Roll Log"),
+  wxSizer:add(Sizer, NotebookTraceAndRollLog, Expand),
 
-    Win.
+  Win.
+
 
 %%------------------------------------------------------------------------------
 %% @doc Updates the <i>system info</i> panel according to the given new state,
 %% by comparing it with the given old state.
 
 -spec update(OldState, NewState) -> ok when
-    OldState :: cauder_wx:state(),
-    NewState :: cauder_wx:state().
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
 update(OldState, NewState) ->
-    update_mail(OldState, NewState),
-    update_trace(OldState, NewState),
-    update_roll_log(OldState, NewState).
+  update_nodes(OldState, NewState),
+  update_mail(OldState, NewState),
+  update_trace(OldState, NewState),
+  update_roll_log(OldState, NewState).
+
 
 %%%=============================================================================
 %%% Internal functions
 %%%=============================================================================
 
+
 -spec create_mail(Parent) -> Window when
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
+
+create_mail(Parent) ->
+  Win = wxPanel:new(Parent),
+
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
+
+  MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_Mail}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
+  wxBoxSizer:add(Sizer, MailArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
+
+  Item = wxListItem:new(),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+
+  wxListItem:setText(Item, "UID"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MailArea, 0, Item),
+
+  wxListItem:setText(Item, "Value"),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MailArea, 1, Item),
+
+  wxListItem:setText(Item, "Src."),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MailArea, 2, Item),
+
+  wxListItem:setText(Item, "Dest."),
+  wxListItem:setFont(Item, Font),
+  wxListCtrl:insertColumn(MailArea, 3, Item),
+
+  wxListItem:destroy(Item),
+
+  wxListCtrl:setColumnWidth(MailArea, 0, 50),
+  wxListCtrl:setColumnWidth(MailArea, 1, 150),
+  wxListCtrl:setColumnWidth(MailArea, 2, 50),
+  wxListCtrl:setColumnWidth(MailArea, 3, 50),
+
+  wxListCtrl:connect(MailArea, command_list_item_activated),
+
+  Win.
+
+-spec create_nodes(Parent) -> Window when
     Parent :: wxWindow:wxWindow(),
     Window :: wxWindow:wxWindow().
 
-create_mail(Parent) ->
-    Win = wxPanel:new(Parent, [{winid, ?SYSTEM_Mail_Panel}]),
+create_nodes(Parent) ->
+  Win = wxPanel:new(Parent),
 
-    Sizer = wxStaticBoxSizer:new(?wxHORIZONTAL, Win, [{label, "Mail"}]),
-    wxPanel:setSizer(Win, Sizer),
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
 
-    MailArea = wxListCtrl:new(Win, [{winid, ?SYSTEM_Mail_Control}, {style, ?wxLC_REPORT bor ?wxLC_SINGLE_SEL}]),
-    wxBoxSizer:add(Sizer, MailArea, [{proportion, 1}, {flag, ?wxEXPAND}]),
+  NodesArea = wxTextCtrl:new(Win, ?SYSTEM_Nodes, [{style, ?wxTE_MULTILINE bor ?wxTE_READONLY bor ?wxTE_RICH2}]),
+  wxBoxSizer:add(Sizer, NodesArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
-    Item = wxListItem:new(),
-    Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxTextCtrl:setFont(NodesArea, Font),
 
-    wxListItem:setText(Item, "UID"),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MailArea, 0, Item),
+  Win.
 
-    wxListItem:setText(Item, "Value"),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MailArea, 1, Item),
+-spec update_nodes(OldState, NewState) -> ok when
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
-    wxListItem:setText(Item, "Src."),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MailArea, 2, Item),
+update_nodes(#wx_state{system = #sys{nodes = Nodes}}, #wx_state{system = #sys{nodes = Nodes}}) ->
+  ok;
+update_nodes(_, #wx_state{system = undefined}) ->
+  ok;
+update_nodes(_, #wx_state{system = #sys{nodes = Nodes}}) ->
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_NodesAndMail, wxNotebook), ?SYSTEM_Notebook_Tab_Nodes),
+  NodesArea = cauder_wx:find(?SYSTEM_Nodes, wxTextCtrl),
+  wxTextCtrl:freeze(NodesArea),
+  wxTextCtrl:clear(NodesArea),
 
-    wxListItem:setText(Item, "Dest."),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MailArea, 3, Item),
+  [FirstNode | RemNodes] = lists:map(fun(Node) -> atom_to_list(Node) end, Nodes),
+  NodesListFormatted = "[" ++ lists:foldl(fun(Node, AccIn) -> Node ++ ", " ++ AccIn end, FirstNode, RemNodes) ++ "]",
 
-    wxListItem:destroy(Item),
+  wxTextCtrl:appendText(NodesArea, NodesListFormatted),
+  wxTextCtrl:thaw(NodesArea).
 
-    wxListCtrl:setColumnWidth(MailArea, 0, 50),
-    wxListCtrl:setColumnWidth(MailArea, 1, 150),
-    wxListCtrl:setColumnWidth(MailArea, 2, 50),
-    wxListCtrl:setColumnWidth(MailArea, 3, 50),
-
-    wxListCtrl:connect(MailArea, command_list_item_activated),
-
-    Win.
 
 -spec update_mail(OldState, NewState) -> ok when
-    OldState :: cauder_wx:state(),
-    NewState :: cauder_wx:state().
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
 update_mail(
     #wx_state{system = #sys{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}},
-    #wx_state{system = #sys{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}}
-) ->
-    ok;
+    #wx_state{system = #sys{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}}) ->
+  ok;
 update_mail(
     #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}},
-    #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}
-) ->
-    ok;
-update_mail(_, #wx_state{config = #config{mailbox = false}}) ->
-    show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), false),
-    ok;
+    #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}) ->
+  ok;
 update_mail(_, #wx_state{system = undefined}) ->
-    show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), true),
-    wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail_Control, wxListCtrl)),
-    ok;
+  wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail, wxListCtrl)),
+  ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mode = all}}) ->
-    show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), true),
-    Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-    MailArea = cauder_wx:find(?SYSTEM_Mail_Control, wxListCtrl),
-    wxListCtrl:freeze(MailArea),
-    wxListCtrl:deleteAllItems(MailArea),
-    lists:foldl(
-        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
-            wxListCtrl:insertItem(MailArea, Row, ""),
-            wxListCtrl:setItemFont(MailArea, Row, Font),
-            wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
-            wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
-            wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
-            wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
-            Row + 1
-        end,
-        0,
-        cauder_mailbox:to_list(Mail)
-    ),
-    wxListCtrl:thaw(MailArea),
-    ok;
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
+  wxListCtrl:freeze(MailArea),
+  wxListCtrl:deleteAllItems(MailArea),
+  lists:foldl(
+    fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+      wxListCtrl:insertItem(MailArea, Row, ""),
+      wxListCtrl:setItemFont(MailArea, Row, Font),
+      wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
+      wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
+      wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
+      wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
+      Row + 1
+    end, 0, cauder_mailbox:to_list(Mail)),
+  wxListCtrl:thaw(MailArea),
+  ok;
 update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox_mode = process}}) ->
-    show_and_resize(cauder_wx:find(?SYSTEM_Mail_Panel, wxPanel), true),
-    Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-    MailArea = cauder_wx:find(?SYSTEM_Mail_Control, wxListCtrl),
-    wxListCtrl:freeze(MailArea),
-    wxListCtrl:deleteAllItems(MailArea),
-    case Pid of
-        undefined ->
-            ok;
-        Pid ->
-            Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:pid_get(Pid, Mail)),
-            lists:foldl(
-                fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
-                    wxListCtrl:insertItem(MailArea, Row, ""),
-                    wxListCtrl:setItemFont(MailArea, Row, Font),
-                    wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
-                    wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
-                    wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
-                    wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
-                    Row + 1
-                end,
-                0,
-                Messages
-            )
-    end,
-    wxListCtrl:thaw(MailArea),
-    ok.
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
+  wxListCtrl:freeze(MailArea),
+  wxListCtrl:deleteAllItems(MailArea),
+  case Pid of
+    undefined -> ok;
+    Pid ->
+      Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:pid_get(Pid, Mail)),
+      lists:foldl(
+        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+          wxListCtrl:insertItem(MailArea, Row, ""),
+          wxListCtrl:setItemFont(MailArea, Row, Font),
+          wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
+          wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
+          wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
+          wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
+          Row + 1
+        end, 0, Messages)
+  end,
+  wxListCtrl:thaw(MailArea),
+  ok.
+
+
 
 %%%=============================================================================
+
 
 -spec create_trace(Parent) -> Window when
-    Parent :: wxWindow:wxWindow(),
-    Window :: wxWindow:wxWindow().
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_trace(Parent) ->
-    Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent),
 
-    Sizer = wxBoxSizer:new(?wxHORIZONTAL),
-    wxPanel:setSizer(Win, Sizer),
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
 
-    TraceArea = wxListBox:new(Win, ?SYSTEM_Trace),
-    wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
+  TraceArea = wxListBox:new(Win, ?SYSTEM_Trace),
+  wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
-    Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-    wxListBox:setFont(TraceArea, Font),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxListBox:setFont(TraceArea, Font),
 
-    Win.
+  Win.
+
 
 -spec update_trace(OldState, NewState) -> ok when
-    OldState :: cauder_wx:state(),
-    NewState :: cauder_wx:state().
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
 update_trace(#wx_state{system = #sys{trace = Trace}}, #wx_state{system = #sys{trace = Trace}}) ->
-    ok;
+  ok;
 update_trace(_, #wx_state{system = undefined}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
-    ok;
+  wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+  ok;
 update_trace(_, #wx_state{system = #sys{trace = []}}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
-    ok;
+  wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+  ok;
 update_trace(_, #wx_state{system = #sys{trace = Trace}}) ->
-    wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_Trace),
-    TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
-    wxListBox:freeze(TraceArea),
-    wxListBox:clear(TraceArea),
-    Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
-    lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
-    wxListBox:thaw(TraceArea).
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
+  TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
+  wxListBox:freeze(TraceArea),
+  wxListBox:clear(TraceArea),
+  Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
+  lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
+  wxListBox:thaw(TraceArea).
+
 
 %%%=============================================================================
+
 
 -spec create_roll_log(Parent) -> Window when
-    Parent :: wxWindow:wxWindow(),
-    Window :: wxWindow:wxWindow().
+  Parent :: wxWindow:wxWindow(),
+  Window :: wxWindow:wxWindow().
 
 create_roll_log(Parent) ->
-    Win = wxPanel:new(Parent),
+  Win = wxPanel:new(Parent),
 
-    Sizer = wxBoxSizer:new(?wxHORIZONTAL),
-    wxPanel:setSizer(Win, Sizer),
+  Sizer = wxBoxSizer:new(?wxHORIZONTAL),
+  wxPanel:setSizer(Win, Sizer),
 
-    RollLogArea = wxListBox:new(Win, ?SYSTEM_RollLog),
-    wxBoxSizer:add(Sizer, RollLogArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
+  RollLogArea = wxListBox:new(Win, ?SYSTEM_RollLog),
+  wxBoxSizer:add(Sizer, RollLogArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
 
-    Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-    wxListBox:setFont(RollLogArea, Font),
+  Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
+  wxListBox:setFont(RollLogArea, Font),
 
-    Win.
+  Win.
+
 
 -spec update_roll_log(OldState, NewState) -> ok when
-    OldState :: cauder_wx:state(),
-    NewState :: cauder_wx:state().
+  OldState :: cauder_wx:state(),
+  NewState :: cauder_wx:state().
 
 update_roll_log(#wx_state{system = #sys{roll = RollLog}}, #wx_state{system = #sys{roll = RollLog}}) ->
-    ok;
+  ok;
 update_roll_log(_, #wx_state{system = undefined}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
-    ok;
+  wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
+  ok;
 update_roll_log(_, #wx_state{system = #sys{roll = []}}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
-    ok;
+  wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
+  ok;
 update_roll_log(_, #wx_state{system = #sys{roll = RollLog}}) ->
-    wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook, wxNotebook), ?SYSTEM_Notebook_RollLog),
-    RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
-    wxListBox:freeze(RollLogArea),
-    wxListBox:clear(RollLogArea),
-    lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog),
-    wxListBox:thaw(RollLogArea).
-
-%%%=============================================================================
-
--spec show_and_resize(Panel, Show) -> ok when
-    Panel :: wxPanel:wxPanel(),
-    Show :: boolean().
-
-show_and_resize(Panel, Show) ->
-    case wxPanel:isShown(Panel) of
-        Show ->
-            ok;
-        _ ->
-            wxPanel:show(Panel, [{show, Show}]),
-
-            % -----
-
-            SystemPanel = cauder_wx:find(?SYSTEM_Panel, wxPanel),
-            SystemSizer = wx:typeCast(wxPanel:getSizer(SystemPanel), wxSizer),
-
-            [Top, Spacer, Bottom] = wxSizer:getChildren(SystemSizer),
-
-            ShowTop = wxSizerItem:isShown(Top),
-            ShowBottom = wxSizerItem:isShown(Bottom),
-
-            wxSizerItem:show(Spacer, ShowTop and ShowBottom),
-
-            % -----
-
-            wxPanel:layout(SystemPanel),
-            ok
-    end.
+  wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_RollLog),
+  RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
+  wxListBox:freeze(RollLogArea),
+  wxListBox:clear(RollLogArea),
+  lists:foreach(fun(Entry) -> wxListBox:append(RollLogArea, Entry) end, RollLog),
+  wxListBox:thaw(RollLogArea).
