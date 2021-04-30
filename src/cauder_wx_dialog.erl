@@ -7,6 +7,9 @@
 -export([drop_files/2]).
 -export([about/1]).
 
+% TODO Remove
+-elvis([{elvis_style, nesting_level, #{ignore => [cauder_wx_dialog, start_session, 2]}}]).
+
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
