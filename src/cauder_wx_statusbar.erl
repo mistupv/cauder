@@ -24,6 +24,8 @@
 -export([rollback_receive_start/1, rollback_receive_finish/2, rollback_receive_fail/0]).
 -export([rollback_variable_start/1, rollback_variable_finish/2, rollback_variable_fail/0]).
 
+-elvis([{elvis_style, god_modules, disable}]).
+
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 -include("cauder_wx_statusbar.hrl").

@@ -31,6 +31,8 @@
 -export([is_dead/1]).
 -export([is_conc_item/1]).
 
+-elvis([{elvis_style, god_modules, disable}]).
+
 -include("cauder.hrl").
 
 %%------------------------------------------------------------------------------
