@@ -310,26 +310,8 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
     end;
 expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
     case is_reducible(As, Bs0) of
-        true ->
-            eval_and_update({Bs0, As, Stk0}, {5, E});
-        false ->
-            A = length(As),
-            case cauder_utils:fundef_lookup({M, F, A}) of
-                {Exported, Cs} ->
-                    % Check if function is accessible
-                    case current_module(Stk0) of
-                        {ok, M} -> ok;
-                        {ok, _} -> true = Exported;
-                        error when Stk0 =:= [] -> ok
-                    end,
-                    {match, Bs, Body} = match_fun(Cs, As),
-                    Var = cauder_utils:temp_variable(Line),
-                    Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
-                    #result{env = Bs0, exprs = [Var], stack = Stk};
-                error ->
-                    Value = apply(M, F, lists:map(fun concrete/1, As)),
-                    #result{env = Bs0, exprs = [{value, Line, Value}], stack = Stk0}
-            end
+        true -> eval_and_update({Bs0, As, Stk0}, {5, E});
+        false -> eval_remote_call(M, F, As, Stk0, Line, Bs0)
     end;
 % TODO Handle calls to self/0, spawn/1, spawn/3
 expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
@@ -347,23 +329,7 @@ expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
                         false ->
                             M = concrete(M0),
                             F = concrete(F0),
-                            A = length(As),
-                            case cauder_utils:fundef_lookup({M, F, A}) of
-                                {Exported, Cs} ->
-                                    % Check if function is accessible
-                                    case current_module(Stk0) of
-                                        {ok, M} -> ok;
-                                        {ok, _} -> true = Exported;
-                                        error when Stk0 =:= [] -> ok
-                                    end,
-                                    {match, Bs, Body} = match_fun(Cs, As),
-                                    Var = cauder_utils:temp_variable(Line),
-                                    Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
-                                    #result{env = Bs0, exprs = [Var], stack = Stk};
-                                error ->
-                                    Value = apply(M, F, lists:map(fun concrete/1, As)),
-                                    #result{env = Bs0, exprs = [{value, Line, Value}], stack = Stk0}
-                            end
+                            eval_remote_call(M, F, As, Stk0, Line, Bs0)
                     end
             end
     end;
@@ -442,6 +408,25 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
                             #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
                     end
             end
+    end.
+
+eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
+    A = length(As),
+    case cauder_utils:fundef_lookup({M, F, A}) of
+        {Exported, Cs} ->
+            % Check if function is accessible
+            case current_module(Stk0) of
+                {ok, M} -> ok;
+                {ok, _} -> true = Exported;
+                error when Stk0 =:= [] -> ok
+            end,
+            {match, Bs, Body} = match_fun(Cs, As),
+            Var = cauder_utils:temp_variable(Line),
+            Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
+            #result{env = Bs0, exprs = [Var], stack = Stk};
+        error ->
+            Value = apply(M, F, lists:map(fun concrete/1, As)),
+            #result{env = Bs0, exprs = [{value, Line, Value}], stack = Stk0}
     end.
 
 %%%=============================================================================

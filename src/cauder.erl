@@ -1044,13 +1044,16 @@ task_rollback_variable(Name, Sys0) ->
     StepsDone :: non_neg_integer().
 
 step(Sem, Scheduler, Sys, Pid, Steps) ->
+    CanStep =
+        fun(Opts) ->
+            lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts)
+        end,
     DoStep =
         fun(Step, {Sys0}) ->
             case Sem of
                 ?FWD_SEM ->
                     Opts = cauder_semantics_forwards:options(Sys0, normal),
-                    CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
-                    case CanStep of
+                    case CanStep(Opts) of
                         false ->
                             throw({success, Sys0, Step});
                         true ->
@@ -1063,8 +1066,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                     end;
                 ?BWD_SEM ->
                     Opts = cauder_semantics_backwards:options(Sys0),
-                    CanStep = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts),
-                    case CanStep of
+                    case CanStep(Opts) of
                         false ->
                             throw({success, Sys0, Step});
                         true ->

@@ -24,6 +24,7 @@
     message_scheduler/0,
     rule/0,
     trace/0,
+    replay/0,
     result/0,
     label/0
 ]).
@@ -105,6 +106,8 @@
     ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
 
 -type trace() :: #trace{}.
+
+-type replay() :: #replay{}.
 
 -type result() :: #result{}.
 -type label() ::

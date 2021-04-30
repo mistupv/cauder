@@ -253,7 +253,10 @@ rollback_start(Sys0, Pid, SpawnNode) ->
             Sys1 = rollback_step(Sys0, Pid),
             rollback_start(Sys1, Pid, SpawnNode);
         {value, #opt{pid = Pid, sem = Sem}} ->
-            Sem:step(Sys0, Pid)
+            case Sem of
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+            end
     end.
 
 -spec rollback_send(System, Pid, DestPid, Uid) -> NewSystem when
@@ -404,4 +407,7 @@ options(Sys, Pid) ->
 
 undo_step(System, Pid) ->
     [#opt{pid = Pid, sem = Sem} | _] = options(System, Pid),
-    Sem:step(System, Pid).
+    case Sem of
+        ?FWD_SEM -> cauder_semantics_forwards:step(System, Pid, ?SCHEDULER_Random, normal);
+        ?BWD_SEM -> cauder_semantics_backwards:step(System, Pid)
+    end.

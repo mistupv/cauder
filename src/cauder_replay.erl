@@ -214,20 +214,20 @@ replay_until_spawn(Sys0, ParentPid, Pid) ->
     #sys{procs = PMap} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
     case maps:is_key(Pid, PMap) of
         true -> Sys1;
-        _ -> replay_until_spawn_1(Sys1, ParentPid, Pid)
+        _ -> replay_until_spawn1(Sys1, ParentPid, Pid)
     end.
 
--spec replay_until_spawn_1(System, ParentPid, Pid) -> NewSystem when
+-spec replay_until_spawn1(System, ParentPid, Pid) -> NewSystem when
     System :: cauder_types:system(),
     ParentPid :: cauder_types:proc_id(),
     Pid :: cauder_types:proc_id(),
     NewSystem :: cauder_types:system().
 
-replay_until_spawn_1(Sys0, ParentPid, Pid) ->
+replay_until_spawn1(Sys0, ParentPid, Pid) ->
     #sys{logs = #{ParentPid := ParentLog}} = Sys1 = replay_step(Sys0, ParentPid),
     case cauder_utils:find_spawn_parent(#{ParentPid => ParentLog}, Pid) of
         false -> Sys1;
-        _ -> replay_until_spawn_1(Sys1, ParentPid, Pid)
+        _ -> replay_until_spawn1(Sys1, ParentPid, Pid)
     end.
 
 -spec replay_until_start(System, ParentPid, Node) -> NewSystem when
@@ -240,20 +240,20 @@ replay_until_start(Sys0, ParentPid, Node) ->
     #sys{logs = LMap} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
     case cauder_utils:find_node_parent(LMap, Node) of
         false -> Sys1;
-        _ -> replay_until_start_1(Sys1, ParentPid, Node)
+        _ -> replay_until_start1(Sys1, ParentPid, Node)
     end.
 
--spec replay_until_start_1(System, ParentPid, Node) -> NewSystem when
+-spec replay_until_start1(System, ParentPid, Node) -> NewSystem when
     System :: cauder_types:system(),
     ParentPid :: cauder_types:proc_id(),
     Node :: cauder_types:net_node(),
     NewSystem :: cauder_types:system().
 
-replay_until_start_1(Sys0, ParentPid, Node) ->
+replay_until_start1(Sys0, ParentPid, Node) ->
     #sys{logs = LMap} = Sys1 = replay_step(Sys0, ParentPid),
     case cauder_utils:find_node_parent(LMap, Node) of
         false -> Sys1;
-        _ -> replay_until_start_1(Sys1, ParentPid, Node)
+        _ -> replay_until_start1(Sys1, ParentPid, Node)
     end.
 
 -spec replay_until_send(System, SenderPid, Uid) -> NewSystem when
@@ -266,20 +266,20 @@ replay_until_send(Sys0, SenderPid, Uid) ->
     #sys{logs = #{SenderPid := SenderLog}} = Sys1 = replay_spawn(Sys0, SenderPid, '_'),
     case lists:member({send, Uid}, SenderLog) of
         false -> Sys1;
-        true -> replay_until_send_1(Sys1, SenderPid, Uid)
+        true -> replay_until_send1(Sys1, SenderPid, Uid)
     end.
 
--spec replay_until_send_1(System, SenderPid, Uid) -> NewSystem when
+-spec replay_until_send1(System, SenderPid, Uid) -> NewSystem when
     System :: cauder_types:system(),
     SenderPid :: cauder_types:proc_id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_types:system().
 
-replay_until_send_1(Sys0, SenderPid, Uid) ->
+replay_until_send1(Sys0, SenderPid, Uid) ->
     #sys{logs = #{SenderPid := SenderLog}} = Sys1 = replay_step(Sys0, SenderPid),
     case lists:member({send, Uid}, SenderLog) of
         false -> Sys1;
-        true -> replay_until_send_1(Sys1, SenderPid, Uid)
+        true -> replay_until_send1(Sys1, SenderPid, Uid)
     end.
 
 -spec replay_until_receive(System, ReceiverPid, Uid) -> NewSystem when
@@ -294,20 +294,20 @@ replay_until_receive(Sys0, ReceiverPid, Uid) ->
     #sys{logs = #{ReceiverPid := ReceiverLog}} = Sys2 = replay_send(Sys1, Uid),
     case lists:member({'receive', Uid}, ReceiverLog) of
         false -> Sys0;
-        true -> replay_until_receive_1(Sys2, ReceiverPid, Uid)
+        true -> replay_until_receive1(Sys2, ReceiverPid, Uid)
     end.
 
--spec replay_until_receive_1(System, ReceiverPid, Uid) -> NewSystem when
+-spec replay_until_receive1(System, ReceiverPid, Uid) -> NewSystem when
     System :: cauder_types:system(),
     ReceiverPid :: cauder_types:proc_id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_types:system().
 
-replay_until_receive_1(Sys0, ReceiverPid, Uid) ->
+replay_until_receive1(Sys0, ReceiverPid, Uid) ->
     #sys{logs = #{ReceiverPid := ReceiverLog}} = Sys1 = replay_step(Sys0, ReceiverPid),
     case lists:member({'receive', Uid}, ReceiverLog) of
         false -> Sys1;
-        true -> replay_until_receive_1(Sys1, ReceiverPid, Uid)
+        true -> replay_until_receive1(Sys1, ReceiverPid, Uid)
     end.
 
 %%%=============================================================================

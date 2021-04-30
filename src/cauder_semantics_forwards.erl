@@ -650,7 +650,7 @@ fwd_start_f(
     NewLog =
         case maps:get(new_log, Opts, not_found) of
             not_found -> [];
-            _NLog -> _NLog
+            NewLog0 -> NewLog0
         end,
     Err = {error, {already_running, NewNode}},
     P = P0#proc{
@@ -735,12 +735,12 @@ fwd_rec(
     Mode =
         case maps:get(mode, Opts, not_found) of
             not_found -> error(mode_not_found);
-            _Mode -> _Mode
+            Mode0 -> Mode0
         end,
     Sched =
         case maps:get(sched, Opts, not_found) of
             not_found -> error(sched_not_found);
-            _Sched -> _Sched
+            Sched0 -> Sched0
         end,
     {{Bs1, Es1, {Msg, QPos}, Mail1}, LMap1} =
         case Mode of

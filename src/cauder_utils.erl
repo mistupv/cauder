@@ -578,7 +578,7 @@ gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
 
 -spec load_replay_data(LogPath) -> ReplayData when
     LogPath :: file:filename(),
-    ReplayData :: #replay{}.
+    ReplayData :: cauder_types:replay().
 
 load_replay_data(Path) ->
     ResultFile = filename:join(Path, "trace_result.log"),
