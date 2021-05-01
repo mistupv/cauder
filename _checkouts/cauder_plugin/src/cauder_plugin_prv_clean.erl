@@ -8,11 +8,9 @@
 -define(PROVIDER, ?MODULE).
 -define(DEPS, []).
 
-
 %%%=============================================================================
 %%% API
 %%%=============================================================================
-
 
 %% Called when rebar3 first boots, before even parsing the arguments
 %% or commands to be run. Purely initiates the provider, and nothing
@@ -21,19 +19,19 @@
 -spec init(rebar_state:t()) -> {ok, rebar_state:t()}.
 
 init(State) ->
-  Provider = providers:create(
-    [
-      {name, ?PROVIDER},
-      {module, ?MODULE},
-      {bare, true},
-      {deps, ?DEPS},
-      {desc, "Removes extra files which `rebar3 clean -a` doesn't"},
-      {short_desc, "Removes extra files which `rebar3 clean -a` doesn't"},
-      {example, "rebar3 " ++ atom_to_list(?PROVIDER)},
-      {opts, []}
-    ]),
-  {ok, rebar_state:add_provider(State, Provider)}.
-
+    Provider = providers:create(
+        [
+            {name, ?PROVIDER},
+            {module, ?MODULE},
+            {bare, true},
+            {deps, ?DEPS},
+            {desc, "Removes extra files which `rebar3 clean -a` doesn't"},
+            {short_desc, "Removes extra files which `rebar3 clean -a` doesn't"},
+            {example, "rebar3 " ++ atom_to_list(?PROVIDER)},
+            {opts, []}
+        ]
+    ),
+    {ok, rebar_state:add_provider(State, Provider)}.
 
 %% Run the code for the plugin. The command line argument are parsed
 %% and dependencies have been run.
@@ -41,21 +39,20 @@ init(State) ->
 -spec do(rebar_state:t()) -> {ok, rebar_state:t()} | {error, string()}.
 
 do(State) ->
-  case rebar_state:current_app(State) of
-    undefined ->
-      ok;
-    AppInfo ->
-      case rebar_app_info:name(AppInfo) of
-        <<"cauder">> ->
-          file:delete(filename:join(rebar_dir:root_dir(State), "cauder")),
-          rebar_file_utils:rm_rf(rebar_dir:base_dir(State));
-        _ ->
-          ok
-      end
-  end,
+    case rebar_state:current_app(State) of
+        undefined ->
+            ok;
+        AppInfo ->
+            case rebar_app_info:name(AppInfo) of
+                <<"cauder">> ->
+                    file:delete(filename:join(rebar_dir:root_dir(State), "cauder")),
+                    rebar_file_utils:rm_rf(rebar_dir:base_dir(State));
+                _ ->
+                    ok
+            end
+    end,
 
-  {ok, State}.
-
+    {ok, State}.
 
 %% When an exception is raised or a value returned as
 %% `{error, {?MODULE, Reason}}` will see the `format_error(Reason)`
@@ -65,4 +62,4 @@ do(State) ->
 -spec format_error(any()) -> iolist().
 
 format_error(Reason) ->
-  io_lib:format("~p", [Reason]).
+    io_lib:format("~p", [Reason]).

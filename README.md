@@ -37,13 +37,31 @@ To create a release for your platform, type:
 
     ./rebar3 reltool
 
-To run tests, type:
+## Reviewing
 
-    ./rebar3 do eunit, ct
-
-To run dialyzer, type:
+To run a success typing analysis, type:
 
     ./rebar3 dialyzer
+
+To run a cross-reference analysis, type:
+
+    ./rebar3 xref
+
+To run the code formatter, type:
+
+    ./rebar3 fmt
+
+To run the style reviewer, type:
+
+    ./rebar3 lint
+
+To run the unit tests, type:
+
+    ./rebar3 eunit
+
+To run the common tests, type:
+
+    ./rebar3 ct
 
 To clean-up the build files, type:
 

@@ -1,19 +1,19 @@
 <component name="ProjectCodeStyleConfiguration">
   <code_scheme name="Project" version="173">
-    <option name="RIGHT_MARGIN" value="140" />
+    <option name="LINE_SEPARATOR" value="&#10;" />
     <option name="SOFT_MARGINS" value="80" />
     <ErlangCodeStyleSettings>
-      <option name="ALIGN_MULTILINE_BLOCK" value="true" />
-      <option name="ALIGN_FUNCTION_CLAUSES" value="true" />
-      <option name="ALIGN_GUARDS" value="true" />
+      <option name="INDENT_RELATIVE" value="false" />
       <option name="NEW_LINE_AFTER_ARROW" value="2" />
-      <option name="ALIGN_FUN_CLAUSES" value="true" />
-      <option name="ALIGN_RECORD_FIELD_ASSIGNMENTS" value="true" />
       <option name="UNIFORM_BINARY_EXPRESSIONS" value="true" />
       <option name="EXPRESSION_IN_CLAUSE_WRAP" value="5" />
     </ErlangCodeStyleSettings>
     <codeStyleSettings language="Erlang">
       <option name="CALL_PARAMETERS_WRAP" value="5" />
+      <indentOptions>
+        <option name="INDENT_SIZE" value="4" />
+        <option name="TAB_SIZE" value="4" />
+      </indentOptions>
     </codeStyleSettings>
   </code_scheme>
 </component>

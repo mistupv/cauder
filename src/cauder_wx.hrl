@@ -1,29 +1,29 @@
 -record(config, {
-  current_expression = true :: boolean(),
-  bindings = true :: boolean(),
-  stack = true :: boolean(),
-  log = true :: boolean(),
-  history = true :: boolean(),
-  mailbox = true :: boolean(),
-  bindings_mode = relevant :: all | relevant,
-  history_mode = concurrent :: full | concurrent,
-  mailbox_mode = process :: all | process,
-  status_bar = true :: boolean()
+    current_expression = true :: boolean(),
+    bindings = true :: boolean(),
+    stack = true :: boolean(),
+    log = true :: boolean(),
+    history = true :: boolean(),
+    mailbox = true :: boolean(),
+    bindings_mode = relevant :: all | relevant,
+    history_mode = concurrent :: full | concurrent,
+    mailbox_mode = process :: all | process,
+    status_bar = true :: boolean()
 }).
 
 -record(wx_state, {
-  frame :: wxFrame:wxFrame(),
-  menubar :: wxMenuBar:wxMenuBar(),
-  content :: wxWindow:wxWindow(),
-  statusbar :: wxStatusBar:wxStatusBar(),
+    frame :: wxFrame:wxFrame(),
+    menubar :: wxMenuBar:wxMenuBar(),
+    content :: wxWindow:wxWindow(),
+    statusbar :: wxStatusBar:wxStatusBar(),
 
-  config = #config{} :: #config{},
+    config = #config{} :: #config{},
 
-  module :: atom() | undefined,
-  position = -1 :: integer(),
-  task :: atom() | undefined,
-  system :: cauder_types:system() | undefined,
-  pid :: cauder_types:proc_id() | undefined
+    module :: atom() | undefined,
+    position = -1 :: integer(),
+    task :: atom() | undefined,
+    system :: cauder_types:system() | undefined,
+    pid :: cauder_types:proc_id() | undefined
 }).
 
 -define(GUI_DB, 'cauder_wx/database').
@@ -75,7 +75,10 @@
 
 -define(MENU_View_CurrentExpression, 1000).
 
--define(Is_Visibility_Item(Item), (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse Item =:= ?MENU_View_History orelse Item =:= ?MENU_View_Mailbox)).
+-define(Is_Visibility_Item(Item),
+    (Item =:= ?MENU_View_Bindings orelse Item =:= ?MENU_View_Stack orelse Item =:= ?MENU_View_Log orelse
+        Item =:= ?MENU_View_History orelse Item =:= ?MENU_View_Mailbox)
+).
 
 -define(MENU_View_Bindings, 1001).
 -define(MENU_View_Stack, 1002).
@@ -112,7 +115,6 @@
 
 -define(MENU_Help_About, ?wxID_ABOUT).
 
-
 %% ---------- Main Panel ---------- %%
 
 -define(CODE_Code_Control, 2001).
@@ -131,7 +133,9 @@
 -define(ACTION_Manual_Forward_Button, 2114).
 -define(ACTION_Manual_Backward_Button, 2115).
 
--define(Is_Step_Button(Button), (Button =:= ?ACTION_Manual_Forward_Button orelse Button =:= ?ACTION_Manual_Backward_Button)).
+-define(Is_Step_Button(Button),
+    (Button =:= ?ACTION_Manual_Forward_Button orelse Button =:= ?ACTION_Manual_Backward_Button)
+).
 
 %% -----
 
@@ -142,7 +146,9 @@
 -define(ACTION_Automatic_Forward_Button, 2133).
 -define(ACTION_Automatic_Backward_Button, 2134).
 
--define(Is_Automatic_Button(Button), (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)).
+-define(Is_Automatic_Button(Button),
+    (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)
+).
 
 %% -----
 
@@ -153,7 +159,6 @@
 -define(ACTION_Replay_Send, 21303).
 -define(ACTION_Replay_Receive, 21304).
 -define(ACTION_Replay_Start, 21305).
-
 
 -define(ACTION_Replay_Steps_Button, 21306).
 -define(ACTION_Replay_Spawn_Button, 21307).
@@ -185,18 +190,21 @@
 -define(SYSTEM_Panel, 2200).
 
 -define(SYSTEM_Notebook_NodesAndMail, 2201).
--define(SYSTEM_Notebook_Tab_Nodes, 0). % Tab index
--define(SYSTEM_Notebook_Tab_Mail, 1). % Tab index
+% Tab index
+-define(SYSTEM_Notebook_Tab_Nodes, 0).
+% Tab index
+-define(SYSTEM_Notebook_Tab_Mail, 1).
 
 -define(SYSTEM_Notebook_TraceAndRollLog, 2202).
--define(SYSTEM_Notebook_Tab_Trace, 0). % Tab index
--define(SYSTEM_Notebook_Tab_RollLog, 1). % Tab index
+% Tab index
+-define(SYSTEM_Notebook_Tab_Trace, 0).
+% Tab index
+-define(SYSTEM_Notebook_Tab_RollLog, 1).
 
 -define(SYSTEM_Nodes, 2210).
 -define(SYSTEM_Mail, 2211).
 -define(SYSTEM_Trace, 2212).
 -define(SYSTEM_RollLog, 2213).
-
 
 %% ----- Process Info Panel ----- %%
 
@@ -214,11 +222,9 @@
 -define(PROCESS_History_Panel, 2307).
 -define(PROCESS_History_Control, 2308).
 
-
 %% ---------- Status bar ---------- %%
 
 -define(STATUS_BAR, 2400).
-
 
 %% -------------------- Process Scheduler strings -------------------- %%
 
@@ -259,7 +265,6 @@
 -define(HELP_Run_Start, "Start a new debugging session").
 -define(HELP_Run_Stop, "Stop the current debugging session").
 
-
 %% -------------------- Dialog strings -------------------- %%
 
 -define(DIALOG_StartSession_Title, "Start debugging session").
@@ -268,21 +273,35 @@
 -define(DIALOG_StartSession_NodeName_Message, "Node name not correct, the node name must be of the form 'name@host'").
 
 -define(DIALOG_StartSession_ArgCount_Title, "Warming: Argument count").
--define(DIALOG_StartSession_ArgCount_Message, "Wrong number of argumments!\nExpected ~b but got ~b.").
+-define(DIALOG_StartSession_ArgCount_Message,
+    "Wrong number of argumments!\n"
+    "Expected ~b but got ~b."
+).
 
 -define(DIALOG_BadArgs_Title, "Error: Invalid arguments").
 -define(DIALOG_BadArgs_Message, "Invalid arguments!").
 
 -define(DIALOG_StopSession_Title, "Stop debugging session").
--define(DIALOG_StopSession_Message, "You are about to stop the current debugging session.\nThe current system state will be lost.\nAre you sure you want to continue?").
+-define(DIALOG_StopSession_Message,
+    "You are about to stop the current debugging session.\n"
+    "The current system state will be lost.\nAre you sure you want to continue?"
+).
 
 -define(DIALOG_Exception_Raised_Title, "Exception raised").
--define(DIALOG_Exception_Raised_Message, "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted").
+-define(DIALOG_Exception_Raised_Message,
+    "An exception has been raised from the program.\nCauDEr still does not handle exceptions.\nThe debugging session has been interrupted"
+).
 
 -define(DIALOG_DropFiles_Unsupported_Title, "Unsupported files").
--define(DIALOG_DropFiles_Unsupported_Message, "Some of the dropped files are not supported.\nOnly files with the extension .erl are supported.").
+-define(DIALOG_DropFiles_Unsupported_Message,
+    "Some of the dropped files are not supported.\n"
+    "Only files with the extension .erl are supported."
+).
 
 -define(DIALOG_DropFiles_Multiple_Title, "Multiple files").
--define(DIALOG_DropFiles_Multiple_Message, "Currently only one file can be opened at a time.\nPlease, choose one of the files:").
+-define(DIALOG_DropFiles_Multiple_Message,
+    "Currently only one file can be opened at a time.\n"
+    "Please, choose one of the files:"
+).
 
 -define(DIALOG_About, "A Causal-Consistent Reversible Debugger for Erlang.").
