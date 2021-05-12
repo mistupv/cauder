@@ -38,6 +38,7 @@ instrument(T) ->
             T;
         application ->
             Op = erl_syntax:application_operator(T),
+            Args = erl_syntax:application_arguments(T),
             case erl_syntax:type(Op) of
                 module_qualifier ->
                     Module = erl_syntax:atom_value(erl_syntax:module_qualifier_argument(Op)),
@@ -46,6 +47,15 @@ instrument(T) ->
                         {erlang, send} ->
                             [Target, Message] = erl_syntax:application_arguments(T),
                             instrument_send(Target, Message);
+                        {erlang, nodes} when Args =:= [] ->
+                            instrument_nodes(T);
+                        _ ->
+                            T
+                    end;
+                atom ->
+                    case erl_syntax:atom_value(Op) of
+                        nodes when Args =:= [] ->
+                            instrument_nodes(T);
                         _ ->
                             T
                     end;
@@ -131,6 +141,17 @@ instrument_receive_clause(Clause) ->
         Guard,
         [ReceiveEvaluated | Body]
     ).
+
+-spec instrument_nodes(Expr) -> NewExpr when
+    Expr :: erl_syntax:syntaxTree(),
+    NewExpr :: erl_syntax:syntaxTree().
+
+instrument_nodes(Call) ->
+    NodesVar = temp_variable(),
+
+    LogNodes = send_expr(?LOG_NODES, erl_syntax:match_expr(NodesVar, Call)),
+
+    erl_syntax:block_expr([LogNodes, NodesVar]).
 
 -spec temp_variable() -> VarExpr when
     VarExpr :: erl_syntax:syntaxTree().

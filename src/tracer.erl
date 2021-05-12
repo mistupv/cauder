@@ -113,50 +113,59 @@ handle_call(get_trace, _From, #state{trace = Trace} = State) ->
 handle_call(get_result, _From, #state{result = Result} = State) ->
     {reply, Result, State};
 %% Save return value
-handle_call({trace, Pid, return_from, {?MODULE, run, 3}, Result}, _From, #state{result = undefined} = State) ->
-    check_process(Pid, State),
+handle_call({trace, _Pid, return_from, {?MODULE, run, 3}, Result}, _From, #state{result = undefined} = State) ->
     {reply, ok, State#state{result = {value, Result}}};
-%% Generate message stamp
-handle_call({trace, Pid, send, {?SEND_SENT, []}, {undefined, _}}, _From, State) ->
-    check_process(Pid, State),
-    Pid ! {?RECV_STAMP, erlang:unique_integer()},
-    {reply, ok, State};
+%% ========== 'send' trace messages ========== %%
 %% Send message
 handle_call({trace, Pid, send, {{stamp, Stamp}, _Message}, _}, _From, State) ->
-    check_process(Pid, State),
-    State1 = trace_with_stamp(send, Pid, Stamp, State),
+    State1 = add_to_trace(Pid, send, Stamp, State),
     {reply, ok, State1};
-%% Deliver message
-handle_call({trace, Pid, 'receive', {{stamp, Stamp}, _Message}}, _From, State) ->
-    check_process(Pid, State),
-    State1 = trace_with_stamp(deliver, Pid, Stamp, State),
-    {reply, ok, State1};
+%% Generate message stamp
+handle_call({trace, Pid, send, {?SEND_SENT, []}, {undefined, _}}, _From, State) ->
+    Pid ! {?RECV_STAMP, erlang:unique_integer()},
+    {reply, ok, State};
 %% Receive message
 handle_call({trace, Pid, send, {?RECEIVE_EVALUATED, Stamp}, {undefined, _}}, _From, State) ->
-    check_process(Pid, State),
-    State1 = trace_with_stamp('receive', Pid, Stamp, State),
+    State1 = add_to_trace(Pid, 'receive', Stamp, State),
     {reply, ok, State1};
+%% Call to `nodes()`
+handle_call({trace, Pid, send, {?LOG_NODES, Nodes}, {undefined, _}}, _From, State) ->
+    State1 = add_to_trace(Pid, {nodes, Nodes}, State),
+    {reply, ok, State1};
+%% Slave started
+handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
+    #{Pid := {ParentPid, Node}} = State#state.slave_starters,
+    State1 = add_to_trace(Pid, {start, Node, success}, State),
+    {reply, ok, State1};
+%% Slave failed to start
+handle_call({trace, Pid, send, {result, {error, _}}, ParentPid}, _From, State) ->
+    #{Pid := {ParentPid, Node}} = State#state.slave_starters,
+    State1 = add_to_trace(Pid, {start, Node, failure}, State),
+    {reply, ok, State1};
+%% ========== 'receive' trace messages ========== %%
+%% Deliver message
+handle_call({trace, Pid, 'receive', {{stamp, Stamp}, _Message}}, _From, State) ->
+    State1 = add_to_trace(Pid, deliver, Stamp, State),
+    {reply, ok, State1};
+%% ========== 'spawn' trace messages ========== %%
+%% Starting a slave
+handle_call({trace, Pid, spawn, SlavePid, {slave, wait_for_slave, [Pid, _, _, Node, _, _, _]}}, _From, State) ->
+    SlaveStarters1 = maps:put(SlavePid, {Pid, Node}, State#state.slave_starters),
+    {reply, ok, State#state{slave_starters = SlaveStarters1}};
 %% Spawn failed
-handle_call({trace, Pid, spawn, ChildPid, {erts_internal, crasher, [Node, _, _, _, _, _]}}, _From, State) ->
-    check_process(Pid, State),
-    Idx = pid_index(Pid),
+handle_call({trace, Pid, spawn, ChildPid, {erts_internal, crasher, [ChildNode, _, _, _, _, _]}}, _From, State) ->
     ChildIdx = pid_index(ChildPid),
-    Entry = {spawn, {Node, node(ChildPid), ChildIdx}, fail},
-    Trace1 = maps:update_with(Idx, fun(L) -> [Entry | L] end, [Entry], State#state.trace),
-    {reply, ok, State#state{trace = Trace1}};
+    State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, failure}, State),
+    {reply, ok, State1};
 %% Spawn succeeded
 handle_call({trace, Pid, spawn, ChildPid, {_, _, _}}, _From, State) ->
-    check_process(Pid, State),
-    Idx = pid_index(Pid),
     ChildNode = node(ChildPid),
     ChildIdx = pid_index(ChildPid),
-    Entry = {spawn, {ChildNode, ChildIdx}, success},
-    Trace1 = maps:update_with(Idx, fun(L) -> [Entry | L] end, [Entry], State#state.trace),
-    ProcSet1 = sets:add_element(ChildPid, State#state.procs),
-    {reply, ok, State#state{trace = Trace1, procs = ProcSet1}};
+    State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, success}, State),
+    {reply, ok, State1};
+%% ========== 'exit' trace messages ========== %%
 %% Process exited
 handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs = ProcSet0} = State) ->
-    check_process(Pid, State),
     ProcSet1 = sets:del_element(Pid, ProcSet0),
     State1 = State#state{procs = ProcSet1},
     case sets:is_empty(ProcSet1) of
@@ -164,13 +173,20 @@ handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs
         false -> ok
     end,
     {reply, ok, State1};
-%% ----- Unused -----
-handle_call({trace, Pid, 'receive', {?RECV_STAMP, _}}, _From, State) ->
-    check_process(Pid, State),
+%% ========== Ignored trace messages ========== %%
+handle_call({trace, _, call, {?MODULE, run, [_, _, _]}}, _From, State) ->
     {reply, ok, State};
-handle_call({trace, Pid, call, {?MODULE, run, [_, _, _]}}, _From, State) ->
-    check_process(Pid, State),
+handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
+handle_call({trace, _, register, _}, _From, State) ->
+    {reply, ok, State};
+handle_call({trace, _, unregister, _}, _From, State) ->
+    {reply, ok, State};
+handle_call({trace, _, link, _}, _From, State) ->
+    {reply, ok, State};
+handle_call({trace, _, getting_unlinked, _}, _From, State) ->
+    {reply, ok, State};
+%% ========== Unhandled trace messages ========== %%
 handle_call(Request, _From, State) ->
     io:format("[~p:~p] Unhandled Call: ~p~n", [?MODULE, ?LINE, Request]),
     {reply, ok, State}.
@@ -229,19 +245,21 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
     Function :: atom(),
     Arguments :: [term()],
     Options :: [term()],
-    % FIXME
-    Trace :: term().
+    Trace :: trace().
 
 do_trace(Module, Function, Args, Opts) ->
     Timeout = proplists:get_value(timeout, Opts),
     Dir = proplists:get_value(dir, Opts),
     Mods = proplists:get_value(mods, Opts),
     StampMode = proplists:get_value(stamp_mode, Opts),
+    Distributed = proplists:get_bool(distributed, Opts),
 
     [_Name, Host] = string:lexemes(atom_to_list(node()), [$@]),
     % TODO detached?
     % TODO node name
-    {ok, TracedNode} = slave:start_link(Host, trace, io_lib:format("-setcookie ~p", [erlang:get_cookie()])),
+
+    %, io_lib:format("-setcookie ~p", [erlang:get_cookie()])),
+    {ok, TracedNode} = slave:start_link(Host, trace),
 
     {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
     Filename = filename:absname(filename:join(Dir, atom_to_list(Module) ++ ".beam")),
@@ -254,7 +272,22 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:tracer(process, {fun trace_handler/2, []}),
     dbg:n(TracedNode),
     dbg:p(TracedPid, [m, c, p, sos]),
-    dbg:tpl(?MODULE, run, 3, [{'_', [], [{return_trace}]}]),
+    dbg:tpe(send, [
+        {['_', {{stamp, '_'}, '_'}], [], []},
+        {[{undefined, '_'}, {?SEND_SENT, []}], [], []},
+        {[{undefined, '_'}, {?RECEIVE_EVALUATED, '_'}], [], []},
+        {[{undefined, '_'}, {?LOG_NODES, '_'}], [], []},
+        {['_', {result, {ok, '_'}}], [], []},
+        {['_', {result, {error, '_'}}], [], []}
+    ]),
+    dbg:tpe('receive', [
+        {['_', {{stamp, '_'}, '_'}], [], []}
+    ]),
+    dbg:tpl(?MODULE, run, 3, [
+        {'_', [], [{return_trace}]}
+    ]),
+
+    % dbg:tpl modules to instrument
 
     receive
         setup_complete -> ok
@@ -273,20 +306,40 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:stop(),
     slave:stop(TracedNode),
 
+    receive
+        Trap -> io:format("Trap: ~p~n", [Trap])
+    after 2 * 1000 ->
+        ok
+    end,
+
     {ok, Trace} = gen_server:call(?SERVER, get_trace),
     Result = gen_server:call(?SERVER, get_result),
     gen_server:stop(?SERVER),
 
+    Node =
+        case Distributed of
+            true -> TracedNode;
+            false -> 'nonode@nohost'
+        end,
+
     #trace{
         call = {Module, Function, Args},
         comp = CompTime,
-        node = TracedNode,
+        node = Node,
         pid = TracedPid,
         tracing = Tracing,
         result = Result,
         exec = ExecTime,
         log = Trace
     }.
+
+-spec instrument(Module, Dir, StampMode) -> {Time, {Module, Binary}} when
+    Module :: module(),
+    Dir :: file:filename(),
+    % TODO Specify values
+    StampMode :: atom(),
+    Time :: non_neg_integer(),
+    Binary :: binary().
 
 instrument(Module, Dir, StampMode) ->
     CompileOpts = [
@@ -303,16 +356,33 @@ instrument(Module, Dir, StampMode) ->
     {Time, {ok, Module, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
     {Time, {Module, Binary}}.
 
+-spec reload(Node, Module) -> ok when
+    Node :: node(),
+    Module :: module().
+
 reload(Node, Module) ->
     {Module, Binary, Filename} = code:get_object_code(Module),
     reload(Node, Module, Binary, Filename).
+
+-spec reload(Node, Module, Binary, Filename) -> ok when
+    Node :: node(),
+    Module :: module(),
+    Binary :: binary(),
+    Filename :: file:filename().
 
 reload(Node, Module, Binary, Filename) ->
     rpc:call(Node, code, purge, [Module]),
     {module, Module} = rpc:call(Node, code, load_binary, [Module, Filename, Binary]),
     ok.
 
-execute(Node, Module, Fun, Args) ->
+-spec execute(Node, Module, Function, Args) -> Pid when
+    Node :: node(),
+    Module :: module(),
+    Function :: atom(),
+    Args :: [term()],
+    Pid :: pid().
+
+execute(Node, Module, Function, Args) ->
     reload(Node, ?MODULE),
     MainPid = self(),
     F = fun() ->
@@ -320,7 +390,7 @@ execute(Node, Module, Fun, Args) ->
         receive
             start -> ok
         end,
-        run(Module, Fun, Args)
+        run(Module, Function, Args)
     end,
     spawn_link(Node, F).
 
@@ -328,22 +398,56 @@ execute(Node, Module, Fun, Args) ->
 %% @doc Wrapper function used to capture the return value of the traced function
 %% using the `dbg'. See dbg:tpl/4 and `return_trace'.
 
+-spec run(Module, Function, Args) -> term() when
+    Module :: module(),
+    Function :: atom(),
+    Args :: [term()].
+
 run(Module, Function, Args) -> apply(Module, Function, Args).
 
 trace_handler(Trace, []) ->
     ok = gen_server:call(?SERVER, Trace),
     [].
 
-trace_with_stamp(Tag, Pid, Stamp, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) ->
+-spec add_to_trace(Pid, Entry, State) -> NewState when
+    Pid :: pid(),
+    Entry :: cauder_types:log_entry(),
+    State :: state(),
+    NewState :: state().
+
+add_to_trace(Pid, Entry, #state{trace = Trace0} = State) ->
+    Index = pid_index(Pid),
+    Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
+    State#state{trace = Trace1}.
+
+-spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
+    Pid :: pid(),
+    Tag :: send | deliver | 'receive',
+    Stamp :: integer(),
+    State :: state(),
+    NewState :: state().
+
+add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) when is_atom(Tag) ->
     PidIndex = pid_index(Pid),
     {Uid, StampMap1} = get_uid(Stamp, StampMap0, Table),
     Entry = {Tag, Uid},
     Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
     State#state{stamps = StampMap1, trace = Trace1}.
 
+-spec pid_index(Pid) -> Index when
+    Pid :: pid(),
+    Index :: non_neg_integer().
+
 pid_index(Pid) ->
     [_Node, Index, _Serial] = string:lexemes(pid_to_list(Pid), "<.>"),
     list_to_integer(Index).
+
+-spec get_uid(Stamp, Map, Table) -> {Uid, NewMap} when
+    Stamp :: integer(),
+    Map :: #{integer() => non_neg_integer()},
+    Table :: ets:tid(),
+    Uid :: non_neg_integer(),
+    NewMap :: #{integer() => non_neg_integer()}.
 
 get_uid(Stamp, Map, Table) ->
     case maps:find(Stamp, Map) of
@@ -354,7 +458,3 @@ get_uid(Stamp, Map, Table) ->
         {ok, Uid} ->
             {Uid, Map}
     end.
-
-check_process(Pid, #state{procs = ProcSet}) ->
-    true = sets:is_element(Pid, ProcSet),
-    ok.
