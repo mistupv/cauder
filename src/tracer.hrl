@@ -1,4 +1,0 @@
--define(SEND_SENT, send_sent).
--define(RECV_STAMP, recv_stamp).
--define(RECEIVE_EVALUATED, receive_evaluated).
--define(LOG_NODES, log_nodes).

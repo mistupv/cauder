@@ -4,8 +4,6 @@
 
 -ignore_xref([parse_transform/2]).
 
--include("tracer.hrl").
-
 -spec parse_transform(Forms, Options) -> NewForms when
     Forms :: [erl_parse:abstract_form() | erl_parse:form_info()],
     Options :: [compile:option()],
@@ -18,13 +16,14 @@ parse_transform(Forms, Opts) ->
     put(atomic, atomics:new(1, [])),
     put(stamp_mode, proplists:get_value(stamp_mode, Opts)),
 
-    [Module] = [M || {attribute, _, module, M} <- Forms],
+    XForms = erl_expand_records:module(Forms, Opts),
+    IForms = [erl_syntax_lib:map(fun instrument/1, F) || F <- XForms],
+    RForms = erl_syntax:revert_forms(IForms),
 
-    NForms = [erl_syntax_lib:map(fun instrument/1, Form) || Form <- Forms],
-
-    RForms = erl_syntax:revert_forms(NForms),
+    [Module] = [M || {attribute, _, module, M} <- XForms],
     {ok, File} = file:open("./inst_" ++ atom_to_list(Module) ++ ".erl", [write]),
-    [io:format(File, "~s", [erl_pp:form(RForm, [{linewidth, 120}])]) || RForm <- RForms],
+    [io:format(File, "~s", [erl_pp:form(F, [{linewidth, 120}])]) || F <- RForms],
+
     RForms.
 
 -spec instrument(Tree) -> NewTree when
@@ -46,16 +45,12 @@ instrument(T) ->
                     case {Module, Function} of
                         {erlang, send} ->
                             [Target, Message] = erl_syntax:application_arguments(T),
-                            instrument_send(Target, Message);
+                            erl_syntax:application(erl_syntax:atom(tracer_erlang), erl_syntax:atom(send), [
+                                Target,
+                                Message
+                            ]);
                         {erlang, nodes} when Args =:= [] ->
-                            instrument_nodes(T);
-                        _ ->
-                            T
-                    end;
-                atom ->
-                    case erl_syntax:atom_value(Op) of
-                        nodes when Args =:= [] ->
-                            instrument_nodes(T);
+                            erl_syntax:application(erl_syntax:atom(tracer_erlang), erl_syntax:atom(nodes), []);
                         _ ->
                             T
                     end;
@@ -68,7 +63,7 @@ instrument(T) ->
                 '!' ->
                     Target = erl_syntax:infix_expr_left(T),
                     Message = erl_syntax:infix_expr_right(T),
-                    instrument_send(Target, Message);
+                    erl_syntax:application(erl_syntax:atom(tracer_erlang), erl_syntax:atom(send), [Target, Message]);
                 _ ->
                     T
             end;
@@ -77,38 +72,6 @@ instrument(T) ->
         _ ->
             T
     end.
-
--spec instrument_send(Target, Message) -> Expr when
-    Target :: erl_syntax:syntaxTree(),
-    Message :: erl_syntax:syntaxTree(),
-    Expr :: erl_syntax:syntaxTree().
-
-instrument_send(Target, Message) ->
-    StampVar = temp_variable(),
-    MessageVar = temp_variable(),
-
-    SendSent = send_expr(?SEND_SENT),
-
-    RecvStamp =
-        erl_syntax:receive_expr([
-            erl_syntax:clause(
-                [erl_syntax:tuple([erl_syntax:atom(?RECV_STAMP), StampVar])],
-                [],
-                [erl_syntax:atom("ok")]
-            )
-        ]),
-
-    SendWithStamp =
-        erl_syntax:infix_expr(
-            Target,
-            erl_syntax:operator("!"),
-            erl_syntax:tuple([
-                erl_syntax:tuple([erl_syntax:atom(stamp), StampVar]),
-                erl_syntax:match_expr(MessageVar, Message)
-            ])
-        ),
-
-    erl_syntax:block_expr([SendSent, RecvStamp, SendWithStamp, MessageVar]).
 
 -spec instrument_receive(ReceiveExpr) -> NewReceiveExpr when
     ReceiveExpr :: erl_syntax:syntaxTree(),
@@ -134,24 +97,13 @@ instrument_receive_clause(Clause) ->
     Guard = erl_syntax:clause_guard(Clause),
     Body = erl_syntax:clause_body(Clause),
 
-    ReceiveEvaluated = send_expr(?RECEIVE_EVALUATED, StampVar),
+    ReceiveEvaluated = send_expr(receive_evaluated, StampVar),
 
     erl_syntax:clause(
         [erl_syntax:tuple([(erl_syntax:tuple([erl_syntax:atom(stamp), StampVar])), Pattern])],
         Guard,
         [ReceiveEvaluated | Body]
     ).
-
--spec instrument_nodes(Expr) -> NewExpr when
-    Expr :: erl_syntax:syntaxTree(),
-    NewExpr :: erl_syntax:syntaxTree().
-
-instrument_nodes(Call) ->
-    NodesVar = temp_variable(),
-
-    LogNodes = send_expr(?LOG_NODES, erl_syntax:match_expr(NodesVar, Call)),
-
-    erl_syntax:block_expr([LogNodes, NodesVar]).
 
 -spec temp_variable() -> VarExpr when
     VarExpr :: erl_syntax:syntaxTree().
@@ -160,16 +112,11 @@ temp_variable() ->
     Atomic = atomics:add_get(get(atomic), 1, 1),
     erl_syntax:variable(io_lib:format("tmp$^~b", [Atomic])).
 
--spec send_expr(Key) -> SendExpr when
-    Key :: atom(),
-    SendExpr :: erl_syntax:syntaxTree().
-
-send_expr(Key) -> send_expr(Key, erl_syntax:nil()).
-
 -spec send_expr(Key, Value) -> SendExpr when
     Key :: atom(),
     Value :: erl_syntax:syntaxTree(),
     SendExpr :: erl_syntax:syntaxTree().
+
 send_expr(Key, Value) ->
     erl_syntax:infix_expr(
         erl_syntax:tuple([

@@ -10,8 +10,6 @@
 
 -ignore_xref([trace/3, trace/4]).
 
--include("tracer.hrl").
-
 -define(SERVER, ?MODULE).
 
 -record(state, {
@@ -112,25 +110,27 @@ handle_call(get_trace, _From, #state{trace = Trace} = State) ->
     {reply, {ok, ReversedTrace}, State};
 handle_call(get_result, _From, #state{result = Result} = State) ->
     {reply, Result, State};
+%% ========== 'call' trace messages ========== %%
+%% Generate message stamp
+handle_call({trace, Pid, call, {tracer_erlang, send, [_, _]}}, _From, State) ->
+    Pid ! {stamp, erlang:unique_integer()},
+    {reply, ok, State};
+%% ========== 'return_from' trace messages ========== %%
 %% Save return value
 handle_call({trace, _Pid, return_from, {?MODULE, run, 3}, Result}, _From, #state{result = undefined} = State) ->
     {reply, ok, State#state{result = {value, Result}}};
+%% Call to `nodes()`
+handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
+    State1 = add_to_trace(Pid, {nodes, Nodes}, State),
+    {reply, ok, State1};
 %% ========== 'send' trace messages ========== %%
 %% Send message
 handle_call({trace, Pid, send, {{stamp, Stamp}, _Message}, _}, _From, State) ->
     State1 = add_to_trace(Pid, send, Stamp, State),
     {reply, ok, State1};
-%% Generate message stamp
-handle_call({trace, Pid, send, {?SEND_SENT, []}, {undefined, _}}, _From, State) ->
-    Pid ! {?RECV_STAMP, erlang:unique_integer()},
-    {reply, ok, State};
 %% Receive message
-handle_call({trace, Pid, send, {?RECEIVE_EVALUATED, Stamp}, {undefined, _}}, _From, State) ->
+handle_call({trace, Pid, send, {receive_evaluated, Stamp}, {undefined, _}}, _From, State) ->
     State1 = add_to_trace(Pid, 'receive', Stamp, State),
-    {reply, ok, State1};
-%% Call to `nodes()`
-handle_call({trace, Pid, send, {?LOG_NODES, Nodes}, {undefined, _}}, _From, State) ->
-    State1 = add_to_trace(Pid, {nodes, Nodes}, State),
     {reply, ok, State1};
 %% Slave started
 handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
@@ -175,6 +175,10 @@ handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs
     {reply, ok, State1};
 %% ========== Ignored trace messages ========== %%
 handle_call({trace, _, call, {?MODULE, run, [_, _, _]}}, _From, State) ->
+    {reply, ok, State};
+handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
+    {reply, ok, State};
+handle_call({trace, _, return_from, {tracer_erlang, send, 2}, _}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
@@ -264,6 +268,7 @@ do_trace(Module, Function, Args, Opts) ->
     {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
     Filename = filename:absname(filename:join(Dir, atom_to_list(Module) ++ ".beam")),
     reload(TracedNode, Module, Binary, Filename),
+    reload(TracedNode, tracer_erlang),
 
     MainPid = self(),
     TracedPid = execute(TracedNode, Module, Function, Args),
@@ -274,18 +279,15 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:p(TracedPid, [m, c, p, sos]),
     dbg:tpe(send, [
         {['_', {{stamp, '_'}, '_'}], [], []},
-        {[{undefined, '_'}, {?SEND_SENT, []}], [], []},
-        {[{undefined, '_'}, {?RECEIVE_EVALUATED, '_'}], [], []},
-        {[{undefined, '_'}, {?LOG_NODES, '_'}], [], []},
+        {[{undefined, '_'}, {receive_evaluated, '_'}], [], []},
         {['_', {result, {ok, '_'}}], [], []},
         {['_', {result, {error, '_'}}], [], []}
     ]),
     dbg:tpe('receive', [
-        {['_', {{stamp, '_'}, '_'}], [], []}
+        {['_', '_', {{stamp, '_'}, '_'}], [], []}
     ]),
-    dbg:tpl(?MODULE, run, 3, [
-        {'_', [], [{return_trace}]}
-    ]),
+    dbg:tpl(?MODULE, run, 3, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(tracer_erlang, [{'_', [], [{return_trace}]}]),
 
     % dbg:tpl modules to instrument
 
@@ -305,12 +307,6 @@ do_trace(Module, Function, Args, Opts) ->
 
     dbg:stop(),
     slave:stop(TracedNode),
-
-    receive
-        Trap -> io:format("Trap: ~p~n", [Trap])
-    after 2 * 1000 ->
-        ok
-    end,
 
     {ok, Trace} = gen_server:call(?SERVER, get_trace),
     Result = gen_server:call(?SERVER, get_result),
