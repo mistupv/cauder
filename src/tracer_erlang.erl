@@ -1,9 +1,9 @@
 -module(tracer_erlang).
 
 %% API
--export([send/2, nodes/0]).
+-export([send_distributed/2, send_centralized/2, nodes/0]).
 
--ignore_xref([send/2, nodes/0]).
+-ignore_xref([send_distributed/2, send_centralized/2, nodes/0]).
 
 -type dst() ::
     pid()
@@ -11,11 +11,19 @@
     | (RegName :: atom())
     | {RegName :: atom(), Node :: node()}.
 
--spec send(Dst, Msg) -> Msg when
+-spec send_distributed(Dst, Msg) -> Msg when
     Dst :: dst(),
     Msg :: term().
 
-send(Dst, Msg) ->
+send_distributed(Dst, Msg) ->
+    Dst ! {{stamp, erlang:unique_integer()}, Msg},
+    Msg.
+
+-spec send_centralized(Dst, Msg) -> Msg when
+    Dst :: dst(),
+    Msg :: term().
+
+send_centralized(Dst, Msg) ->
     receive
         {stamp, Stamp} ->
             Dst ! {{stamp, Stamp}, Msg},

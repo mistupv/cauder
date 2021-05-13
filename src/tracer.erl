@@ -64,9 +64,10 @@ trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, []).
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: [Timeout | Dir],
+    Options :: [Timeout | Dir | StampMode],
     Timeout :: {timeout, timeout()},
     Dir :: {dir, file:filename()},
+    StampMode :: {stamp_mode, distributed | centralized},
     Trace :: trace().
 
 trace(Mod, Fun, Args, Opts) ->
@@ -74,7 +75,7 @@ trace(Mod, Fun, Args, Opts) ->
         {timeout, 10000},
         {dir, "."},
         {mods, []},
-        {stamp_mode, "central"}
+        {stamp_mode, centralized}
     ],
     do_trace(Mod, Fun, Args, Opts ++ DefaultOpts).
 
@@ -112,7 +113,7 @@ handle_call(get_result, _From, #state{result = Result} = State) ->
     {reply, Result, State};
 %% ========== 'call' trace messages ========== %%
 %% Generate message stamp
-handle_call({trace, Pid, call, {tracer_erlang, send, [_, _]}}, _From, State) ->
+handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
     Pid ! {stamp, erlang:unique_integer()},
     {reply, ok, State};
 %% ========== 'return_from' trace messages ========== %%
@@ -178,7 +179,7 @@ handle_call({trace, _, call, {?MODULE, run, [_, _, _]}}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
     {reply, ok, State};
-handle_call({trace, _, return_from, {tracer_erlang, send, 2}, _}, _From, State) ->
+handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
@@ -287,7 +288,8 @@ do_trace(Module, Function, Args, Opts) ->
         {['_', '_', {{stamp, '_'}, '_'}], [], []}
     ]),
     dbg:tpl(?MODULE, run, 3, [{'_', [], [{return_trace}]}]),
-    dbg:tpl(tracer_erlang, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
 
     % dbg:tpl modules to instrument
 
