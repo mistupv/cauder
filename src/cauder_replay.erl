@@ -101,8 +101,8 @@ replay_step(#sys{logs = LMap} = Sys, Pid) ->
     case options(Sys, Pid) of
         [] ->
             case maps:get(Pid, LMap) of
-                [{spawn, {Node, succ, Pid}} | _] -> replay_spawn(Sys, '_', {spawn, {Node, succ, Pid}});
-                [{start, {succ, Node}} | _] -> replay_start(Sys, Node);
+                [{spawn, {Node, Pid}, success} | _] -> replay_spawn(Sys, '_', {spawn, {Node, Pid}, success});
+                [{start, Node, success} | _] -> replay_start(Sys, Node);
                 [{send, Uid} | _] -> replay_send(Sys, Uid);
                 [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
             end;
@@ -124,12 +124,12 @@ replay_spawn(#sys{procs = PMap} = Sys, Pid, _) when is_map_key(Pid, PMap) -> Sys
 replay_spawn(#sys{logs = LMap} = Sys, Pid, _) when Pid =/= '_' ->
     LogItem = cauder_utils:find_spawn_log(LMap, Pid),
     replay_spawn(Sys, '_', LogItem);
-replay_spawn(#sys{logs = LMap} = Sys, _, {spawn, {_, fail, Pid}}) ->
+replay_spawn(#sys{logs = LMap} = Sys, _, {spawn, {_, Pid}, failure}) ->
     case cauder_utils:find_spawn_parent(LMap, Pid) of
         {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
         false -> Sys
     end;
-replay_spawn(Sys0, _, {spawn, {Node, succ, Pid}}) ->
+replay_spawn(Sys0, _, {spawn, {Node, Pid}, success}) ->
     #sys{logs = LMap} = Sys = replay_start(Sys0, Node),
     {value, ProcParent} = cauder_utils:find_spawn_parent(LMap, Pid),
     replay_until_spawn(Sys, ProcParent, Pid).

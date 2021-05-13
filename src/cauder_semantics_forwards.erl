@@ -54,7 +54,7 @@ step(Sys, Pid, Sched, Mode) ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, Node, M, F, []},
             case extract_log(LMap, Pid, spawn) of
-                {found, {spawn, _N, succ, NewPid}, NewLog} ->
+                {found, {spawn, _N, success, NewPid}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
@@ -68,14 +68,14 @@ step(Sys, Pid, Sched, Mode) ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, N, M, F, []},
             case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, _N, succ, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, _N, success, NewPid}, NewLog}, _, _} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
                         inline => true,
                         fun_literal => FunLiteral
                     });
-                {{found, {spawn, _N, fail, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, _N, failure, NewPid}, NewLog}, _, _} ->
                     fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
@@ -92,18 +92,18 @@ step(Sys, Pid, Sched, Mode) ->
         {spawn, VarPid, M, F, As} ->
             CLabel = {spawn, VarPid, Node, M, F, As},
             case extract_log(LMap, Pid, spawn) of
-                {found, {spawn, _N, succ, NewPid}, NewLog} ->
+                {found, {spawn, _N, success, NewPid}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
-                {found, {spawn, _N, fail, NewPid}, NewLog} ->
+                {found, {spawn, _N, failure, NewPid}, NewLog} ->
                     fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
                 not_found ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{})
             end;
         {spawn, _VarPid, N, _M, _F, _As} ->
             case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, _N, fail, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, _N, failure, NewPid}, NewLog}, _, _} ->
                     fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-                {{found, {spawn, _N, succ, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, _N, success, NewPid}, NewLog}, _, _} ->
                     fwd_spawn_s(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     fwd_spawn_f(P0, Result, Sys, #{});
@@ -117,9 +117,9 @@ step(Sys, Pid, Sched, Mode) ->
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
             CLabel = {start, VarNode, list_to_atom(Host), NewName},
             case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, succ, N}, NewLog}, _, _} ->
+                {{found, {start, success, N}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, fail, N}, NewLog}, _, _} ->
+                {{found, {start, failure, N}, NewLog}, _, _} ->
                     fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     error(no_alive);
@@ -131,9 +131,9 @@ step(Sys, Pid, Sched, Mode) ->
         {start, _, Host, NewName} ->
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
             case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, succ, N}, NewLog}, _, _} ->
+                {{found, {start, success, N}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, fail, N}, NewLog}, _, _} ->
+                {{found, {start, failure, N}, NewLog}, _, _} ->
                     fwd_start_f(P0, Result, Sys, #{node => N, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     error(no_alive);
@@ -339,7 +339,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{logs = LMap, nodes = Nodes}, sp
             ?RULE_START;
         {found, {spawn, Node, Result, _}, _} ->
             case {Result, lists:member(Node, Nodes)} of
-                {succ, false} -> ?NOT_EXP;
+                {success, false} -> ?NOT_EXP;
                 {_, _} -> ?RULE_START
             end
     end;
@@ -354,9 +354,9 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{logs = LMap, nodes = Nodes}, st
             NodeAlreadyExists = lists:member(Node, Nodes),
             case {Result, FailedSpawnsExist, NodeAlreadyExists, FutureReads} of
                 %at least one spawn has still to fail
-                {succ, {value, _}, _, _} -> ?NOT_EXP;
-                {fail, _, false, _} -> ?NOT_EXP;
-                {succ, _, _, {value, _}} -> ?NOT_EXP;
+                {success, {value, _}, _, _} -> ?NOT_EXP;
+                {failure, _, false, _} -> ?NOT_EXP;
+                {success, _, _, {value, _}} -> ?NOT_EXP;
                 _ -> ?RULE_START
             end
     end;
@@ -619,7 +619,7 @@ fwd_start_s(
     T = #trace{
         type = ?RULE_START,
         from = Pid,
-        res = succ,
+        res = success,
         node = NewNode
     },
     Sys#sys{
@@ -654,7 +654,7 @@ fwd_start_f(
         end,
     Err = {error, {already_running, NewNode}},
     P = P0#proc{
-        hist = [{start, fail, Bs0, Es0, Stk0, NewNode} | Hist],
+        hist = [{start, failure, Bs0, Es0, Stk0, NewNode} | Hist],
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarNode, Err)
@@ -662,7 +662,7 @@ fwd_start_f(
     T = #trace{
         type = ?RULE_START,
         from = Pid,
-        res = fail,
+        res = failure,
         node = NewNode
     },
     Sys#sys{

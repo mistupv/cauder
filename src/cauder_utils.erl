@@ -95,8 +95,8 @@ find_item(LMap, Entry) ->
 
 compare([], _) -> false;
 compare([H | _], H) -> true;
-compare([{spawn, {_, _, Pid}} | _], {spawn, {_, _, Pid}}) -> true;
-compare([{spawn, {Node, fail, _}} | _], {spawn, {Node, fail, _}}) -> true;
+compare([{spawn, {_, Pid}, _} | _], {spawn, {_, Pid}, _}) -> true;
+compare([{spawn, {Node, _}, failure} | _], {spawn, {Node, _}, failure}) -> true;
 compare([_ | T], Entry) -> compare(T, Entry).
 
 %%------------------------------------------------------------------------------
@@ -111,7 +111,7 @@ compare([_ | T], Entry) -> compare(T, Entry).
     Parent :: cauder_types:proc_id().
 
 find_spawn_parent(LMap, Pid) ->
-    find_item(LMap, {spawn, {'_', '_', Pid}}).
+    find_item(LMap, {spawn, {'_', Pid}, '_'}).
 
 %%---------------------------------------------------------------------------------
 %% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
@@ -124,7 +124,7 @@ find_spawn_parent(LMap, Pid) ->
 find_spawn_log(LMap, Pid) ->
     {value, Log} = lists:search(
         fun
-            ({spawn, {_, _, SpawnPid}}) when Pid =:= SpawnPid -> true;
+            ({spawn, {_, SpawnPid}, _}) when Pid =:= SpawnPid -> true;
             (_) -> false
         end,
         lists:merge(maps:values(LMap))
@@ -143,7 +143,7 @@ find_spawn_log(LMap, Pid) ->
     Parent :: cauder_types:proc_id().
 
 find_node_parent(LMap, Node) ->
-    find_item(LMap, {start, {succ, Node}}).
+    find_item(LMap, {start, Node, success}).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for a process whose log has an entry with the information to
@@ -219,7 +219,7 @@ find_process_with_failed_start(ProcessMap, Node) ->
     Process :: cauder_types:proc_id().
 
 find_process_with_failed_spawn(LMap, Node) ->
-    find_item(LMap, {spawn, {Node, fail, '_'}}).
+    find_item(LMap, {spawn, {Node, '_'}, failure}).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that will do a read while `Node' was not part of the network
@@ -403,7 +403,7 @@ has_start([_ | RestHist], Node) -> has_start(RestHist, Node).
     Result :: boolean().
 
 has_failed_start([], _) -> false;
-has_failed_start([{start, fail, _Bs, _Es, _Stk, Node} | _], Node) -> true;
+has_failed_start([{start, failure, _Bs, _Es, _Stk, Node} | _], Node) -> true;
 has_failed_start([_ | RestHist], Node) -> has_failed_start(RestHist, Node).
 
 %%------------------------------------------------------------------------------
@@ -692,7 +692,7 @@ is_conc_item({self, _Bs, _Es, _Stk}) -> false;
 is_conc_item({node, _Bs, _Es, _Stk}) -> false;
 is_conc_item({nodes, _Bs, _Es, _Stk, _Nodes}) -> true;
 is_conc_item({start, success, _BS, _Es, _Stk, _Node}) -> true;
-is_conc_item({start, fail, _BS, _Es, _Stk, _Node}) -> true;
+is_conc_item({start, failure, _BS, _Es, _Stk, _Node}) -> true;
 is_conc_item({spawn, _Bs, _Es, _Stk, _Node, _Pid}) -> true;
 is_conc_item({send, _Bs, _Es, _Stk, _Msg}) -> true;
 is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.

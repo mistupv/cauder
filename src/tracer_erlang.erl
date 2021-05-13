@@ -3,6 +3,8 @@
 %% API
 -export([send/2, nodes/0]).
 
+-ignore_xref([send/2, nodes/0]).
+
 -type dst() ::
     pid()
     | port()

@@ -537,7 +537,7 @@ update_replay(_, #wx_state{system = undefined}) ->
 update_replay(_, #wx_state{system = #sys{logs = LMap}, pid = Pid}) ->
     Filter = fun
         ({nodes, {_}}) -> false;
-        ({start, {fail, _}}) -> false;
+        ({start, _, failure}) -> false;
         (_) -> true
     end,
     FLMap = lists:map(fun(Log) -> lists:filter(Filter, Log) end, maps:values(LMap)),
@@ -869,8 +869,8 @@ populate_choice(Choice, Items) ->
     lists:foreach(
         fun
             ({_Node, _Res, Pid}) -> wxChoice:append(Choice, io_lib:format("~p", [Pid]), Pid);
-            ({succ, NodeName}) -> wxChoice:append(Choice, io_lib:format("~p", [NodeName]), NodeName);
-            ({fail, _}) -> nothing;
+            ({success, NodeName}) -> wxChoice:append(Choice, io_lib:format("~p", [NodeName]), NodeName);
+            ({failure, _}) -> nothing;
             ({Item, ClientData}) -> wxChoice:append(Choice, Item, ClientData);
             (Item) -> wxChoice:append(Choice, io_lib:format("~p", [Item]), Item)
         end,

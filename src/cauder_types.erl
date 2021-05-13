@@ -55,19 +55,20 @@
 -type log() :: [log_entry()].
 -type log_entry() ::
     {send, cauder_mailbox:uid()}
+    | {deliver, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
-    | {nodes, {[net_node()]}}
-    | {start, {succ, net_node()}}
-    | {start, {fail, net_node()}}
-    | {spawn, {net_node(), succ, proc_id()}}
-    | {spawn, {net_node(), fail, proc_id()}}.
+    | {nodes, [net_node()]}
+    | {start, net_node(), success}
+    | {start, net_node(), failure}
+    | {spawn, {net_node(), proc_id()}, success}
+    | {spawn, {net_node(), proc_id()}, failure}.
 
 -type log_entry_search() ::
     {send, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
-    | {start, {succ, net_node()}}
-    | {spawn, {'_', '_', proc_id()}}
-    | {spawn, {net_node(), fail, '_'}}.
+    | {start, net_node(), success}
+    | {spawn, {'_', proc_id()}, '_'}
+    | {spawn, {net_node(), '_'}, failure}.
 
 % Not empty
 -type process_map() :: #{proc_id() := process()}.
@@ -83,7 +84,7 @@
     | {nodes, environment(), [abstract_expr()], stack(), [net_node()]}
     | {spawn, environment(), [abstract_expr()], stack(), net_node(), proc_id()}
     | {start, success, environment(), [abstract_expr()], stack(), net_node()}
-    | {start, fail, environment(), [abstract_expr()], stack(), net_node()}
+    | {start, failure, environment(), [abstract_expr()], stack(), net_node()}
     | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
     | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
 

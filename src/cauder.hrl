@@ -119,7 +119,7 @@
     to :: undefined | cauder_types:proc_id(),
     node :: undefined | cauder_types:net_node(),
     val :: undefined | term(),
-    res :: succ | fail | undefined,
+    res :: success | failure | undefined,
     time :: undefined | cauder_mailbox:uid()
 }).
 

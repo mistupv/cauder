@@ -618,7 +618,7 @@ handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = 
 handle_info(?DBG_SUCCESS(rollback_start, Node, Time, System), #wx_state{task = rollback_start} = State) ->
     cauder_wx_statusbar:rollback_start_finish(Node, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-handle_info({dbg, {fail, rollback_start, no_rollback}}, #wx_state{task = rollback_start} = State) ->
+handle_info(?DBG_FAILURE(rollback_start, no_rollback, _Stacktrace), #wx_state{task = rollback_start} = State) ->
     cauder_wx_statusbar:rollback_start_fail(),
     {noreply, refresh(State, State#wx_state{task = undefined})};
 handle_info(?DBG_SUCCESS(rollback_spawn, Pid, Time, System), #wx_state{task = rollback_spawn} = State) ->
