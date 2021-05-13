@@ -260,10 +260,9 @@ do_trace(Module, Function, Args, Opts) ->
     Distributed = proplists:get_bool(distributed, Opts),
 
     [_Name, Host] = string:lexemes(atom_to_list(node()), [$@]),
+
     % TODO detached?
     % TODO node name
-
-    %, io_lib:format("-setcookie ~p", [erlang:get_cookie()])),
     {ok, TracedNode} = slave:start_link(Host, trace),
 
     {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
@@ -272,9 +271,9 @@ do_trace(Module, Function, Args, Opts) ->
     reload(TracedNode, tracer_erlang),
 
     MainPid = self(),
-    TracedPid = execute(TracedNode, Module, Function, Args),
+    TracedPid = spawn_link(TracedNode, tracer_erlang, start, [MainPid, Module, Function, Args]),
+    {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {MainPid, TracedPid}, []),
 
-    gen_server:start_link({local, ?SERVER}, ?MODULE, {MainPid, TracedPid}, []),
     dbg:tracer(process, {fun trace_handler/2, []}),
     dbg:n(TracedNode),
     dbg:p(TracedPid, [m, c, p, sos]),
@@ -284,9 +283,7 @@ do_trace(Module, Function, Args, Opts) ->
         {['_', {result, {ok, '_'}}], [], []},
         {['_', {result, {error, '_'}}], [], []}
     ]),
-    dbg:tpe('receive', [
-        {['_', '_', {{stamp, '_'}, '_'}], [], []}
-    ]),
+    dbg:tpe('receive', [{['_', '_', {{stamp, '_'}, '_'}], [], []}]),
     dbg:tpl(?MODULE, run, 3, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
@@ -372,36 +369,6 @@ reload(Node, Module, Binary, Filename) ->
     rpc:call(Node, code, purge, [Module]),
     {module, Module} = rpc:call(Node, code, load_binary, [Module, Filename, Binary]),
     ok.
-
--spec execute(Node, Module, Function, Args) -> Pid when
-    Node :: node(),
-    Module :: module(),
-    Function :: atom(),
-    Args :: [term()],
-    Pid :: pid().
-
-execute(Node, Module, Function, Args) ->
-    reload(Node, ?MODULE),
-    MainPid = self(),
-    F = fun() ->
-        MainPid ! setup_complete,
-        receive
-            start -> ok
-        end,
-        run(Module, Function, Args)
-    end,
-    spawn_link(Node, F).
-
-%%------------------------------------------------------------------------------
-%% @doc Wrapper function used to capture the return value of the traced function
-%% using the `dbg'. See dbg:tpl/4 and `return_trace'.
-
--spec run(Module, Function, Args) -> term() when
-    Module :: module(),
-    Function :: atom(),
-    Args :: [term()].
-
-run(Module, Function, Args) -> apply(Module, Function, Args).
 
 trace_handler(Trace, []) ->
     ok = gen_server:call(?SERVER, Trace),

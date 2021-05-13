@@ -1,7 +1,7 @@
 -module(tracer_erlang).
 
 %% API
--export([send_distributed/2, send_centralized/2, nodes/0]).
+-export([start/4, apply/3, send_distributed/2, send_centralized/2, nodes/0]).
 
 -ignore_xref([send_distributed/2, send_centralized/2, nodes/0]).
 
@@ -10,6 +10,26 @@
     | port()
     | (RegName :: atom())
     | {RegName :: atom(), Node :: node()}.
+
+-spec start(Pid, Module, Function, Args) -> term() when
+    Pid :: pid(),
+    Module :: module(),
+    Function :: atom(),
+    Args :: [term()].
+
+start(MainPid, Module, Function, Args) ->
+    MainPid ! setup_complete,
+    receive
+        start -> ok
+    end,
+    tracer_erlang:apply(Module, Function, Args).
+
+-spec apply(Module, Function, Args) -> term() when
+    Module :: module(),
+    Function :: atom(),
+    Args :: [term()].
+
+apply(Module, Function, Args) -> erlang:apply(Module, Function, Args).
 
 -spec send_distributed(Dst, Msg) -> Msg when
     Dst :: dst(),
