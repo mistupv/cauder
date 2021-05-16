@@ -118,7 +118,7 @@ handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From
     {reply, ok, State};
 %% ========== 'return_from' trace messages ========== %%
 %% Save return value
-handle_call({trace, _Pid, return_from, {?MODULE, run, 3}, Result}, _From, #state{result = undefined} = State) ->
+handle_call({trace, _Pid, return_from, {tracer_erlang, apply, 3}, Result}, _From, #state{result = undefined} = State) ->
     {reply, ok, State#state{result = {value, Result}}};
 %% Call to `nodes()`
 handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
@@ -284,7 +284,7 @@ do_trace(Module, Function, Args, Opts) ->
         {['_', {result, {error, '_'}}], [], []}
     ]),
     dbg:tpe('receive', [{['_', '_', {{stamp, '_'}, '_'}], [], []}]),
-    dbg:tpl(?MODULE, run, 3, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(tracer_erlang, apply, 3, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
 
