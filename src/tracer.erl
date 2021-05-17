@@ -19,7 +19,7 @@
     trace = #{} :: cauder_types:log_map(),
     procs :: sets:set(pid()),
     result :: undefined | {value, term()},
-    slave_starters = #{} :: #{pid() => {pid(), node()}}
+    slave_starters = #{} :: #{pid() => {node(), pid()}}
 }).
 
 -type state() :: #state{}.
@@ -135,13 +135,13 @@ handle_call({trace, Pid, send, {receive_evaluated, Stamp}, {undefined, _}}, _Fro
     {reply, ok, State1};
 %% Slave started
 handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
-    #{Pid := {ParentPid, Node}} = State#state.slave_starters,
-    State1 = add_to_trace(Pid, {start, Node, success}, State),
+    #{Pid := {Node, ParentPid}} = State#state.slave_starters,
+    State1 = add_to_trace(ParentPid, {start, Node, success}, State),
     {reply, ok, State1};
 %% Slave failed to start
 handle_call({trace, Pid, send, {result, {error, _}}, ParentPid}, _From, State) ->
-    #{Pid := {ParentPid, Node}} = State#state.slave_starters,
-    State1 = add_to_trace(Pid, {start, Node, failure}, State),
+    #{Pid := {Node, ParentPid}} = State#state.slave_starters,
+    State1 = add_to_trace(ParentPid, {start, Node, failure}, State),
     {reply, ok, State1};
 %% ========== 'receive' trace messages ========== %%
 %% Deliver message
@@ -151,7 +151,7 @@ handle_call({trace, Pid, 'receive', {{stamp, Stamp}, _Message}}, _From, State) -
 %% ========== 'spawn' trace messages ========== %%
 %% Starting a slave
 handle_call({trace, Pid, spawn, SlavePid, {slave, wait_for_slave, [Pid, _, _, Node, _, _, _]}}, _From, State) ->
-    SlaveStarters1 = maps:put(SlavePid, {Pid, Node}, State#state.slave_starters),
+    SlaveStarters1 = maps:put(SlavePid, {Node, Pid}, State#state.slave_starters),
     {reply, ok, State#state{slave_starters = SlaveStarters1}};
 %% Spawn failed
 handle_call({trace, Pid, spawn, ChildPid, {erts_internal, crasher, [ChildNode, _, _, _, _, _]}}, _From, State) ->
