@@ -45,19 +45,17 @@
 -type trace() :: #trace{}.
 
 -type some_options() :: #{
-    timeout => timeout(),
     dir => file:filename(),
-    stamp_mode => distributed | centralized,
-    name => atom() | string(),
-    args => atom() | string()
+    modules => [atom()],
+    timeout => timeout(),
+    stamp_mode => distributed | centralized
 }.
 
 -type all_options() :: #{
-    timeout := timeout(),
     dir := file:filename(),
-    stamp_mode := distributed | centralized,
-    name := atom() | string(),
-    args := atom() | string()
+    modules := [atom()],
+    timeout := timeout(),
+    stamp_mode := distributed | centralized
 }.
 
 %%%===================================================================
@@ -96,11 +94,10 @@ trace(Mod, Fun, Args, Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_optio
 
 default_options() ->
     #{
-        timeout => 10000,
         dir => ".",
-        stamp_mode => centralized,
-        name => "main",
-        args => []
+        modules => [],
+        timeout => 10000,
+        stamp_mode => centralized
     }.
 
 %%%===================================================================
@@ -254,7 +251,12 @@ handle_info(Info, State) ->
     Reason :: any(),
     State :: state().
 
-terminate(_Reason, _State) ->
+terminate(_Reason, State) ->
+    ProcSet = State#state.procs,
+    case sets:is_empty(ProcSet) of
+        true -> ok;
+        false -> lists:foreach(fun(P) -> true = erlang:exit(P, kill) end, sets:to_list(ProcSet))
+    end,
     ok.
 
 %%------------------------------------------------------------------------------
@@ -280,26 +282,29 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
     Trace :: trace().
 
 do_trace(Module, Function, Args, Opts) ->
-    Timeout = maps:get(timeout, Opts),
     Dir = maps:get(dir, Opts),
+    Modules = maps:get(modules, Opts),
+    Timeout = maps:get(timeout, Opts),
     StampMode = maps:get(stamp_mode, Opts),
-    SlaveName = maps:get(name, Opts),
-    SlaveArgs = maps:get(args, Opts),
 
-    [_Name, Host] = string:lexemes(atom_to_list(node()), [$@]),
-    {ok, TracedNode} = slave:start_link(Host, SlaveName, SlaveArgs),
+    CompTime = lists:foldl(
+        fun(Mod, AccTime) ->
+            {Time, {Mod, Bin}} = instrument(Mod, Dir, StampMode),
+            File = filename:absname(filename:join(Dir, [Mod, ".beam"])),
+            ok = load(Mod, Bin, File),
+            Time + AccTime
+        end,
+        0,
+        lists:usort([Module | Modules])
+    ),
 
-    {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
-    Filename = filename:absname(filename:join(Dir, atom_to_list(Module) ++ ".beam")),
-    load(TracedNode, Module, Binary, Filename),
-    load(TracedNode, tracer_erlang),
+    load(tracer_erlang),
 
     MainPid = self(),
-    TracedPid = spawn_link(TracedNode, tracer_erlang, start, [MainPid, Module, Function, Args]),
+    TracedPid = spawn_link(tracer_erlang, start, [MainPid, Module, Function, Args]),
     {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {MainPid, TracedPid}, []),
 
     dbg:tracer(process, {fun trace_handler/2, []}),
-    dbg:n(TracedNode),
     dbg:p(TracedPid, [m, c, p, sos]),
     dbg:tpe(send, [
         {['_', {{stamp, '_'}, '_'}], [], []},
@@ -311,8 +316,6 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:tpl(tracer_erlang, apply, 3, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
-
-    % dbg:tpl modules to instrument
 
     receive
         setup_complete -> ok
@@ -329,23 +332,15 @@ do_trace(Module, Function, Args, Opts) ->
     ),
 
     dbg:stop(),
-    slave:stop(TracedNode),
 
     {ok, Trace} = gen_server:call(?SERVER, get_trace),
     Result = gen_server:call(?SERVER, get_result),
     gen_server:stop(?SERVER),
 
-    %% TODO
-    %%    Node =
-    %%        case Distributed of
-    %%            true -> TracedNode;
-    %%            false -> 'nonode@nohost'
-    %%        end,
-
     #trace{
         call = {Module, Function, Args},
         comp = CompTime,
-        node = TracedNode,
+        node = node(),
         pid = TracedPid,
         tracing = Tracing,
         result = Result,
@@ -361,7 +356,7 @@ do_trace(Module, Function, Args, Opts) ->
     Time :: non_neg_integer(),
     Binary :: binary().
 
-instrument(Module, Dir, StampMode) ->
+instrument(Mod, Dir, StampMode) ->
     CompileOpts = [
         % Standard compile options
         binary,
@@ -369,30 +364,29 @@ instrument(Module, Dir, StampMode) ->
         {i, Dir},
         {parse_transform, tracer_transform},
         % Tracer options
-        {stamp_mode, StampMode},
-        {inst_mod, get(modules_to_instrument)}
+        {stamp_mode, StampMode}
     ],
-    File = filename:join(Dir, atom_to_list(Module)),
-    {Time, {ok, Module, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
-    {Time, {Module, Binary}}.
+    File = filename:join(Dir, Mod),
+    {Time, {ok, Mod, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
+    {Time, {Mod, Binary}}.
 
--spec load(Node, Module) -> ok when
-    Node :: node(),
+-spec load(Module) -> ok when
     Module :: module().
 
-load(Node, Module) ->
+load(Module) ->
     {Module, Binary, Filename} = code:get_object_code(Module),
-    load(Node, Module, Binary, Filename).
+    load(Module, Binary, Filename).
 
--spec load(Node, Module, Binary, Filename) -> ok when
-    Node :: node(),
+-spec load(Module, Binary, Filename) -> ok when
     Module :: module(),
     Binary :: binary(),
     Filename :: file:filename().
 
-load(Node, Module, Binary, Filename) ->
-    rpc:call(Node, code, purge, [Module]),
-    {module, Module} = rpc:call(Node, code, load_binary, [Module, Filename, Binary]),
+load(Module, Binary, Filename) ->
+    %rpc:call(Node, code, purge, [Module]),
+    code:purge(Module),
+    %rpc:call(Node, code, load_binary, [Module, Filename, Binary]),
+    {module, Module} = code:load_binary(Module, Filename, Binary),
     ok.
 
 trace_handler(Trace, []) ->
