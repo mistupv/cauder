@@ -31,9 +31,13 @@
     pid :: pid(),
     % Initial function call
     call :: {module(), atom(), [term()]},
+    % Whether the execution completed or the timeout was reached
     tracing :: success | timeout,
+    % Result of the function application
     result :: undefined | {value, term()},
+    % Compile time in microseconds
     comp :: non_neg_integer(),
+    % Execution time in microseconds
     exec :: non_neg_integer(),
     log = #{} :: cauder_types:log_map()
 }).
@@ -112,9 +116,11 @@ default_options() ->
     State :: state().
 
 init({MainPid, TracedPid}) ->
-    Table = ets:new(?MODULE, []),
-    Set = sets:new(),
-    {ok, #state{main_pid = MainPid, ets = Table, procs = sets:add_element(TracedPid, Set)}}.
+    {ok, #state{
+        main_pid = MainPid,
+        ets = ets:new(?MODULE, []),
+        procs = sets:add_element(TracedPid, sets:new())
+    }}.
 
 %%------------------------------------------------------------------------------
 %% @private
@@ -183,7 +189,8 @@ handle_call({trace, Pid, spawn, ChildPid, {_, _, _}}, _From, State) ->
     ChildNode = node(ChildPid),
     ChildIdx = pid_index(ChildPid),
     State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, success}, State),
-    {reply, ok, State1};
+    State2 = State1#state{procs = sets:add_element(ChildPid, State1#state.procs)},
+    {reply, ok, State2};
 %% ========== 'exit' trace messages ========== %%
 %% Process exited
 handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs = ProcSet0} = State) ->
@@ -195,7 +202,7 @@ handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs
     end,
     {reply, ok, State1};
 %% ========== Ignored trace messages ========== %%
-handle_call({trace, _, call, {?MODULE, run, [_, _, _]}}, _From, State) ->
+handle_call({trace, _, call, {tracer_erlang, apply, [_, _, _]}}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
     {reply, ok, State};
