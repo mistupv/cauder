@@ -267,8 +267,8 @@ do_trace(Module, Function, Args, Opts) ->
 
     {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
     Filename = filename:absname(filename:join(Dir, atom_to_list(Module) ++ ".beam")),
-    reload(TracedNode, Module, Binary, Filename),
-    reload(TracedNode, tracer_erlang),
+    load(TracedNode, Module, Binary, Filename),
+    load(TracedNode, tracer_erlang),
 
     MainPid = self(),
     TracedPid = spawn_link(TracedNode, tracer_erlang, start, [MainPid, Module, Function, Args]),
@@ -351,21 +351,21 @@ instrument(Module, Dir, StampMode) ->
     {Time, {ok, Module, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
     {Time, {Module, Binary}}.
 
--spec reload(Node, Module) -> ok when
+-spec load(Node, Module) -> ok when
     Node :: node(),
     Module :: module().
 
-reload(Node, Module) ->
+load(Node, Module) ->
     {Module, Binary, Filename} = code:get_object_code(Module),
-    reload(Node, Module, Binary, Filename).
+    load(Node, Module, Binary, Filename).
 
--spec reload(Node, Module, Binary, Filename) -> ok when
+-spec load(Node, Module, Binary, Filename) -> ok when
     Node :: node(),
     Module :: module(),
     Binary :: binary(),
     Filename :: file:filename().
 
-reload(Node, Module, Binary, Filename) ->
+load(Node, Module, Binary, Filename) ->
     rpc:call(Node, code, purge, [Module]),
     {module, Module} = rpc:call(Node, code, load_binary, [Module, Filename, Binary]),
     ok.
