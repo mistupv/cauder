@@ -40,6 +40,22 @@
 
 -type trace() :: #trace{}.
 
+-type some_options() :: #{
+    timeout => timeout(),
+    dir => file:filename(),
+    stamp_mode => distributed | centralized,
+    name => atom() | string(),
+    args => atom() | string()
+}.
+
+-type all_options() :: #{
+    timeout := timeout(),
+    dir := file:filename(),
+    stamp_mode := distributed | centralized,
+    name := atom() | string(),
+    args := atom() | string()
+}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -55,7 +71,7 @@
     Arguments :: [term()],
     Trace :: trace().
 
-trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, []).
+trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
 
 %%------------------------------------------------------------------------------
 %% @doc Traces the evaluation of the expression `apply(Mod, Fun, Args)'.
@@ -64,20 +80,24 @@ trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, []).
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: [Timeout | Dir | StampMode],
-    Timeout :: {timeout, timeout()},
-    Dir :: {dir, file:filename()},
-    StampMode :: {stamp_mode, distributed | centralized},
+    Options :: some_options(),
     Trace :: trace().
 
-trace(Mod, Fun, Args, Opts) ->
-    DefaultOpts = [
-        {timeout, 10000},
-        {dir, "."},
-        {mods, []},
-        {stamp_mode, centralized}
-    ],
-    do_trace(Mod, Fun, Args, Opts ++ DefaultOpts).
+trace(Mod, Fun, Args, Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a map with the default value for each of the available options.
+
+-spec default_options() -> all_options().
+
+default_options() ->
+    #{
+        timeout => 10000,
+        dir => ".",
+        stamp_mode => centralized,
+        name => "main",
+        args => []
+    }.
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -249,21 +269,18 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: [term()],
+    Options :: all_options(),
     Trace :: trace().
 
 do_trace(Module, Function, Args, Opts) ->
-    Timeout = proplists:get_value(timeout, Opts),
-    Dir = proplists:get_value(dir, Opts),
-    Mods = proplists:get_value(mods, Opts),
-    StampMode = proplists:get_value(stamp_mode, Opts),
-    Distributed = proplists:get_bool(distributed, Opts),
+    Timeout = maps:get(timeout, Opts),
+    Dir = maps:get(dir, Opts),
+    StampMode = maps:get(stamp_mode, Opts),
+    SlaveName = maps:get(name, Opts),
+    SlaveArgs = maps:get(args, Opts),
 
     [_Name, Host] = string:lexemes(atom_to_list(node()), [$@]),
-
-    % TODO detached?
-    % TODO node name
-    {ok, TracedNode} = slave:start_link(Host, trace),
+    {ok, TracedNode} = slave:start_link(Host, SlaveName, SlaveArgs),
 
     {CompTime, {Module, Binary}} = instrument(Module, Dir, StampMode),
     Filename = filename:absname(filename:join(Dir, atom_to_list(Module) ++ ".beam")),
@@ -311,16 +328,17 @@ do_trace(Module, Function, Args, Opts) ->
     Result = gen_server:call(?SERVER, get_result),
     gen_server:stop(?SERVER),
 
-    Node =
-        case Distributed of
-            true -> TracedNode;
-            false -> 'nonode@nohost'
-        end,
+    %% TODO
+    %%    Node =
+    %%        case Distributed of
+    %%            true -> TracedNode;
+    %%            false -> 'nonode@nohost'
+    %%        end,
 
     #trace{
         call = {Module, Function, Args},
         comp = CompTime,
-        node = Node,
+        node = TracedNode,
         pid = TracedPid,
         tracing = Tracing,
         result = Result,
