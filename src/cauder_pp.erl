@@ -30,20 +30,13 @@ process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
     LogEntry :: cauder_types:log_entry(),
     String :: string().
 
-log_entry({nodes, Nodes}) ->
-    "nodes(" ++ to_string(Nodes) ++ ")";
-log_entry({spawn, {Node, Pid}, success}) ->
-    "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
-log_entry({spawn, {Node, Pid}, failure}) ->
-    "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
-log_entry({send, Uid}) ->
-    "send(" ++ red(to_string(Uid)) ++ ")";
-log_entry({'receive', Uid}) ->
-    "rec(" ++ blue(to_string(Uid)) ++ ")";
-log_entry({start, NodeName, success}) ->
-    "start(" ++ green(to_string(NodeName)) ++ ")";
-log_entry({start, NodeName, failure}) ->
-    "start(" ++ red(to_string(NodeName)) ++ ")".
+log_entry({nodes, Nodes}) -> "nodes(" ++ to_string(Nodes) ++ ")";
+log_entry({spawn, {Node, Pid}, success}) -> "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_entry({spawn, {Node, Pid}, failure}) -> "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_entry({send, Uid}) -> "send(" ++ red(to_string(Uid)) ++ ")";
+log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")";
+log_entry({start, NodeName, success}) -> "start(" ++ green(to_string(NodeName)) ++ ")";
+log_entry({start, NodeName, failure}) -> "start(" ++ red(to_string(NodeName)) ++ ")".
 
 %%%=============================================================================
 
