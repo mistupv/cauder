@@ -12,8 +12,6 @@
 
 % TODO: Treat correctly errors to be considered as a value
 parse_transform(Forms, Opts) ->
-    put(modules_to_instrument, proplists:get_value(inst_mod, Opts)),
-    put(cur_dir, proplists:get_value(i, Opts)),
     put(atomic, atomics:new(1, [])),
     put(stamp_mode, proplists:get_value(stamp_mode, Opts)),
 
