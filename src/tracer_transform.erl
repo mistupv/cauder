@@ -19,9 +19,9 @@ parse_transform(Forms, Opts) ->
     IForms = [erl_syntax_lib:map(fun instrument/1, F) || F <- XForms],
     RForms = erl_syntax:revert_forms(IForms),
 
-    [Module] = [M || {attribute, _, module, M} <- XForms],
-    {ok, File} = file:open("./inst_" ++ atom_to_list(Module) ++ ".erl", [write]),
-    [io:format(File, "~s", [erl_pp:form(F, [{linewidth, 120}])]) || F <- RForms],
+    %[Module] = [M || {attribute, _, module, M} <- XForms],
+    %{ok, File} = file:open("./inst_" ++ atom_to_list(Module) ++ ".erl", [write]),
+    %[io:format(File, "~s", [erl_pp:form(F, [{linewidth, 120}])]) || F <- RForms],
 
     RForms.
 
