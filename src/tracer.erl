@@ -13,18 +13,23 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
+    % The pid of the tracer process, used to notify when the execution of the traced process has finished
     main_pid :: pid(),
     ets :: ets:tid(),
+    % A map between 'unique integers' and stamps
     stamps = #{} :: #{integer() => non_neg_integer()},
+    % The trace
     trace = #{} :: cauder_types:log_map(),
-    procs :: sets:set(pid()),
-    result :: undefined | {value, term()},
+    % A set with all the processes being traced
+    processes :: sets:set(pid()),
+    % The value returned by the function application
+    return = none :: none | {value, term()},
     slave_starters = #{} :: #{pid() => {node(), pid()}}
 }).
 
 -type state() :: #state{}.
 
--record(trace, {
+-record(result, {
     % Initial node
     node :: node(),
     % Initial pid
@@ -33,29 +38,31 @@
     call :: {module(), atom(), [term()]},
     % Whether the execution completed or the timeout was reached
     tracing :: success | timeout,
-    % Result of the function application
-    result :: undefined | {value, term()},
+    % The value returned by the function application
+    return = none :: none | {value, term()},
     % Compile time in microseconds
     comp :: non_neg_integer(),
     % Execution time in microseconds
     exec :: non_neg_integer(),
-    log = #{} :: cauder_types:log_map()
+    trace = #{} :: cauder_types:log_map()
 }).
 
--type trace() :: #trace{}.
+-type result() :: #result{}.
 
 -type some_options() :: #{
     dir => file:filename(),
     modules => [atom()],
     timeout => timeout(),
-    stamp_mode => distributed | centralized
+    stamp_mode => distributed | centralized,
+    output => file:filename()
 }.
 
 -type all_options() :: #{
     dir := file:filename(),
     modules := [atom()],
     timeout := timeout(),
-    stamp_mode := distributed | centralized
+    stamp_mode := distributed | centralized,
+    output := file:filename()
 }.
 
 %%%===================================================================
@@ -71,7 +78,7 @@
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Trace :: trace().
+    Trace :: result().
 
 trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
 
@@ -83,7 +90,7 @@ trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
     Function :: atom(),
     Arguments :: [term()],
     Options :: some_options(),
-    Trace :: trace().
+    Trace :: result().
 
 trace(Mod, Fun, Args, Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
 
@@ -97,7 +104,8 @@ default_options() ->
         dir => ".",
         modules => [],
         timeout => 10000,
-        stamp_mode => centralized
+        stamp_mode => centralized,
+        output => []
     }.
 
 %%%===================================================================
@@ -116,7 +124,7 @@ init({MainPid, TracedPid}) ->
     {ok, #state{
         main_pid = MainPid,
         ets = ets:new(?MODULE, []),
-        procs = sets:add_element(TracedPid, sets:new())
+        processes = sets:add_element(TracedPid, sets:new())
     }}.
 
 %%------------------------------------------------------------------------------
@@ -132,8 +140,8 @@ init({MainPid, TracedPid}) ->
 handle_call(get_trace, _From, #state{trace = Trace} = State) ->
     ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
     {reply, {ok, ReversedTrace}, State};
-handle_call(get_result, _From, #state{result = Result} = State) ->
-    {reply, Result, State};
+handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
+    {reply, ReturnValue, State};
 %% ========== 'call' trace messages ========== %%
 %% Generate message stamp
 handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
@@ -141,8 +149,8 @@ handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From
     {reply, ok, State};
 %% ========== 'return_from' trace messages ========== %%
 %% Save return value
-handle_call({trace, _Pid, return_from, {tracer_erlang, apply, 3}, Result}, _From, #state{result = undefined} = State) ->
-    {reply, ok, State#state{result = {value, Result}}};
+handle_call({trace, _Pid, return_from, {tracer_erlang, apply, 3}, ReturnValue}, _From, #state{return = none} = State) ->
+    {reply, ok, State#state{return = {value, ReturnValue}}};
 %% Call to `nodes()`
 handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
     State1 = add_to_trace(Pid, {nodes, Nodes}, State),
@@ -186,13 +194,13 @@ handle_call({trace, Pid, spawn, ChildPid, {_, _, _}}, _From, State) ->
     ChildNode = node(ChildPid),
     ChildIdx = pid_index(ChildPid),
     State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, success}, State),
-    State2 = State1#state{procs = sets:add_element(ChildPid, State1#state.procs)},
+    State2 = State1#state{processes = sets:add_element(ChildPid, State1#state.processes)},
     {reply, ok, State2};
 %% ========== 'exit' trace messages ========== %%
 %% Process exited
-handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, procs = ProcSet0} = State) ->
+handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, processes = ProcSet0} = State) ->
     ProcSet1 = sets:del_element(Pid, ProcSet0),
-    State1 = State#state{procs = ProcSet1},
+    State1 = State#state{processes = ProcSet1},
     case sets:is_empty(ProcSet1) of
         true -> MainPid ! finished;
         false -> ok
@@ -252,7 +260,7 @@ handle_info(Info, State) ->
     State :: state().
 
 terminate(_Reason, State) ->
-    ProcSet = State#state.procs,
+    ProcSet = State#state.processes,
     case sets:is_empty(ProcSet) of
         true -> ok;
         false -> lists:foreach(fun(P) -> true = erlang:exit(P, kill) end, sets:to_list(ProcSet))
@@ -279,13 +287,14 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
     Function :: atom(),
     Arguments :: [term()],
     Options :: all_options(),
-    Trace :: trace().
+    Trace :: result().
 
 do_trace(Module, Function, Args, Opts) ->
     Dir = maps:get(dir, Opts),
     Modules = maps:get(modules, Opts),
     Timeout = maps:get(timeout, Opts),
     StampMode = maps:get(stamp_mode, Opts),
+    Output = maps:get(output, Opts),
 
     CompTime = lists:foldl(
         fun(Mod, AccTime) ->
@@ -334,19 +343,26 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:stop(),
 
     {ok, Trace} = gen_server:call(?SERVER, get_trace),
-    Result = gen_server:call(?SERVER, get_result),
+    ReturnValue = gen_server:call(?SERVER, get_return_value),
     gen_server:stop(?SERVER),
 
-    #trace{
-        call = {Module, Function, Args},
-        comp = CompTime,
+    Result = #result{
         node = node(),
         pid = TracedPid,
+        call = {Module, Function, Args},
         tracing = Tracing,
-        result = Result,
+        return = ReturnValue,
+        comp = CompTime,
         exec = ExecTime,
-        log = Trace
-    }.
+        trace = Trace
+    },
+
+    case Output of
+        [] -> ok;
+        _ -> write_trace(Output, Result)
+    end,
+
+    Result.
 
 -spec instrument(Module, Dir, StampMode) -> {Time, {Module, Binary}} when
     Module :: module(),
@@ -422,7 +438,7 @@ add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, trace = Tr
     Pid :: pid(),
     Index :: non_neg_integer().
 
-pid_index(Pid) ->
+pid_index(Pid) when is_pid(Pid) ->
     [_Node, Index, _Serial] = string:lexemes(pid_to_list(Pid), "<.>"),
     list_to_integer(Index).
 
@@ -442,3 +458,33 @@ get_uid(Stamp, Map, Table) ->
         {ok, Uid} ->
             {Uid, Map}
     end.
+
+-spec write_trace(Dir, Result) -> ok when
+    Dir :: file:filename(),
+    Result :: result().
+
+write_trace(Dir, Result) ->
+    % This not compile time safe but there is no other way to keep it human-friendly and simple
+    [result | Values] = tuple_to_list(Result),
+    Fields = record_info(fields, result),
+    {Trace, Map0} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
+    Map1 = maps:update_with(pid, fun(Pid) -> pid_index(Pid) end, Map0),
+
+    ok = filelib:ensure_dir(Dir),
+    case filelib:is_dir(Dir) of
+        true -> ok;
+        false -> ok = file:make_dir(Dir)
+    end,
+
+    ResultFile = filename:join(Dir, "trace_result.log"),
+    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(Map1))),
+    ok = file:write_file(ResultFile, ResultContent),
+
+    lists:foreach(
+        fun({Index, List}) ->
+            File = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
+            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, List)),
+            ok = file:write_file(File, Content)
+        end,
+        maps:to_list(Trace)
+    ).
