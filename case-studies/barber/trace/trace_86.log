@@ -1,0 +1,5 @@
+{spawn,{nonode@nohost,90},success}.
+{spawn,{nonode@nohost,91},success}.
+{spawn,{nonode@nohost,92},success}.
+{deliver,13}.
+{'receive',13}.

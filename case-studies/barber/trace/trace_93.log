@@ -1,0 +1,15 @@
+{send,0}.
+{deliver,3}.
+{'receive',3}.
+{send,4}.
+{deliver,5}.
+{'receive',5}.
+{send,6}.
+{deliver,7}.
+{'receive',7}.
+{deliver,8}.
+{send,9}.
+{send,10}.
+{'receive',8}.
+{send,12}.
+{send,14}.
