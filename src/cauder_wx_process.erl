@@ -271,7 +271,7 @@ update_log(_, #wx_state{pid = undefined}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
     wxTextCtrl:clear(cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl)),
     ok;
-update_log(_, #wx_state{system = #sys{logs = LMap}, pid = Pid}) ->
+update_log(_, #wx_state{system = #sys{traces = LMap}, pid = Pid}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
 
     LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),

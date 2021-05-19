@@ -10,6 +10,8 @@
 
 -ignore_xref([trace/3, trace/4]).
 
+-include("cauder.hrl").
+
 -define(SERVER, ?MODULE).
 
 -record(state, {
@@ -17,9 +19,9 @@
     main_pid :: pid(),
     ets :: ets:tid(),
     % A map between 'unique integers' and stamps
-    stamps = #{} :: #{integer() => non_neg_integer()},
+    stamps = maps:new() :: #{integer() => non_neg_integer()},
     % The trace
-    trace = #{} :: cauder_types:log_map(),
+    traces = maps:new() :: cauder_types:trace_map(),
     % A set with all the processes being traced
     processes :: sets:set(pid()),
     % The value returned by the function application
@@ -28,26 +30,6 @@
 }).
 
 -type state() :: #state{}.
-
--record(result, {
-    % Initial node
-    node :: node(),
-    % Initial pid
-    pid :: pid(),
-    % Initial function call
-    call :: {module(), atom(), [term()]},
-    % Whether the execution completed or the timeout was reached
-    tracing :: success | timeout,
-    % The value returned by the function application
-    return = none :: none | {value, term()},
-    % Compile time in microseconds
-    comp :: non_neg_integer(),
-    % Execution time in microseconds
-    exec :: non_neg_integer(),
-    trace = #{} :: cauder_types:log_map()
-}).
-
--type result() :: #result{}.
 
 -type some_options() :: #{
     dir => file:filename(),
@@ -74,23 +56,23 @@
 %%
 %% @see trace/4
 
--spec trace(Module, Function, Arguments) -> Trace when
+-spec trace(Module, Function, Arguments) -> TraceResult when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Trace :: result().
+    TraceResult :: cauder_types:trace_result().
 
 trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
 
 %%------------------------------------------------------------------------------
 %% @doc Traces the evaluation of the expression `apply(Mod, Fun, Args)'.
 
--spec trace(Module, Function, Arguments, Options) -> Trace when
+-spec trace(Module, Function, Arguments, Options) -> TraceResult when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: some_options(),
-    Trace :: result().
+    TraceResult :: cauder_types:trace_result().
 
 trace(Mod, Fun, Args, Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
 
@@ -124,7 +106,7 @@ init({MainPid, TracedPid}) ->
     {ok, #state{
         main_pid = MainPid,
         ets = ets:new(?MODULE, []),
-        processes = sets:add_element(TracedPid, sets:new())
+        processes = sets:from_list([TracedPid])
     }}.
 
 %%------------------------------------------------------------------------------
@@ -137,7 +119,7 @@ init({MainPid, TracedPid}) ->
     Reply :: Reply,
     NewState :: state().
 
-handle_call(get_trace, _From, #state{trace = Trace} = State) ->
+handle_call(get_traces, _From, #state{traces = Trace} = State) ->
     ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
     {reply, {ok, ReversedTrace}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
@@ -213,6 +195,9 @@ handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _From, State) ->
     {reply, ok, State};
+handle_call({trace, _, send_to_non_existing_process, {{stamp, _Stamp}, _Message}, _}, _From, State) ->
+    % TODO Log lost messages
+    {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, register, _}, _From, State) ->
@@ -282,12 +267,12 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% Internal functions
 %%%=============================================================================
 
--spec do_trace(Module, Function, Arguments, Options) -> Trace when
+-spec do_trace(Module, Function, Arguments, Options) -> TraceResult when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: all_options(),
-    Trace :: result().
+    TraceResult :: cauder_types:trace_result().
 
 do_trace(Module, Function, Args, Opts) ->
     Dir = maps:get(dir, Opts),
@@ -310,7 +295,7 @@ do_trace(Module, Function, Args, Opts) ->
     load(tracer_erlang),
 
     MainPid = self(),
-    TracedPid = spawn_link(tracer_erlang, start, [MainPid, Module, Function, Args]),
+    TracedPid = spawn(tracer_erlang, start, [MainPid, Module, Function, Args]),
     {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {MainPid, TracedPid}, []),
 
     dbg:tracer(process, {fun trace_handler/2, []}),
@@ -342,19 +327,19 @@ do_trace(Module, Function, Args, Opts) ->
 
     dbg:stop(),
 
-    {ok, Trace} = gen_server:call(?SERVER, get_trace),
+    {ok, Traces} = gen_server:call(?SERVER, get_traces),
     ReturnValue = gen_server:call(?SERVER, get_return_value),
     gen_server:stop(?SERVER),
 
-    Result = #result{
+    Result = #trace_result{
         node = node(),
-        pid = TracedPid,
+        pid = pid_index(TracedPid),
         call = {Module, Function, Args},
         tracing = Tracing,
         return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
-        trace = Trace
+        traces = Traces
     },
 
     case Output of
@@ -411,14 +396,14 @@ trace_handler(Trace, []) ->
 
 -spec add_to_trace(Pid, Entry, State) -> NewState when
     Pid :: pid(),
-    Entry :: cauder_types:log_entry(),
+    Entry :: cauder_types:trace_entry(),
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Entry, #state{trace = Trace0} = State) ->
+add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
     Index = pid_index(Pid),
     Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
-    State#state{trace = Trace1}.
+    State#state{traces = Trace1}.
 
 -spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
     Pid :: pid(),
@@ -427,12 +412,12 @@ add_to_trace(Pid, Entry, #state{trace = Trace0} = State) ->
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) when is_atom(Tag) ->
+add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, traces = Trace0} = State) when is_atom(Tag) ->
     PidIndex = pid_index(Pid),
     {Uid, StampMap1} = get_uid(Stamp, StampMap0, Table),
     Entry = {Tag, Uid},
     Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
-    State#state{stamps = StampMap1, trace = Trace1}.
+    State#state{stamps = StampMap1, traces = Trace1}.
 
 -spec pid_index(Pid) -> Index when
     Pid :: pid(),
@@ -459,16 +444,15 @@ get_uid(Stamp, Map, Table) ->
             {Uid, Map}
     end.
 
--spec write_trace(Dir, Result) -> ok when
+-spec write_trace(Dir, TraceResult) -> ok when
     Dir :: file:filename(),
-    Result :: result().
+    TraceResult :: cauder_types:trace_result().
 
-write_trace(Dir, Result) ->
+write_trace(Dir, TraceResult) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [result | Values] = tuple_to_list(Result),
-    Fields = record_info(fields, result),
-    {Trace, Map0} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
-    Map1 = maps:update_with(pid, fun(Pid) -> pid_index(Pid) end, Map0),
+    [trace_result | Values] = tuple_to_list(TraceResult),
+    Fields = record_info(fields, trace_result),
+    {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),
     case filelib:is_dir(Dir) of
@@ -477,7 +461,7 @@ write_trace(Dir, Result) ->
     end,
 
     ResultFile = filename:join(Dir, "trace_result.log"),
-    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(Map1))),
+    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(ResultInfo))),
     ok = file:write_file(ResultFile, ResultContent),
 
     lists:foreach(
@@ -486,5 +470,5 @@ write_trace(Dir, Result) ->
             Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, List)),
             ok = file:write_file(File, Content)
         end,
-        maps:to_list(Trace)
+        maps:to_list(Traces)
     ).

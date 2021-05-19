@@ -534,7 +534,7 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
     ok;
-update_replay(_, #wx_state{system = #sys{logs = LMap}, pid = Pid}) ->
+update_replay(_, #wx_state{system = #sys{traces = LMap}, pid = Pid}) ->
     Filter = fun
         ({nodes, {_}}) -> false;
         ({start, _, failure}) -> false;
@@ -557,13 +557,26 @@ update_replay(_, #wx_state{system = #sys{logs = LMap}, pid = Pid}) ->
 
             #{spawn := SpawnPids, send := SendUids, 'receive' := ReceiveUids, start := StartedNids} =
                 lists:foldl(
-                    fun({K, V}, Map) -> maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, Map) end,
+                    fun(Entry, Map) ->
+                        try
+                            {K, V} =
+                                case Entry of
+                                    {send, _} -> Entry;
+                                    {'receive', _} -> Entry;
+                                    {start, Node, _} -> {start, Node};
+                                    {spawn, {_Node, Pid}, _} -> {spawn, Pid};
+                                    _ -> throw(skip)
+                                end,
+                            maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
+                        catch
+                            throw:skip -> Map
+                        end
+                    end,
                     #{
                         spawn => ordsets:new(),
                         send => ordsets:new(),
                         'receive' => ordsets:new(),
-                        start => ordsets:new(),
-                        nodes => ordsets:new()
+                        start => ordsets:new()
                     },
                     lists:flatten(maps:values(LMap))
                 ),

@@ -238,12 +238,12 @@ replay_spawn_finish(Pid, Time) ->
 replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
 
 -spec replay_start_start(Node) -> ok when
-    Node :: cauder_types:net_node().
+    Node :: node().
 
 replay_start_start(Node) -> set_text(io_lib:format(?REPLAY_START_START, [Node])).
 
 -spec replay_start_finish(Node, Time) -> ok when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Time :: non_neg_integer().
 
 replay_start_finish(Node, Time) ->
@@ -344,7 +344,7 @@ rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 %%%=============================================================================
 
 -spec rollback_start_begin(Node) -> ok when
-    Node :: cauder_types:net_node().
+    Node :: node().
 
 rollback_start_begin(Node) -> set_text(io_lib:format(?ROLLBACK_START_BEGIN, [Node])).
 

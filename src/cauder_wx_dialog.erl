@@ -25,7 +25,7 @@ when
     EntryPoints :: [mfa()],
     Module :: module(),
     Function :: atom(),
-    NodeName :: cauder_types:net_node(),
+    NodeName :: node(),
     Args :: cauder_types:af_args(),
     TracePath :: file:filename().
 
@@ -153,9 +153,9 @@ start_session(Parent, MFAs) ->
                                     N1 = wxTextCtrl:getValue(NodeName),
                                     case cauder_utils:check_node_name(N1) of
                                         ok ->
-                                            ReturnPid ! {manual, {M1, F1, N1, Args}};
+                                            ReturnPid ! {manual, {M1, F1, list_to_atom(N1), Args}};
                                         not_provided ->
-                                            ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
+                                            ReturnPid ! {manual, {M1, F1, 'nonode@nohost', Args}};
                                         error ->
                                             Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
                                             Options = [
