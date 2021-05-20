@@ -117,21 +117,21 @@
 
 %% ---------- Main Panel ---------- %%
 
--define(CODE_Code_Control, 2001).
--define(CODE_Expression_Control, 2002).
+-define(CODE_Code_Control, 1800).
+-define(CODE_Expression_Control, 1900).
 
 %% -----
 
--define(ACTION_Process, 2100).
+-define(ACTION_Process, 2000).
 
 %% -----
 
--define(ACTION_Manual, 2110).
+-define(ACTION_Manual, 2100).
 
--define(ACTION_Manual_Steps, 2111).
--define(ACTION_Manual_Scheduler, 2112).
--define(ACTION_Manual_Forward_Button, 2114).
--define(ACTION_Manual_Backward_Button, 2115).
+-define(ACTION_Manual_Steps, 2101).
+-define(ACTION_Manual_Scheduler, 2102).
+-define(ACTION_Manual_Forward_Button, 2103).
+-define(ACTION_Manual_Backward_Button, 2104).
 
 -define(Is_Step_Button(Button),
     (Button =:= ?ACTION_Manual_Forward_Button orelse Button =:= ?ACTION_Manual_Backward_Button)
@@ -139,12 +139,12 @@
 
 %% -----
 
--define(ACTION_Automatic, 2130).
+-define(ACTION_Automatic, 2200).
 
--define(ACTION_Automatic_Steps, 2131).
--define(ACTION_Automatic_Scheduler, 2132).
--define(ACTION_Automatic_Forward_Button, 2133).
--define(ACTION_Automatic_Backward_Button, 2134).
+-define(ACTION_Automatic_Steps, 2210).
+-define(ACTION_Automatic_Scheduler, 2211).
+-define(ACTION_Automatic_Forward_Button, 2212).
+-define(ACTION_Automatic_Backward_Button, 2213).
 
 -define(Is_Automatic_Button(Button),
     (Button =:= ?ACTION_Automatic_Forward_Button orelse Button =:= ?ACTION_Automatic_Backward_Button)
@@ -152,79 +152,83 @@
 
 %% -----
 
--define(ACTION_Replay, 21300).
+-define(ACTION_Replay, 2300).
 
--define(ACTION_Replay_Steps, 21301).
--define(ACTION_Replay_Spawn, 21302).
--define(ACTION_Replay_Send, 21303).
--define(ACTION_Replay_Receive, 21304).
--define(ACTION_Replay_Start, 21305).
+-define(ACTION_Replay_Steps, 2310).
+-define(ACTION_Replay_Send, 2311).
+-define(ACTION_Replay_Deliver, 2312).
+-define(ACTION_Replay_Receive, 2313).
+-define(ACTION_Replay_Start, 2314).
+-define(ACTION_Replay_Spawn, 2315).
 
--define(ACTION_Replay_Steps_Button, 21306).
--define(ACTION_Replay_Spawn_Button, 21307).
--define(ACTION_Replay_Send_Button, 21308).
--define(ACTION_Replay_Receive_Button, 21309).
--define(ACTION_Replay_Start_Button, 21310).
--define(ACTION_Replay_FullLog_Button, 21311).
+-define(ACTION_Replay_Steps_Button, 2320).
+-define(ACTION_Replay_Send_Button, 2321).
+-define(ACTION_Replay_Deliver_Button, 2322).
+-define(ACTION_Replay_Receive_Button, 2323).
+-define(ACTION_Replay_Start_Button, 2324).
+-define(ACTION_Replay_Spawn_Button, 2325).
+-define(ACTION_Replay_FullLog_Button, 2326).
 
 %% -----
 
--define(ACTION_Rollback, 2170).
+-define(ACTION_Rollback, 2400).
 
--define(ACTION_Rollback_Steps, 2141).
--define(ACTION_Rollback_Spawn, 2142).
--define(ACTION_Rollback_Send, 2143).
--define(ACTION_Rollback_Receive, 2144).
--define(ACTION_Rollback_Variable, 2145).
--define(ACTION_Rollback_Start, 2146).
+-define(ACTION_Rollback_Steps, 2410).
+-define(ACTION_Rollback_Send, 2411).
+-define(ACTION_Rollback_Deliver, 2412).
+-define(ACTION_Rollback_Receive, 2413).
+-define(ACTION_Rollback_Start, 2414).
+-define(ACTION_Rollback_Spawn, 2415).
+-define(ACTION_Rollback_Variable, 2416).
 
--define(ACTION_Rollback_Steps_Button, 2147).
--define(ACTION_Rollback_Spawn_Button, 2148).
--define(ACTION_Rollback_Send_Button, 2149).
--define(ACTION_Rollback_Receive_Button, 2150).
--define(ACTION_Rollback_Variable_Button, 2151).
--define(ACTION_Rollback_Start_Button, 2152).
+-define(ACTION_Rollback_Steps_Button, 2420).
+-define(ACTION_Rollback_Send_Button, 2421).
+-define(ACTION_Rollback_Deliver_Button, 2422).
+-define(ACTION_Rollback_Receive_Button, 2423).
+-define(ACTION_Rollback_Start_Button, 2424).
+-define(ACTION_Rollback_Spawn_Button, 2425).
+-define(ACTION_Rollback_Variable_Button, 2426).
 
 %% ----- System Info Panel ----- %%
 
--define(SYSTEM_Panel, 2200).
+-define(SYSTEM_Panel, 2500).
 
--define(SYSTEM_Notebook_NodesAndMail, 2201).
+-define(SYSTEM_Notebook_NodesAndMail, 2510).
 % Tab index
 -define(SYSTEM_Notebook_Tab_Nodes, 0).
 % Tab index
 -define(SYSTEM_Notebook_Tab_Mail, 1).
 
--define(SYSTEM_Notebook_TraceAndRollLog, 2202).
+-define(SYSTEM_Notebook_TraceAndRollLog, 2520).
 % Tab index
 -define(SYSTEM_Notebook_Tab_Trace, 0).
 % Tab index
 -define(SYSTEM_Notebook_Tab_RollLog, 1).
 
--define(SYSTEM_Nodes, 2210).
--define(SYSTEM_Mail, 2211).
--define(SYSTEM_Trace, 2212).
--define(SYSTEM_RollLog, 2213).
+-define(SYSTEM_Nodes, 2530).
+-define(SYSTEM_Mail, 2531).
+-define(SYSTEM_Trace, 2532).
+-define(SYSTEM_RollLog, 2533).
 
 %% ----- Process Info Panel ----- %%
 
--define(PROCESS_Panel, 2300).
+-define(PROCESS_Panel, 2600).
 
--define(PROCESS_Bindings_Panel, 2301).
--define(PROCESS_Bindings_Control, 2302).
+-define(PROCESS_Bindings_Panel, 2610).
+-define(PROCESS_Bindings_Control, 2611).
 
--define(PROCESS_Stack_Panel, 2303).
--define(PROCESS_Stack_Control, 2304).
+-define(PROCESS_Stack_Panel, 2620).
+-define(PROCESS_Stack_Control, 2621).
 
--define(PROCESS_Log_Panel, 2305).
--define(PROCESS_Log_Control, 2306).
+-define(PROCESS_Log_Panel, 2630).
+-define(PROCESS_Log_Control, 2631).
 
--define(PROCESS_History_Panel, 2307).
--define(PROCESS_History_Control, 2308).
+-define(PROCESS_History_Panel, 2640).
+-define(PROCESS_History_Control, 2641).
 
 %% ---------- Status bar ---------- %%
 
--define(STATUS_BAR, 2400).
+-define(STATUS_BAR, 2999).
 
 %% -------------------- Process Scheduler strings -------------------- %%
 
