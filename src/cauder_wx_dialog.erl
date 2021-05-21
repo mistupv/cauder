@@ -107,7 +107,7 @@ start_session(Parent, MFAs) ->
     wxPanel:setSizer(ReplayPanel, ReplaySizer),
 
     BasePath = cauder:get_path(),
-    TracePath = filename:join(BasePath, "results"),
+    TracePath = filename:join(BasePath, "trace"),
     PickerPath =
         case filelib:is_dir(TracePath) of
             true -> TracePath;
