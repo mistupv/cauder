@@ -54,7 +54,7 @@ step(Sys, Pid, Sched, Mode) ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, Node, M, F, []},
             case extract_log(LMap, Pid, spawn) of
-                {found, {spawn, _N, success, NewPid}, NewLog} ->
+                {found, {spawn, {_N, NewPid}, success}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
@@ -68,14 +68,14 @@ step(Sys, Pid, Sched, Mode) ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, N, M, F, []},
             case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, _N, success, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
                         inline => true,
                         fun_literal => FunLiteral
                     });
-                {{found, {spawn, _N, failure, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, {_N, NewPid}, failure}, NewLog}, _, _} ->
                     fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
                         new_log => NewLog,
@@ -92,18 +92,18 @@ step(Sys, Pid, Sched, Mode) ->
         {spawn, VarPid, M, F, As} ->
             CLabel = {spawn, VarPid, Node, M, F, As},
             case extract_log(LMap, Pid, spawn) of
-                {found, {spawn, _N, success, NewPid}, NewLog} ->
+                {found, {spawn, {_N, NewPid}, success}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
-                {found, {spawn, _N, failure, NewPid}, NewLog} ->
+                {found, {spawn, {_N, NewPid}, failure}, NewLog} ->
                     fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
                 not_found ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{})
             end;
         {spawn, _VarPid, N, _M, _F, _As} ->
             case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, _N, failure, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, {_N, NewPid}, failure}, NewLog}, _, _} ->
                     fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-                {{found, {spawn, _N, success, NewPid}, NewLog}, _, _} ->
+                {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
                     fwd_spawn_s(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     fwd_spawn_f(P0, Result, Sys, #{});
@@ -117,9 +117,9 @@ step(Sys, Pid, Sched, Mode) ->
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
             CLabel = {start, VarNode, list_to_atom(Host), NewName},
             case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, success, N}, NewLog}, _, _} ->
+                {{found, {start, N, success}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, failure, N}, NewLog}, _, _} ->
+                {{found, {start, N, failure}, NewLog}, _, _} ->
                     fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     error(no_alive);
@@ -131,9 +131,9 @@ step(Sys, Pid, Sched, Mode) ->
         {start, _, Host, NewName} ->
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
             case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, success, N}, NewLog}, _, _} ->
+                {{found, {start, N, success}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, failure, N}, NewLog}, _, _} ->
+                {{found, {start, N, failure}, NewLog}, _, _} ->
                     fwd_start_f(P0, Result, Sys, #{node => N, new_log => NewLog});
                 {_, 'nonode@nohost', _} ->
                     error(no_alive);
@@ -337,7 +337,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, 
     case Log of
         not_found ->
             ?RULE_START;
-        {found, {spawn, Node, Result, _}, _} ->
+        {found, {spawn, {Node, _}, Result}, _} ->
             case {Result, lists:member(Node, Nodes)} of
                 {success, false} -> ?NOT_EXP;
                 {_, _} -> ?RULE_START
@@ -348,7 +348,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, 
     case Log of
         not_found ->
             ?RULE_START;
-        {found, {start, Result, Node}, _} ->
+        {found, {start, Node, Result}, _} ->
             FailedSpawnsExist = cauder_utils:find_process_with_failed_spawn(LMap, Node),
             FutureReads = cauder_utils:find_process_with_future_reads(LMap, Node),
             NodeAlreadyExists = lists:member(Node, Nodes),
@@ -375,15 +375,15 @@ extract_log(LMap, Pid, nodes) ->
     end;
 extract_log(LMap, Pid, start) ->
     case LMap of
-        #{Pid := [{start, {Result, Node}} | RestLog]} ->
-            {found, {start, Result, Node}, RestLog};
+        #{Pid := [{start, Node, Result} | RestLog]} ->
+            {found, {start, Node, Result}, RestLog};
         _ ->
             not_found
     end;
 extract_log(LMap, Pid, spawn) ->
     case LMap of
-        #{Pid := [{spawn, {Node, Result, LogPid}} | RestLog]} ->
-            {found, {spawn, Node, Result, LogPid}, RestLog};
+        #{Pid := [{spawn, {Node, LogPid}, Result} | RestLog]} ->
+            {found, {spawn, {Node, LogPid}, Result}, RestLog};
         _ ->
             not_found
     end;

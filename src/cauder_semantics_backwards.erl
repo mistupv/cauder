@@ -66,7 +66,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                     false -> failure;
                     _ -> success
                 end,
-            NewLog = {spawn, {Node, Result, Gid}},
+            NewLog = {spawn, {Node, Gid}, Result},
             Sys#sys{
                 mail = Mail,
                 procs = maps:remove(Gid, PMap#{Pid => P}),

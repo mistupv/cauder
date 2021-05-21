@@ -101,10 +101,10 @@ replay_step(#sys{traces = LMap} = Sys, Pid) ->
     case options(Sys, Pid) of
         [] ->
             case maps:get(Pid, LMap) of
-                [{spawn, {Node, Pid}, success} | _] -> replay_spawn(Sys, '_', {spawn, {Node, Pid}, success});
-                [{start, Node, success} | _] -> replay_start(Sys, Node);
                 [{send, Uid} | _] -> replay_send(Sys, Uid);
-                [{'receive', Uid} | _] -> replay_receive(Sys, Uid)
+                [{'receive', Uid} | _] -> replay_receive(Sys, Uid);
+                [{start, Node, success} | _] -> replay_start(Sys, Node);
+                [{spawn, {Node, ChildPid}, success} | _] -> replay_spawn(Sys, '_', {spawn, {Node, ChildPid}, success})
             end;
         _ ->
             cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_Random, replay)
