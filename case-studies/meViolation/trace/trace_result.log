@@ -1,6 +1,7 @@
-call "meViolation:main()"
-comp "examples/meViolation.erl" 77362
-main_pid 93
-tracing timeout
-result <9109.100.0>
-exec 100001554
+{call,{meViolation,main,[]}}.
+{comp,203942}.
+{exec,10001082}.
+{node,nonode@nohost}.
+{pid,81}.
+{return,{value,<0.88.0>}}.
+{tracing,timeout}.
