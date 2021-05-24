@@ -1,4 +1,4 @@
-{spawn,{nonode@nohost,93},success}.
+{spawn,{nonode@nohost,88},success}.
 {deliver,0}.
 {deliver,1}.
 {deliver,2}.
@@ -6,9 +6,9 @@
 {'receive',1}.
 {send,3}.
 {'receive',2}.
-{deliver,4}.
-{send,5}.
-{'receive',4}.
+{send,4}.
+{deliver,5}.
+{'receive',5}.
 {deliver,6}.
 {send,7}.
 {'receive',6}.
@@ -20,5 +20,6 @@
 {'receive',10}.
 {deliver,12}.
 {'receive',12}.
-{deliver,14}.
-{'receive',14}.
+{send,13}.
+{deliver,15}.
+{'receive',15}.
