@@ -155,15 +155,15 @@ load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 %%
 %% @see task_start/2
 
--spec init_system(Module, Function, Node, Arguments) -> Reply when
+-spec init_system(Node, Module, Function, Arguments) -> Reply when
+    Node :: node(),
     Module :: module(),
     Function :: atom(),
-    Node :: node(),
     Arguments :: cauder_types:af_args(),
     Reply :: ok | busy.
 
-init_system(Mod, Fun, Node, Args) ->
-    case gen_server:call(?SERVER, {user, {start, {Mod, Fun, Node, Args}}}) of
+init_system(Node, Mod, Fun, Args) ->
+    case gen_server:call(?SERVER, {user, {start_manual, {Node, {Mod, Fun, Args}}}}) of
         {ok, _} -> ok;
         busy -> busy
     end.
@@ -185,7 +185,7 @@ init_system(Mod, Fun, Node, Args) ->
     Reply :: ok | busy.
 
 init_system(Path) ->
-    case gen_server:call(?SERVER, {user, {start, Path}}) of
+    case gen_server:call(?SERVER, {user, {start_replay, Path}}) of
         {ok, _} -> ok;
         busy -> busy
     end.
@@ -639,7 +639,8 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
     Fun =
         case Task of
             load -> fun task_load/2;
-            start -> fun task_start/2;
+            start_manual -> fun task_start_manual/2;
+            start_replay -> fun task_start_replay/2;
             step -> fun task_step/2;
             step_multiple -> fun task_step_multiple/2;
             replay_steps -> fun task_replay_steps/2;
@@ -768,33 +769,37 @@ task_load(File, System) ->
 
     {success, {File, Module}, Time, System}.
 
--spec task_start(MFA | LogPath, System :: undefined) -> task_result() when
+-spec task_start_manual({Node, MFA}, System :: undefined) -> task_result() when
+    Node :: node(),
     MFA :: {Module, Function, Arguments},
     Module :: module(),
     Function :: atom(),
-    Arguments :: [cauder_types:af_literal()],
-    LogPath :: file:filename().
+    Arguments :: [cauder_types:af_literal()].
 
-task_start({M, F, N, As}, undefined) ->
+task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->
                 Pid = cauder_utils:fresh_pid(),
                 Proc = #proc{
-                    node = list_to_atom(N),
+                    node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(M, F, As)],
-                    spf = {M, F, length(As)}
+                    exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
+                    spf = {Mod, Fun, length(Args)}
                 },
                 #sys{
                     procs = #{Pid => Proc},
-                    nodes = [list_to_atom(N)]
+                    nodes = [Node]
                 }
             end
         ),
 
-    {success, {}, Time, System};
-task_start(TracePath, undefined) ->
+    {success, {}, Time, System}.
+
+-spec task_start_replay(TracePath, System :: undefined) -> task_result() when
+    TracePath :: file:filename().
+
+task_start_replay(TracePath, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->

@@ -602,6 +602,9 @@ load_trace(Dir) ->
                 "trace_" ++ StringPid = filename:basename(File, ".log"),
                 Pid = list_to_integer(StringPid),
                 {ok, Terms0} = file:consult(File),
+
+                find_last_message_uid(Terms0),
+
                 % TODO Keep delivery events
                 Terms1 = lists:filter(
                     fun
@@ -625,6 +628,25 @@ load_trace(Dir) ->
         exec = ExecTime,
         traces = Traces
     }.
+
+-spec find_last_message_uid(Terms) -> ok when
+    Terms :: [cauder_types:trace_entry()].
+
+find_last_message_uid(Terms) ->
+    AllUids = lists:filtermap(
+        fun
+            ({send, Uid}) -> {true, Uid};
+            (_) -> false
+        end,
+        Terms
+    ),
+    case AllUids of
+        [] ->
+            ok;
+        _ ->
+            true = ets:insert(?APP_DB, {last_uid, lists:max(AllUids)}),
+            ok
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether a process has finished execution or not.
