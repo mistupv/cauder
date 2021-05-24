@@ -129,12 +129,44 @@ be created in the root of the project.
 
 ## Creating a log
 
-To run CauDEr in replay mode you will first need to create a log, for that
-purpose you can use the [Tracer](https://github.com/mistupv/tracer) tool.
+To trace the execution of a function call you should use either the `tracer:trace/3` or `tracer:trace/4` function. Both
+functions accept as their first three argument the components of a function application, i.e. to
+trace `apply(Module, Function, Arguments)` you should call `tracer:trace(Module, Function, Arguments)`, they also return
+the trace in case you want to use it directly.
 
-**NOTE:** You should use the version of tracer from branch
-[`with_dbg`](https://github.com/mistupv/tracer/tree/with_dbg) for logs to work
-with the current version of CauDEr. 
+The optional fourth argument is a collection of configuration options for the trace process, these options can be
+provider either as a `proplist` or as a `map`. The available options are:
+
+* `{dir, Dir}`: the directory where the source code is located. Default is the current directory (`"."`).
+* `{modules, Modules}`: a list of additional modules to instrument. Default is an empty list (`[]`).
+* `{timeout, Timeout}`: the number of milliseconds the tracer can run, or the atom `infinity` to run forever (this is
+  however not recommended as there is currently no way to stop the tracer without losing the trace). Default is `10000`.
+* `{stamp_mode, Mode}`: the policy through which stamps in messages are managed. Default is `centralized`.
+* `{output, Dir}`: the directory where the trace will be saved, or an empty list (`[]`) to not save the trace to disk.
+  Default is `[]`.
+
+For distributed programs simply start the Erlang runtime system as a distributed node, using the `-name` or `-sname`
+options.
+
+### Stamp Modes
+
+The available stamp modes are:
+
+* `centralized`: There is a central authority that distributes the stamp, it can always be considered safe.
+* `distributed`: Every send generates its own stamp, more lightweight but safe only if one system instance is involved.
+
+### Example
+
+Suppose that you want to trace the `barber` case study located in the `case-studies/barber/` folder, and you would also
+like to store the results in a new folder called `trace/`.
+
+If you prefer using a `proplist` for options, type:
+
+    tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
+
+Or if you prefer using a `map` for options, type:
+
+    tracer:trace(barber, main, [], #{dir => "case-studies/barber", output => "case-studies/barber/trace"}).
 
 ## Screenshot
 
