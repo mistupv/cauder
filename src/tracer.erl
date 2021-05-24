@@ -39,6 +39,14 @@
     output => file:filename()
 }.
 
+-type some_options_proplist() :: [
+    {dir, file:filename()}
+    | {modules, [atom()]}
+    | {timeout, timeout()}
+    | {stamp_mode, distributed | centralized}
+    | {output, file:filename()}
+].
+
 -type all_options() :: #{
     dir := file:filename(),
     modules := [atom()],
@@ -71,10 +79,11 @@ trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: some_options(),
+    Options :: some_options() | some_options_proplist(),
     TraceResult :: cauder_types:trace_result().
 
-trace(Mod, Fun, Args, Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
+trace(Mod, Fun, Args, Opts) when is_list(Opts) -> trace(Mod, Fun, Args, maps:from_list(Opts));
+trace(Mod, Fun, Args, Opts) when is_map(Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns a map with the default value for each of the available options.
