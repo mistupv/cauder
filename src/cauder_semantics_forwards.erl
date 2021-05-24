@@ -684,23 +684,25 @@ fwd_send(
     #sys{mail = Mail, traces = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NLog -> NLog
-        end,
-    M = #message{
-        src = Pid,
-        dest = Dest,
-        value = Val
-    },
-    UM =
-        case maps:get(uid, Opts, not_found) of
-            not_found -> M;
-            _Uid -> M#message{uid = _Uid}
+    NewLog = maps:get(new_log, Opts, []),
+    M =
+        case maps:find(uid, Opts) of
+            error ->
+                #message{
+                    src = Pid,
+                    dest = Dest,
+                    value = Val
+                };
+            {ok, Uid} ->
+                #message{
+                    uid = Uid,
+                    src = Pid,
+                    dest = Dest,
+                    value = Val
+                }
         end,
     P = P0#proc{
-        hist = [{send, Bs0, Es0, Stk0, UM} | Hist],
+        hist = [{send, Bs0, Es0, Stk0, M} | Hist],
         stack = Stk,
         env = Bs,
         exprs = Es
@@ -710,10 +712,10 @@ fwd_send(
         from = Pid,
         to = Dest,
         val = Val,
-        time = UM#message.uid
+        time = M#message.uid
     },
     Sys#sys{
-        mail = cauder_mailbox:add(UM, Mail),
+        mail = cauder_mailbox:add(M, Mail),
         procs = PMap#{Pid => P},
         traces = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
