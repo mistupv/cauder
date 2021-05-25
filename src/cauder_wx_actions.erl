@@ -433,7 +433,7 @@ update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
                                     {deliver, Uid} -> {deliver, Uid};
                                     {'receive', Uid} -> {'receive', Uid};
                                     {start, Node, success} -> {start, Node};
-                                    {spawn, {_Node, Pid}, success} -> {spawn, Pid};
+                                    {spawn, {_Node, ChildPid}, success} -> {spawn, ChildPid};
                                     _ -> throw(skip)
                                 end,
                             maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
@@ -534,7 +534,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
                                 {deliver, _Bs, _Es, _Stk, #message{uid = Uid}} -> {deliver, Uid};
                                 {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} -> {'receive', Uid};
                                 {start, success, _Bs, _Es, _Stk, Node} -> {start, Node};
-                                {spawn, _Bs, _Es, _Stk, _Node, Pid} -> {spawn, Pid};
+                                {spawn, _Bs, _Es, _Stk, _Node, ChildPid} -> {spawn, ChildPid};
                                 % TODO nodes
                                 _ -> throw(skip)
                             end,
