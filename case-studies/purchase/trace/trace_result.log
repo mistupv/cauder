@@ -1,3 +1,7 @@
-call "purchase:main()"
-main_pid 63
-result false
+{call,{purchase,main,[]}}.
+{comp,194302}.
+{exec,389}.
+{node,nonode@nohost}.
+{pid,81}.
+{return,{value,true}}.
+{tracing,success}.

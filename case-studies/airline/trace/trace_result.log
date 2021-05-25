@@ -1,3 +1,7 @@
-call "airline:main()"
-main_pid 63
-result none
+{call,{airline,main,[]}}.
+{comp,199500}.
+{exec,10000209}.
+{node,nonode@nohost}.
+{pid,81}.
+{return,none}.
+{tracing,timeout}.

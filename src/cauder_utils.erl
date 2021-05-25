@@ -27,7 +27,7 @@
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1]).
--export([load_replay_data/1]).
+-export([load_trace/1]).
 -export([is_dead/1]).
 -export([is_conc_item/1]).
 
@@ -72,8 +72,8 @@ fundef_lookup({M, F, A}) ->
 %% contains the given entry, or `false' if the entry is not found.
 
 -spec find_item(LMap, Entry) -> {value, Pid} | false when
-    LMap :: cauder_types:log_map(),
-    Entry :: cauder_types:log_entry_search(),
+    LMap :: cauder_types:trace_map(),
+    Entry :: cauder_types:trace_entry_search(),
     Pid :: cauder_types:proc_id().
 
 find_item(LMap, Entry) ->
@@ -90,13 +90,13 @@ find_item(LMap, Entry) ->
 %% called using the wildcard '_' when we are not interested in an element.
 
 -spec compare(LogItem, Entry) -> true | false when
-    LogItem :: cauder_types:log(),
-    Entry :: cauder_types:log_entry_search().
+    LogItem :: cauder_types:trace(),
+    Entry :: cauder_types:trace_entry_search().
 
 compare([], _) -> false;
 compare([H | _], H) -> true;
-compare([{spawn, {_, _, Pid}} | _], {spawn, {_, _, Pid}}) -> true;
-compare([{spawn, {Node, fail, _}} | _], {spawn, {Node, fail, _}}) -> true;
+compare([{spawn, {_, Pid}, _} | _], {spawn, {_, Pid}, _}) -> true;
+compare([{spawn, {Node, _}, failure} | _], {spawn, {Node, _}, failure}) -> true;
 compare([_ | T], Entry) -> compare(T, Entry).
 
 %%------------------------------------------------------------------------------
@@ -106,25 +106,25 @@ compare([_ | T], Entry) -> compare(T, Entry).
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
-    LMap :: cauder_types:log_map(),
+    LMap :: cauder_types:trace_map(),
     Pid :: cauder_types:proc_id(),
     Parent :: cauder_types:proc_id().
 
 find_spawn_parent(LMap, Pid) ->
-    find_item(LMap, {spawn, {'_', '_', Pid}}).
+    find_item(LMap, {spawn, {'_', Pid}, '_'}).
 
 %%---------------------------------------------------------------------------------
 %% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
 
 -spec find_spawn_log(LMap, Pid) -> Log when
-    LMap :: cauder_types:log_map(),
+    LMap :: cauder_types:trace_map(),
     Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:log_entry().
+    Log :: cauder_types:trace_entry().
 
 find_spawn_log(LMap, Pid) ->
     {value, Log} = lists:search(
         fun
-            ({spawn, {_, _, SpawnPid}}) when Pid =:= SpawnPid -> true;
+            ({spawn, {_, SpawnPid}, _}) when Pid =:= SpawnPid -> true;
             (_) -> false
         end,
         lists:merge(maps:values(LMap))
@@ -138,12 +138,12 @@ find_spawn_log(LMap, Pid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_node_parent(LMap, Node) -> {value, Parent} | false when
-    LMap :: cauder_types:log_map(),
-    Node :: cauder_types:net_node(),
+    LMap :: cauder_types:trace_map(),
+    Node :: node(),
     Parent :: cauder_types:proc_id().
 
 find_node_parent(LMap, Node) ->
-    find_item(LMap, {start, {succ, Node}}).
+    find_item(LMap, {start, Node, success}).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for a process whose log has an entry with the information to
@@ -152,7 +152,7 @@ find_node_parent(LMap, Node) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:log_map(),
+    LMap :: cauder_types:trace_map(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -166,7 +166,7 @@ find_msg_sender(LMap, Uid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:log_map(),
+    LMap :: cauder_types:trace_map(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -191,7 +191,7 @@ find_process_with_spawn(PMap, Pid) ->
 
 -spec find_process_with_start(ProcessMap, Node) -> {value, Process} | false when
     ProcessMap :: cauder_types:process_map(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Process :: cauder_types:process().
 
 find_process_with_start(PMap, Node) ->
@@ -203,7 +203,7 @@ find_process_with_start(PMap, Node) ->
 
 -spec find_process_with_failed_start(ProcessMap, Node) -> {value, Process} | false when
     ProcessMap :: cauder_types:process_map(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Process :: cauder_types:process().
 
 find_process_with_failed_start(ProcessMap, Node) ->
@@ -214,19 +214,19 @@ find_process_with_failed_start(ProcessMap, Node) ->
 %% this was already part of the network, by looking at its log
 
 -spec find_process_with_failed_spawn(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:log_map(),
-    Node :: cauder_types:net_node(),
+    LMap :: cauder_types:trace_map(),
+    Node :: node(),
     Process :: cauder_types:proc_id().
 
 find_process_with_failed_spawn(LMap, Node) ->
-    find_item(LMap, {spawn, {Node, fail, '_'}}).
+    find_item(LMap, {spawn, {Node, '_'}, failure}).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that will do a read while `Node' was not part of the network
 
 -spec find_process_with_future_reads(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:log_map(),
-    Node :: cauder_types:net_node(),
+    LMap :: cauder_types:trace_map(),
+    Node :: node(),
     Process :: cauder_types:proc_id().
 
 find_process_with_future_reads(LMap, Node) ->
@@ -243,7 +243,7 @@ find_process_with_future_reads(LMap, Node) ->
 
 -spec find_process_on_node(ProcessMap, Node) -> {value, Process} | false when
     ProcessMap :: cauder_types:process_map(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Process :: cauder_types:process().
 
 find_process_on_node(ProcessMap, Node) ->
@@ -255,7 +255,7 @@ find_process_on_node(ProcessMap, Node) ->
 
 -spec find_process_with_read(ProcessMap, Node) -> {value, Process} | false when
     ProcessMap :: cauder_types:process_map(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Process :: cauder_types:process().
 
 find_process_with_read(ProcessMap, Node) ->
@@ -322,7 +322,7 @@ merge_bindings(Bs1, Bs2) ->
 %% Returns `error' if the format of the atom is not a valid Erlang node name.
 
 -spec check_node_name(NodeName) -> ok | error | not_provided when
-    NodeName :: cauder_types:net_node().
+    NodeName :: string().
 
 check_node_name([]) ->
     not_provided;
@@ -386,7 +386,7 @@ has_spawn([_ | RestHist], Pid) -> has_spawn(RestHist, Pid).
 
 -spec has_start(History, Node) -> Result when
     History :: cauder_types:history(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Result :: boolean().
 
 has_start([], _) -> false;
@@ -399,11 +399,11 @@ has_start([_ | RestHist], Node) -> has_start(RestHist, Node).
 
 -spec has_failed_start(History, Node) -> Result when
     History :: cauder_types:history(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Result :: boolean().
 
 has_failed_start([], _) -> false;
-has_failed_start([{start, fail, _Bs, _Es, _Stk, Node} | _], Node) -> true;
+has_failed_start([{start, failure, _Bs, _Es, _Stk, Node} | _], Node) -> true;
 has_failed_start([_ | RestHist], Node) -> has_failed_start(RestHist, Node).
 
 %%------------------------------------------------------------------------------
@@ -411,7 +411,7 @@ has_failed_start([_ | RestHist], Node) -> has_failed_start(RestHist, Node).
 
 -spec will_always_read(Log, Node) -> Result when
     Log :: cauder_types:history(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Result :: boolean().
 
 will_always_read([], _) -> true;
@@ -424,7 +424,7 @@ will_always_read([_ | RestLog], Node) -> will_always_read(RestLog, Node).
 
 -spec has_read(History, Node) -> Result when
     History :: cauder_types:history(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Result :: boolean().
 
 has_read([], _) ->
@@ -541,7 +541,7 @@ gen_log_spawn(OtherPid) ->
 %% @doc Returns a roll log message about starting a node with the given name.
 
 -spec gen_log_start(Node) -> [Log] when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Log :: [string()].
 
 gen_log_start(Node) ->
@@ -574,87 +574,68 @@ gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
-%% @doc Load the replay data in the given folder and returns it.
+%% @doc Load the trace result from the given directory adn returns it.
 
--spec load_replay_data(LogPath) -> ReplayData when
-    LogPath :: file:filename(),
-    ReplayData :: cauder_types:replay().
+-spec load_trace(TraceDir) -> TraceResult when
+    TraceDir :: file:filename(),
+    TraceResult :: cauder_types:trace_result().
 
-load_replay_data(Path) ->
-    ResultFile = filename:join(Path, "trace_result.log"),
-    {ok, FileHandler} = file:open(ResultFile, [read]),
-    Lines = read_lines(FileHandler),
-    file:close(FileHandler),
-    #{call := Call, main_pid := Pid, main_node := Node} = parse_lines(Lines),
-    #replay{log_path = Path, call = Call, main_pid = Pid, main_node = Node}.
+load_trace(Dir) ->
+    ResultFile = filename:join(Dir, "trace_result.log"),
+    {ok, ResultTerms} = file:consult(ResultFile),
+    #{
+        node := InitialNode,
+        pid := InitialPid,
+        call := {Mod, Fun, Args},
+        tracing := Tracing,
+        return := ReturnValue,
+        comp := CompTime,
+        exec := ExecTime
+    } = maps:from_list(ResultTerms),
 
-%%------------------------------------------------------------------------------
-%% @doc Reads all the lines from the given `IoDevice' and returns them.
-%% Any trailing `\n' or `\r\n' are removed from each line.
-
--spec read_lines(IoDevice) -> Lines when
-    IoDevice :: file:io_device(),
-    Lines :: [string()].
-
-read_lines(File) ->
-    case file:read_line(File) of
-        eof -> [];
-        {ok, Line} -> [string:chomp(Line) | read_lines(File)]
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Parses the given lines (list of strings) and returns the extracted
-%% information as a map.
-
--spec parse_lines(Lines) -> Data when
-    Lines :: [string()],
-    Data :: #{call := Call, main_pid := Pid, main_node := Node},
-    Call :: {module(), atom(), cauder_types:af_args()},
-    Pid :: cauder_types:proc_id(),
-    Node :: cauder_types:net_node().
-
-parse_lines(Lines) ->
-    #{call := _, main_pid := _} =
-        lists:foldl(
-            fun
-                ("call" ++ _ = Line, Data) ->
-                    {match, [Call]} = re:run(Line, "call \"(.+)\"", [{capture, [1], list}]),
-                    Data#{call => parse_call(Call)};
-                ("main_pid" ++ _ = Line, Data) ->
-                    {match, [Pid]} = re:run(Line, "main_pid (\\d+)", [{capture, [1], list}]),
-                    Data#{main_pid => list_to_integer(Pid)};
-                ("main_node" ++ _ = Line, Data) ->
-                    {match, [Node]} = re:run(Line, "main_node (.+)", [{capture, [1], list}]),
-                    Data#{main_node => Node};
-                % TODO result
-                (_, Data) ->
-                    Data
+    Traces =
+        filelib:fold_files(
+            Dir,
+            "trace_\\d+\\.log",
+            false,
+            fun(File, Acc) ->
+                "trace_" ++ StringPid = filename:basename(File, ".log"),
+                Pid = list_to_integer(StringPid),
+                {ok, Terms0} = file:consult(File),
+                find_last_message_uid(Terms0),
+                Acc#{Pid => Terms0}
             end,
-            maps:new(),
-            Lines
-        ).
+            maps:new()
+        ),
 
-%%------------------------------------------------------------------------------
-%% @doc Parses the given string as a function call.
-%% Returns a tuple with the module name, the function name and the list of
-%% arguments in abstract form.
+    #trace_result{
+        node = InitialNode,
+        pid = InitialPid,
+        call = {Mod, Fun, Args},
+        tracing = Tracing,
+        return = ReturnValue,
+        comp = CompTime,
+        exec = ExecTime,
+        traces = Traces
+    }.
 
--spec parse_call(String) -> Call when
-    String :: string(),
-    Call :: {module(), atom(), cauder_types:af_args()}.
+-spec find_last_message_uid(Terms) -> ok when
+    Terms :: [cauder_types:trace_entry()].
 
-parse_call(Call) ->
-    case erl_scan:string(Call ++ ".") of
-        {ok, Tokens, _} ->
-            case erl_parse:parse_exprs(Tokens) of
-                {ok, Exprs} ->
-                    [{remote_call, _, M, F, As}] = cauder_syntax:expr_list(Exprs),
-                    {M, F, As};
-                _Err ->
-                    error({parse_error, Call, Tokens})
-            end;
-        _Err ->
-            error({parse_error, Call})
+find_last_message_uid(Terms) ->
+    AllUids = lists:filtermap(
+        fun
+            ({send, Uid}) -> {true, Uid};
+            (_) -> false
+        end,
+        Terms
+    ),
+    case AllUids of
+        [] ->
+            ok;
+        _ ->
+            true = ets:insert(?APP_DB, {last_uid, lists:max(AllUids)}),
+            ok
     end.
 
 %%------------------------------------------------------------------------------
@@ -672,7 +653,7 @@ is_dead(#proc{}) -> false.
 -spec process_node(PMap, Pid) -> Result when
     PMap :: cauder_types:process_map(),
     Pid :: cauder_types:proc_id(),
-    Result :: cauder_types:net_node() | false.
+    Result :: node() | false.
 
 process_node(PMap, Pid) ->
     case maps:get(Pid, PMap, false) of
@@ -692,7 +673,7 @@ is_conc_item({self, _Bs, _Es, _Stk}) -> false;
 is_conc_item({node, _Bs, _Es, _Stk}) -> false;
 is_conc_item({nodes, _Bs, _Es, _Stk, _Nodes}) -> true;
 is_conc_item({start, success, _BS, _Es, _Stk, _Node}) -> true;
-is_conc_item({start, fail, _BS, _Es, _Stk, _Node}) -> true;
+is_conc_item({start, failure, _BS, _Es, _Stk, _Node}) -> true;
 is_conc_item({spawn, _Bs, _Es, _Stk, _Node, _Pid}) -> true;
 is_conc_item({send, _Bs, _Es, _Stk, _Msg}) -> true;
 is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.

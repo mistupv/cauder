@@ -155,15 +155,15 @@ load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 %%
 %% @see task_start/2
 
--spec init_system(Module, Function, Node, Arguments) -> Reply when
+-spec init_system(Node, Module, Function, Arguments) -> Reply when
+    Node :: node(),
     Module :: module(),
     Function :: atom(),
-    Node :: cauder_types:net_node(),
     Arguments :: cauder_types:af_args(),
     Reply :: ok | busy.
 
-init_system(Mod, Fun, Node, Args) ->
-    case gen_server:call(?SERVER, {user, {start, {Mod, Fun, Node, Args}}}) of
+init_system(Node, Mod, Fun, Args) ->
+    case gen_server:call(?SERVER, {user, {start_manual, {Node, {Mod, Fun, Args}}}}) of
         {ok, _} -> ok;
         busy -> busy
     end.
@@ -185,7 +185,7 @@ init_system(Mod, Fun, Node, Args) ->
     Reply :: ok | busy.
 
 init_system(Path) ->
-    case gen_server:call(?SERVER, {user, {start, Path}}) of
+    case gen_server:call(?SERVER, {user, {start_replay, Path}}) of
         {ok, _} -> ok;
         busy -> busy
     end.
@@ -311,7 +311,7 @@ replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 %% @see task_replay_spawn/2
 
 -spec replay_start(Node) -> Reply when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_types:system().
 
@@ -398,7 +398,7 @@ rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {
 %% @see task_rollback_start/2
 
 -spec rollback_start(Node) -> Reply when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_types:system().
 
@@ -639,7 +639,8 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
     Fun =
         case Task of
             load -> fun task_load/2;
-            start -> fun task_start/2;
+            start_manual -> fun task_start_manual/2;
+            start_replay -> fun task_start_replay/2;
             step -> fun task_step/2;
             step_multiple -> fun task_step_multiple/2;
             replay_steps -> fun task_replay_steps/2;
@@ -768,49 +769,57 @@ task_load(File, System) ->
 
     {success, {File, Module}, Time, System}.
 
--spec task_start(MFA | LogPath, System :: undefined) -> task_result() when
+-spec task_start_manual({Node, MFA}, System :: undefined) -> task_result() when
+    Node :: node(),
     MFA :: {Module, Function, Arguments},
     Module :: module(),
     Function :: atom(),
-    Arguments :: [cauder_types:af_literal()],
-    LogPath :: file:filename().
+    Arguments :: [cauder_types:af_literal()].
 
-task_start({M, F, N, As}, undefined) ->
+task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->
                 Pid = cauder_utils:fresh_pid(),
                 Proc = #proc{
-                    node = list_to_atom(N),
+                    node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(M, F, As)],
-                    spf = {M, F, length(As)}
+                    exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
+                    spf = {Mod, Fun, length(Args)}
                 },
                 #sys{
                     procs = #{Pid => Proc},
-                    nodes = [list_to_atom(N)]
+                    nodes = [Node]
                 }
             end
         ),
 
-    {success, {}, Time, System};
-task_start(LogPath, undefined) ->
+    {success, {}, Time, System}.
+
+-spec task_start_replay(TracePath, System :: undefined) -> task_result() when
+    TracePath :: file:filename().
+
+task_start_replay(TracePath, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->
-                #replay{log_path = LogPath, call = {M, F, As}, main_pid = Pid, main_node = N} = cauder_utils:load_replay_data(
-                    LogPath
-                ),
-                Proc = #proc{
+                #trace_result{
+                    node = Node,
                     pid = Pid,
-                    node = list_to_atom(N),
-                    exprs = [cauder_syntax:remote_call(M, F, As)],
-                    spf = {M, F, length(As)}
+                    call = {Mod, Fun, Args},
+                    traces = Traces
+                } = cauder_utils:load_trace(TracePath),
+                AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, Args)),
+                Proc = #proc{
+                    node = Node,
+                    pid = Pid,
+                    exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
+                    spf = {Mod, Fun, length(Args)}
                 },
                 #sys{
                     procs = #{Pid => Proc},
-                    logs = load_logs(LogPath),
-                    nodes = [list_to_atom(N)]
+                    traces = Traces,
+                    nodes = [Node]
                 }
             end
         ),
@@ -875,7 +884,7 @@ task_replay_spawn(Pid, Sys0) ->
     {success, Pid, Time, Sys1}.
 
 -spec task_replay_start(Node, System) -> task_result(Node) when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     System :: cauder_types:system().
 
 task_replay_start(Node, Sys0) ->
@@ -947,7 +956,7 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
     {success, {StepsDone, Steps}, Time, Sys1}.
 
 -spec task_rollback_start(Node, System) -> task_result(Node) when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     System :: cauder_types:system().
 
 task_rollback_start(Node, Sys0) ->
@@ -1162,7 +1171,7 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
     System :: cauder_types:system(),
     NewSystem :: cauder_types:system().
 
-replay_full_log(Sys = #sys{logs = LMap}) ->
+replay_full_log(Sys = #sys{traces = LMap}) ->
     case lists:filter(fun({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
         [] ->
             Sys;
@@ -1188,85 +1197,4 @@ rollback_steps(Sys0, Pid, Steps, StepsDone) ->
         true ->
             Sys1 = cauder_rollback:rollback_step(Sys0, Pid),
             rollback_steps(Sys1, Pid, Steps, StepsDone + 1)
-    end.
-
-%%%=============================================================================
-
-%%------------------------------------------------------------------------------
-%% @doc Loads the logs for all the available processes.
-
--spec load_logs(LogPath) -> LogMap when
-    LogPath :: file:filename(),
-    LogMap :: cauder_types:log_map().
-
-load_logs(LogPath) ->
-    {ok, Filenames} = file:list_dir(LogPath),
-    lists:foldl(
-        fun(Filename, Map) ->
-            case re:run(Filename, "trace_(\\d+)\\.log", [{capture, [1], list}]) of
-                {match, [StrPid]} ->
-                    Pid = list_to_integer(StrPid),
-                    Log = load_log(Pid, LogPath),
-                    Map#{Pid => Log};
-                nomatch ->
-                    Map
-            end
-        end,
-        maps:new(),
-        Filenames
-    ).
-
-%%------------------------------------------------------------------------------
-%% @doc Loads the log of the given process.
-
--spec load_log(Pid, LogPath) -> Log when
-    Pid :: cauder_types:proc_id(),
-    LogPath :: file:filename(),
-    Log :: cauder_types:log().
-
-load_log(Pid, LogPath) ->
-    File = filename:join(LogPath, "trace_" ++ integer_to_list(Pid) ++ ".log"),
-    {ok, FileHandler} = file:open(File, [read]),
-    Log = read_log(FileHandler, Pid, []),
-    file:close(FileHandler),
-    Log.
-
-%%------------------------------------------------------------------------------
-%% @doc Reads and parses the log from the given `IoDevice'.
-
--spec read_log(IoDevice, Pid, Log1) -> Log2 when
-    IoDevice :: file:io_device(),
-    Pid :: cauder_types:proc_id(),
-    Log1 :: cauder_types:log(),
-    Log2 :: cauder_types:log().
-
-read_log(FileHandler, Pid, Data) ->
-    case file:read_line(FileHandler) of
-        eof ->
-            lists:reverse(Data);
-        {ok, Line} ->
-            Entry = parse_log_entry(string:chomp(Line), Pid),
-            read_log(FileHandler, Pid, [Entry | Data])
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Parses a string as a log entry and return it.
-
--spec parse_log_entry(String, Pid) -> LogEntry when
-    String :: string(),
-    Pid :: cauder_types:proc_id(),
-    LogEntry :: cauder_types:log_entry().
-
-parse_log_entry(String, Pid) ->
-    case erl_scan:string(String ++ ".") of
-        {ok, Tokens, _} ->
-            case erl_parse:parse_exprs(Tokens) of
-                {ok, Exprs} ->
-                    [{value, _, {Pid, Action, Id}}] = cauder_syntax:expr_list(Exprs),
-                    {Action, Id};
-                _Err ->
-                    error({parse_error, String, Tokens})
-            end;
-        _Err ->
-            error({parse_error, String})
     end.

@@ -65,17 +65,17 @@
     % Pool of processes
     procs :: cauder_types:process_map(),
     % System log
-    logs = maps:new() :: cauder_types:log_map(),
+    traces = maps:new() :: cauder_types:trace_map(),
     % System nodes
-    nodes = [] :: [cauder_types:net_node()],
-    trace = [] :: [cauder_types:trace()],
+    nodes = [] :: [node()],
+    x_trace = [] :: [cauder_types:x_trace()],
     roll = []
 }).
 
 %% Process
 -record(proc, {
     % Process node
-    node :: cauder_types:net_node(),
+    node :: node(),
     % Process identifier
     pid :: cauder_types:proc_id(),
     % History
@@ -112,29 +112,40 @@
     rule :: cauder_types:rule()
 }).
 
-% Trace
--record(trace, {
+% TODO What is the purpose of this?
+-record(x_trace, {
     type :: ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE,
     from :: cauder_types:proc_id(),
     to :: undefined | cauder_types:proc_id(),
-    node :: undefined | cauder_types:net_node(),
+    node :: undefined | node(),
     val :: undefined | term(),
-    res :: succ | fail | undefined,
+    res :: success | failure | undefined,
     time :: undefined | cauder_mailbox:uid()
 }).
 
-% Replay info
--record(replay, {
-    log_path :: file:filename(),
-    call :: {module(), atom(), cauder_types:af_args()},
-    main_pid :: cauder_types:proc_id(),
-    main_node :: cauder_types:net_node()
-}).
-
-% Evaluation step result
+% Evaluation result
 -record(result, {
     env :: cauder_types:environment(),
     exprs :: [cauder_types:abstract_expr()],
     stack :: cauder_types:stack(),
     label = tau :: cauder_types:label()
+}).
+
+% Trace result
+-record(trace_result, {
+    % Initial node
+    node :: node(),
+    % Initial pid
+    pid :: cauder_types:proc_id(),
+    % Initial function call
+    call :: {module(), atom(), [term()]},
+    % Whether the execution completed or the timeout was reached
+    tracing :: success | timeout,
+    % The value returned by the function application
+    return = none :: none | {value, term()},
+    % Compile time in microseconds
+    comp :: non_neg_integer(),
+    % Execution time in microseconds
+    exec :: non_neg_integer(),
+    traces = #{} :: cauder_types:trace_map()
 }).

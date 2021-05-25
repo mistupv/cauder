@@ -19,13 +19,13 @@
 %% required information in each case.
 
 -spec start_session(Parent, EntryPoints) ->
-    {manual, {Module, Function, NodeName, Args}} | {replay, TracePath} | false
+    {manual, {Node, Module, Function, Args}} | {replay, TracePath} | false
 when
     Parent :: wxWindow:wxWindow(),
     EntryPoints :: [mfa()],
+    Node :: node(),
     Module :: module(),
     Function :: atom(),
-    NodeName :: cauder_types:net_node(),
     Args :: cauder_types:af_args(),
     TracePath :: file:filename().
 
@@ -107,7 +107,7 @@ start_session(Parent, MFAs) ->
     wxPanel:setSizer(ReplayPanel, ReplaySizer),
 
     BasePath = cauder:get_path(),
-    TracePath = filename:join(BasePath, "results"),
+    TracePath = filename:join(BasePath, "trace"),
     PickerPath =
         case filelib:is_dir(TracePath) of
             true -> TracePath;
@@ -153,9 +153,9 @@ start_session(Parent, MFAs) ->
                                     N1 = wxTextCtrl:getValue(NodeName),
                                     case cauder_utils:check_node_name(N1) of
                                         ok ->
-                                            ReturnPid ! {manual, {M1, F1, N1, Args}};
+                                            ReturnPid ! {manual, {list_to_atom(N1), M1, F1, Args}};
                                         not_provided ->
-                                            ReturnPid ! {manual, {M1, F1, "nonode@nohost", Args}};
+                                            ReturnPid ! {manual, {'nonode@nohost', M1, F1, Args}};
                                         error ->
                                             Message = io_lib:format(?DIALOG_StartSession_NodeName_Message, []),
                                             Options = [

@@ -1,3 +1,7 @@
-call "barber:main()"
-main_pid 74
-result none
+{call,{barber,main,[]}}.
+{comp,206234}.
+{exec,10000525}.
+{node,nonode@nohost}.
+{pid,81}.
+{return,none}.
+{tracing,timeout}.
