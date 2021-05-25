@@ -1,6 +1,6 @@
 {call,{barber,main,[]}}.
-{comp,225557}.
-{exec,10000828}.
+{comp,206234}.
+{exec,10000525}.
 {node,nonode@nohost}.
 {pid,81}.
 {return,none}.

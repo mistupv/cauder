@@ -2,5 +2,4 @@
 {spawn,{nonode@nohost,86},success}.
 {spawn,{nonode@nohost,87},success}.
 {spawn,{nonode@nohost,88},success}.
-{deliver,3}.
 {'receive',3}.
