@@ -602,18 +602,8 @@ load_trace(Dir) ->
                 "trace_" ++ StringPid = filename:basename(File, ".log"),
                 Pid = list_to_integer(StringPid),
                 {ok, Terms0} = file:consult(File),
-
                 find_last_message_uid(Terms0),
-
-                % TODO Keep delivery events
-                Terms1 = lists:filter(
-                    fun
-                        ({deliver, _}) -> false;
-                        (_) -> true
-                    end,
-                    Terms0
-                ),
-                Acc#{Pid => Terms1}
+                Acc#{Pid => Terms0}
             end,
             maps:new()
         ),

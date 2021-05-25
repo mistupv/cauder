@@ -165,11 +165,6 @@ handle_call({trace, Pid, send, {result, {error, _}}, ParentPid}, _From, State) -
     #{Pid := {Node, ParentPid}} = State#state.slave_starters,
     State1 = add_to_trace(ParentPid, {start, Node, failure}, State),
     {reply, ok, State1};
-%% ========== 'receive' trace messages ========== %%
-%% Deliver message
-handle_call({trace, Pid, 'receive', {{stamp, Stamp}, _Message}}, _From, State) ->
-    State1 = add_to_trace(Pid, deliver, Stamp, State),
-    {reply, ok, State1};
 %% ========== 'spawn' trace messages ========== %%
 %% Starting a slave
 handle_call({trace, Pid, spawn, SlavePid, {slave, wait_for_slave, [Pid, _, _, Node, _, _, _]}}, _From, State) ->
@@ -206,6 +201,9 @@ handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _F
     {reply, ok, State};
 handle_call({trace, _, send_to_non_existing_process, {{stamp, _Stamp}, _Message}, _}, _From, State) ->
     % TODO Log lost messages
+    {reply, ok, State};
+handle_call({trace, _, 'receive', {{stamp, _}, _}}, _From, State) ->
+    % TODO Log deliver events
     {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
@@ -416,7 +414,7 @@ add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
 
 -spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
     Pid :: pid(),
-    Tag :: send | deliver | 'receive',
+    Tag :: send | 'receive',
     Stamp :: integer(),
     State :: state(),
     NewState :: state().

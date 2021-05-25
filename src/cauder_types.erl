@@ -55,7 +55,7 @@
 -type trace() :: [trace_entry()].
 -type trace_entry() ::
     {send, cauder_mailbox:uid()}
-    | {deliver, cauder_mailbox:uid()}
+    %| {deliver, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
     | {nodes, [node()]}
     | {start, node(), success}

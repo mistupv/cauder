@@ -156,14 +156,14 @@
 
 -define(ACTION_Replay_Steps, 2310).
 -define(ACTION_Replay_Send, 2311).
--define(ACTION_Replay_Deliver, 2312).
+%-define(ACTION_Replay_Deliver, 2312).
 -define(ACTION_Replay_Receive, 2313).
 -define(ACTION_Replay_Start, 2314).
 -define(ACTION_Replay_Spawn, 2315).
 
 -define(ACTION_Replay_Steps_Button, 2320).
 -define(ACTION_Replay_Send_Button, 2321).
--define(ACTION_Replay_Deliver_Button, 2322).
+%-define(ACTION_Replay_Deliver_Button, 2322).
 -define(ACTION_Replay_Receive_Button, 2323).
 -define(ACTION_Replay_Start_Button, 2324).
 -define(ACTION_Replay_Spawn_Button, 2325).
@@ -175,7 +175,7 @@
 
 -define(ACTION_Rollback_Steps, 2410).
 -define(ACTION_Rollback_Send, 2411).
--define(ACTION_Rollback_Deliver, 2412).
+%-define(ACTION_Rollback_Deliver, 2412).
 -define(ACTION_Rollback_Receive, 2413).
 -define(ACTION_Rollback_Start, 2414).
 -define(ACTION_Rollback_Spawn, 2415).
@@ -183,7 +183,7 @@
 
 -define(ACTION_Rollback_Steps_Button, 2420).
 -define(ACTION_Rollback_Send_Button, 2421).
--define(ACTION_Rollback_Deliver_Button, 2422).
+%-define(ACTION_Rollback_Deliver_Button, 2422).
 -define(ACTION_Rollback_Receive_Button, 2423).
 -define(ACTION_Rollback_Start_Button, 2424).
 -define(ACTION_Rollback_Spawn_Button, 2425).
