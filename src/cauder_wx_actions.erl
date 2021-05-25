@@ -376,8 +376,8 @@ create_replay(Parent) ->
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Replay_Send, {"Replay send", ?ACTION_Replay_Send_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
-    create_choice(Win, Content, "Uid:", ?ACTION_Replay_Deliver, {"Replay deliver", ?ACTION_Replay_Deliver_Button}),
-    wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+    %create_choice(Win, Content, "Uid:", ?ACTION_Replay_Deliver, {"Replay deliver", ?ACTION_Replay_Deliver_Button}),
+    %wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Replay_Receive, {"Replay receive", ?ACTION_Replay_Receive_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Node:", ?ACTION_Replay_Start, {"Replay start", ?ACTION_Replay_Start_Button}),
@@ -430,7 +430,7 @@ update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
                             {K, V} =
                                 case Entry of
                                     {send, Uid} -> {send, Uid};
-                                    {deliver, Uid} -> {deliver, Uid};
+                                    %{deliver, Uid} -> {deliver, Uid};
                                     {'receive', Uid} -> {'receive', Uid};
                                     {start, Node, success} -> {start, Node};
                                     {spawn, {_Node, ChildPid}, success} -> {spawn, ChildPid};
@@ -446,7 +446,7 @@ update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
                 ),
 
             update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, maps:get(send, RuleMap, [])),
-            update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, maps:get(deliver, RuleMap, [])),
+            %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, maps:get(deliver, RuleMap, [])),
             update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, maps:get('receive', RuleMap, [])),
             update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, maps:get(start, RuleMap, [])),
             update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, maps:get(spawn, RuleMap, [])),
@@ -478,8 +478,8 @@ create_rollback(Parent) ->
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Send, {"Roll send", ?ACTION_Rollback_Send_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
-    create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Deliver, {"Roll deliver", ?ACTION_Rollback_Deliver_Button}),
-    wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+    %create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Deliver, {"Roll deliver", ?ACTION_Rollback_Deliver_Button}),
+    %wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Receive, {"Roll receive", ?ACTION_Rollback_Receive_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Node:", ?ACTION_Rollback_Start, {"Roll start", ?ACTION_Rollback_Start_Button}),
@@ -531,7 +531,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
                         {K, V} =
                             case Entry of
                                 {send, _Bs, _Es, _Stk, #message{uid = Uid}} -> {send, Uid};
-                                {deliver, _Bs, _Es, _Stk, #message{uid = Uid}} -> {deliver, Uid};
+                                %{deliver, _Bs, _Es, _Stk, #message{uid = Uid}} -> {deliver, Uid};
                                 {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} -> {'receive', Uid};
                                 {start, success, _Bs, _Es, _Stk, Node} -> {start, Node};
                                 {spawn, _Bs, _Es, _Stk, _Node, ChildPid} -> {spawn, ChildPid};
@@ -548,7 +548,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
             ),
 
             update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, maps:get(send, RuleMap, [])),
-            update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, maps:get(deliver, RuleMap, [])),
+            %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, maps:get(deliver, RuleMap, [])),
             update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, maps:get('receive', RuleMap, [])),
             update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, maps:get(start, RuleMap, [])),
             update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, maps:get(spawn, RuleMap, [])),
