@@ -1,3 +1,6 @@
+{deliver,0}.
+{deliver,1}.
+{deliver,2}.
 {'receive',0}.
 {'receive',1}.
 {send,3}.
