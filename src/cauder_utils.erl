@@ -603,7 +603,14 @@ load_trace(Dir) ->
                 Pid = list_to_integer(StringPid),
                 {ok, Terms0} = file:consult(File),
                 find_last_message_uid(Terms0),
-                Acc#{Pid => Terms0}
+                Terms1 = lists:filter(
+                    fun
+                        ({deliver, _}) -> false;
+                        (_) -> true
+                    end,
+                    Terms0
+                ),
+                Acc#{Pid => Terms1}
             end,
             maps:new()
         ),
