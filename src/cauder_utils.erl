@@ -768,10 +768,8 @@ is_before(A1, A2, [_ | Seq]) -> is_before(A1, A2, Seq).
     RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
 
 race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
+    % Assert that p:receive(l) ∈ T
     true = lists:member(Ar, maps:get(P, Traces)),
-
-    Ed = {P, {deliver, L}},
-
     % Type: [{Pid, {send, Uid}}, ...]
     SendEvents = lists:flatmap(
         fun({P1, Trace}) ->
@@ -786,12 +784,15 @@ race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
         maps:to_list(Traces)
     ),
 
+    Ed = {P, {deliver, L}},
+
     lists:foldl(
         fun({_P1, {send, L1}} = Es, Set) ->
-            Cond1 = race_set_cond1(Ed, Es, Traces),
-            Cond2 = race_set_cond2(Ed, L1, Traces),
-            Cond3 = race_set_cond3(Ed, Es, SendEvents, Traces),
-            case (Cond1 andalso Cond2 andalso Cond3) of
+            InRaceSet =
+                race_set_cond1(Ed, Es, Traces) andalso
+                    race_set_cond2(Ed, L1, Traces) andalso
+                    race_set_cond3(Ed, Es, SendEvents, Traces),
+            case InRaceSet of
                 true -> ordsets:add_element(L1, Set);
                 false -> Set
             end
@@ -804,11 +805,7 @@ race_set_cond1(Ed, Es, Traces) -> not happen_before(Ed, Es, Traces).
 
 race_set_cond2({P, {deliver, _L}} = Ed, L1, Traces) ->
     Ed1 = {P, Ad1 = {deliver, L1}},
-    WasDelivered = lists:member(Ad1, maps:get(P, Traces)),
-    HappenBefore = happen_before(Ed, Ed1, Traces),
-    % If l' was delivered then, the deliver of l happened before the deliver of l'
-    %not (WasDelivered andalso not HappenBefore).
-    WasDelivered andalso HappenBefore.
+    lists:member(Ad1, maps:get(P, Traces)) andalso happen_before(Ed, Ed1, Traces).
 
 race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Traces) ->
     SendEvents1 = lists:filter(
