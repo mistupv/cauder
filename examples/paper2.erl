@@ -81,10 +81,10 @@ race_set() ->
             {deliver, 4},
             {'receive', 4},
             {'receive', 1},
-            {send, 4},
+            {send, 5},
             {deliver, 6},
             {'receive', 6},
-            {de0liver, 7},
+            {deliver, 7},
             {deliver, 8}
         ],
         4 => [
