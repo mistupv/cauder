@@ -4,10 +4,9 @@
 
 -export_type([
     system/0,
-    trace_map/0,
     trace/0,
-    trace_entry/0,
-    trace_entry_search/0,
+    action/0,
+    action_search/0,
     fwd_opts/0,
     process_map/0,
     proc_id/0,
@@ -51,9 +50,8 @@
 
 -type system() :: #sys{}.
 
--type trace_map() :: #{proc_id() => trace()}.
--type trace() :: [trace_entry()].
--type trace_entry() ::
+-type trace() :: #{proc_id() => [action()]}.
+-type action() ::
     {send, cauder_mailbox:uid()}
     | {deliver, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
@@ -63,7 +61,7 @@
     | {spawn, {node(), proc_id()}, success}
     | {spawn, {node(), proc_id()}, failure}.
 
--type trace_entry_search() ::
+-type action_search() ::
     {send, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
     | {start, node(), success}

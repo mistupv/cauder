@@ -117,7 +117,7 @@ replay_step(#sys{traces = LMap} = Sys, Pid) ->
 -spec replay_spawn(System, Pid, SpawnInfo) -> NewSystem when
     System :: cauder_types:system(),
     Pid :: cauder_types:proc_id() | '_',
-    SpawnInfo :: cauder_types:trace_entry() | '_',
+    SpawnInfo :: cauder_types:action() | '_',
     NewSystem :: cauder_types:system().
 
 replay_spawn(#sys{procs = PMap} = Sys, Pid, _) when is_map_key(Pid, PMap) -> Sys;

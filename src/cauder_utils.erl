@@ -73,8 +73,8 @@ fundef_lookup({M, F, A}) ->
 %% contains the given entry, or `false' if the entry is not found.
 
 -spec find_item(LMap, Entry) -> {value, Pid} | false when
-    LMap :: cauder_types:trace_map(),
-    Entry :: cauder_types:trace_entry_search(),
+    LMap :: cauder_types:trace(),
+    Entry :: cauder_types:action_search(),
     Pid :: cauder_types:proc_id().
 
 find_item(LMap, Entry) ->
@@ -91,8 +91,8 @@ find_item(LMap, Entry) ->
 %% called using the wildcard '_' when we are not interested in an element.
 
 -spec compare(LogItem, Entry) -> true | false when
-    LogItem :: cauder_types:trace(),
-    Entry :: cauder_types:trace_entry_search().
+    LogItem :: [cauder_types:action()],
+    Entry :: cauder_types:action_search().
 
 compare([], _) -> false;
 compare([H | _], H) -> true;
@@ -107,7 +107,7 @@ compare([_ | T], Entry) -> compare(T, Entry).
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Pid :: cauder_types:proc_id(),
     Parent :: cauder_types:proc_id().
 
@@ -118,9 +118,9 @@ find_spawn_parent(LMap, Pid) ->
 %% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
 
 -spec find_spawn_log(LMap, Pid) -> Log when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:trace_entry().
+    Log :: cauder_types:action().
 
 find_spawn_log(LMap, Pid) ->
     {value, Log} = lists:search(
@@ -139,7 +139,7 @@ find_spawn_log(LMap, Pid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_node_parent(LMap, Node) -> {value, Parent} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Node :: node(),
     Parent :: cauder_types:proc_id().
 
@@ -153,7 +153,7 @@ find_node_parent(LMap, Node) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -167,7 +167,7 @@ find_msg_sender(LMap, Uid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -215,7 +215,7 @@ find_process_with_failed_start(ProcessMap, Node) ->
 %% this was already part of the network, by looking at its log
 
 -spec find_process_with_failed_spawn(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Node :: node(),
     Process :: cauder_types:proc_id().
 
@@ -226,7 +226,7 @@ find_process_with_failed_spawn(LMap, Node) ->
 %% @doc Searches for the process(es) that will do a read while `Node' was not part of the network
 
 -spec find_process_with_future_reads(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:trace_map(),
+    LMap :: cauder_types:trace(),
     Node :: node(),
     Process :: cauder_types:proc_id().
 
@@ -628,7 +628,7 @@ load_trace(Dir) ->
     }.
 
 -spec find_last_message_uid(Terms) -> ok when
-    Terms :: [cauder_types:trace_entry()].
+    Terms :: [cauder_types:action()].
 
 find_last_message_uid(Terms) ->
     AllUids = lists:filtermap(
@@ -689,9 +689,9 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 %%%=============================================================================
 
 -spec happen_before(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 happen_before(E1, E2, Traces) ->
     hb_1(E1, E2, Traces) orelse
@@ -703,9 +703,9 @@ happen_before(E1, E2, Traces) ->
 % Rule 1
 
 -spec hb_1(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 hb_1({_, {deliver, _}}, {_, _}, _) -> false;
 hb_1({_, _}, {_, {deliver, _}}, _) -> false;
@@ -715,9 +715,9 @@ hb_1(_, _, _) -> false.
 % Rule 2
 
 -spec hb_2(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 hb_2({P, {deliver, L1} = A1}, {P, {deliver, L2} = A2}, Traces) when L1 =/= L2 -> is_before(A1, A2, maps:get(P, Traces));
 hb_2(_, _, _) -> false.
@@ -725,9 +725,9 @@ hb_2(_, _, _) -> false.
 % Rule 3
 
 -spec hb_3(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 hb_3({P1, {spawn, {_, P2}, _}}, {P2, _}, _) when P1 =/= P2 -> true;
 hb_3(_, _, _) -> false.
@@ -735,9 +735,9 @@ hb_3(_, _, _) -> false.
 % Rule 4
 
 -spec hb_4(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 hb_4({_, {send, L}}, {_, {deliver, L}}, _) -> true;
 hb_4(_, _, _) -> false.
@@ -745,17 +745,17 @@ hb_4(_, _, _) -> false.
 % Rule 5
 
 -spec hb_5(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_entry()},
-    Traces :: cauder_types:trace_map().
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Traces :: cauder_types:trace().
 
 hb_5({_, {deliver, L}}, {_, {'receive', L}}, _) -> true;
 hb_5(_, _, _) -> false.
 
 -spec is_before(Action1, Action2, Trace) -> boolean() when
-    Action1 :: cauder_types:trace_entry(),
-    Action2 :: cauder_types:trace_entry(),
-    Trace :: cauder_types:trace().
+    Action1 :: cauder_types:action(),
+    Action2 :: cauder_types:action(),
+    Trace :: [cauder_types:action()].
 
 is_before(A1, _, [A1 | _]) -> true;
 is_before(_, A2, [A2 | _]) -> false;
@@ -764,7 +764,7 @@ is_before(A1, A2, [_ | Seq]) -> is_before(A1, A2, Seq).
 -spec race_set({Pid, ReceiveEvent}, Traces) -> [RaceSet] when
     Pid :: cauder_types:proc_id(),
     ReceiveEvent :: {'receive', cauder_mailbox:uid()},
-    Traces :: cauder_types:trace_map(),
+    Traces :: cauder_types:trace(),
     RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
 
 race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
@@ -801,7 +801,10 @@ race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
         SendEvents
     ).
 
-race_set_cond1(Ed, Es, Traces) -> not happen_before(Ed, Es, Traces).
+race_set_cond1(Ed, Es, Traces) ->
+    HappenBefore = happen_before(Ed, Es, Traces),
+    io:format("Cond1: ~p - ~p = ~p~n", [Ed, Es, HappenBefore]),
+    not HappenBefore.
 
 race_set_cond2({P, {deliver, _L}} = Ed, L1, Traces) ->
     Ed1 = {P, Ad1 = {deliver, L1}},

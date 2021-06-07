@@ -27,7 +27,7 @@ process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
 %%%=============================================================================
 
 -spec log_entry(LogEntry) -> String when
-    LogEntry :: cauder_types:trace_entry(),
+    LogEntry :: cauder_types:action(),
     String :: string().
 
 log_entry({nodes, Nodes}) -> "nodes(" ++ to_string(Nodes) ++ ")";

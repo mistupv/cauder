@@ -21,7 +21,7 @@
     % A map between 'unique integers' and stamps
     stamps = maps:new() :: #{integer() => non_neg_integer()},
     % The trace
-    traces = maps:new() :: cauder_types:trace_map(),
+    traces = maps:new() :: cauder_types:trace(),
     % A set with all the processes being traced
     processes :: sets:set(pid()),
     % The value returned by the function application
@@ -405,7 +405,7 @@ trace_handler(Trace, []) ->
 
 -spec add_to_trace(Pid, Entry, State) -> NewState when
     Pid :: pid(),
-    Entry :: cauder_types:trace_entry(),
+    Entry :: cauder_types:action(),
     State :: state(),
     NewState :: state().
 

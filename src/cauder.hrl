@@ -65,7 +65,7 @@
     % Pool of processes
     procs :: cauder_types:process_map(),
     % System log
-    traces = maps:new() :: cauder_types:trace_map(),
+    traces = maps:new() :: cauder_types:trace(),
     % System nodes
     nodes = [] :: [node()],
     x_trace = [] :: [cauder_types:x_trace()],
@@ -147,5 +147,5 @@
     comp :: non_neg_integer(),
     % Execution time in microseconds
     exec :: non_neg_integer(),
-    traces = #{} :: cauder_types:trace_map()
+    traces = #{} :: cauder_types:trace()
 }).
