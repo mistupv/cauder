@@ -688,79 +688,6 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 
 %%%=============================================================================
 
--spec happen_before(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-happen_before(E1, E2, Traces) ->
-    hb_1(E1, E2, Traces) orelse
-        hb_2(E1, E2, Traces) orelse
-        hb_3(E1, E2, Traces) orelse
-        hb_4(E1, E2, Traces) orelse
-        hb_5(E1, E2, Traces).
-
-% Rule 1
-
--spec hb_1(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-hb_1({_, {deliver, _}}, {_, _}, _) -> false;
-hb_1({_, _}, {_, {deliver, _}}, _) -> false;
-hb_1({P, A1}, {P, A2}, Traces) -> is_before(A1, A2, maps:get(P, Traces));
-hb_1(_, _, _) -> false.
-
-% Rule 2
-
--spec hb_2(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-hb_2({P, {deliver, L1} = A1}, {P, {deliver, L2} = A2}, Traces) when L1 =/= L2 -> is_before(A1, A2, maps:get(P, Traces));
-hb_2(_, _, _) -> false.
-
-% Rule 3
-
--spec hb_3(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-hb_3({P1, {spawn, {_, P2}, _}}, {P2, _}, _) when P1 =/= P2 -> true;
-hb_3(_, _, _) -> false.
-
-% Rule 4
-
--spec hb_4(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-hb_4({_, {send, L}}, {_, {deliver, L}}, _) -> true;
-hb_4(_, _, _) -> false.
-
-% Rule 5
-
--spec hb_5(Event1, Event2, Traces) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Traces :: cauder_types:trace().
-
-hb_5({_, {deliver, L}}, {_, {'receive', L}}, _) -> true;
-hb_5(_, _, _) -> false.
-
--spec is_before(Action1, Action2, Trace) -> boolean() when
-    Action1 :: cauder_types:action(),
-    Action2 :: cauder_types:action(),
-    Trace :: [cauder_types:action()].
-
-is_before(A1, _, [A1 | _]) -> true;
-is_before(_, A2, [A2 | _]) -> false;
-is_before(A1, A2, [_ | Seq]) -> is_before(A1, A2, Seq).
-
 -spec race_set({Pid, ReceiveEvent}, Traces) -> [RaceSet] when
     Pid :: cauder_types:proc_id(),
     ReceiveEvent :: {'receive', cauder_mailbox:uid()},
@@ -802,19 +729,19 @@ race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
     ).
 
 race_set_cond1(Ed, Es, Traces) ->
-    HappenBefore = happen_before(Ed, Es, Traces),
+    HappenBefore = happened_before(Ed, Es, Traces),
     io:format("Cond1: ~p - ~p = ~p~n", [Ed, Es, HappenBefore]),
     not HappenBefore.
 
 race_set_cond2({P, {deliver, _L}} = Ed, L1, Traces) ->
     Ed1 = {P, Ad1 = {deliver, L1}},
-    lists:member(Ad1, maps:get(P, Traces)) andalso happen_before(Ed, Ed1, Traces).
+    lists:member(Ad1, maps:get(P, Traces)) andalso happened_before(Ed, Ed1, Traces).
 
 race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Traces) ->
     SendEvents1 = lists:filter(
         fun
             ({Pid, {send, L2}} = SendEvent1) when Pid =:= P1, L2 =/= L1 ->
-                happen_before(SendEvent1, Es, Traces);
+                happened_before(SendEvent1, Es, Traces);
             (_) ->
                 false
         end,
@@ -824,7 +751,87 @@ race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Trac
     lists:all(
         fun({_, {send, L2}} = _SendEvent1) ->
             DeliverEvent2 = {P, DeliverAction = {deliver, L2}},
-            lists:member(DeliverAction, maps:get(P, Traces)) andalso happen_before(DeliverEvent2, Ed, Traces)
+            lists:member(DeliverAction, maps:get(P, Traces)) andalso happened_before(DeliverEvent2, Ed, Traces)
         end,
         SendEvents1
     ).
+
+%%%=============================================================================
+
+-spec happened_before(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+happened_before(E1, E2, Trace) ->
+    hb_cond1(E1, E2, Trace) orelse
+        hb_cond2(E1, E2, Trace) orelse
+        hb_cond3(E1, E2, Trace) orelse
+        hb_cond4(E1, E2, Trace) orelse
+        hb_cond5(E1, E2, Trace).
+
+%%------------------------------------------------------------------------------
+%% @doc Condition 1: p1 = p2, a1 != deliver(_), a2 != deliver(_), and a1 comes before a2 in the sequence T(p1)
+
+-spec hb_cond1(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+hb_cond1({_, {deliver, _}}, _, _) -> false;
+hb_cond1(_, {_, {deliver, _}}, _) -> false;
+hb_cond1({P, A1}, {P, A2}, T) -> is_before(A1, A2, maps:get(P, T));
+hb_cond1(_, _, _) -> false.
+
+%%------------------------------------------------------------------------------
+%% @doc Condition 2: p1 = p2, a1 = deliver(l), a2 != deliver(l'), l != l', and a1 comes before a2 in the sequence T(p1)
+
+-spec hb_cond2(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+hb_cond2({P, {deliver, L1} = A1}, {P, {deliver, L2} = A2}, T) when L1 =/= L2 -> is_before(A1, A2, maps:get(P, T));
+hb_cond2(_, _, _) -> false.
+
+%%------------------------------------------------------------------------------
+%% @doc Condition 3: a1 = spawn(p2), and p1 != p2
+
+-spec hb_cond3(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+hb_cond3({P1, {spawn, {_, P2}, _}}, {P2, _}, _) when P1 =/= P2 -> true;
+hb_cond3(_, _, _) -> false.
+
+%%------------------------------------------------------------------------------
+%% @doc Condition 4: a1 = send(l), and a2 = deliver(l)
+
+-spec hb_cond4(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+hb_cond4({_, {send, L}}, {_, {deliver, L}}, _) -> true;
+hb_cond4(_, _, _) -> false.
+
+%%------------------------------------------------------------------------------
+%% @doc Condition 5: a1 = deliver(l), and a2 = receive(l)
+
+-spec hb_cond5(Event1, Event2, Trace) -> boolean() when
+    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Trace :: cauder_trace:trace().
+
+hb_cond5({_, {deliver, L}}, {_, {'receive', L}}, _) -> true;
+hb_cond5(_, _, _) -> false.
+
+-spec is_before(Action1, Action2, Actions) -> boolean() when
+    Action1 :: cauder_types:action(),
+    Action2 :: cauder_types:action(),
+    Actions :: [cauder_types:action()].
+
+is_before(A1, _, [A1 | _]) -> true;
+is_before(_, A2, [A2 | _]) -> false;
+is_before(A1, A2, [_ | As]) -> is_before(A1, A2, As).
