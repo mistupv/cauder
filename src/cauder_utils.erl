@@ -34,6 +34,8 @@
 
 -elvis([{elvis_style, god_modules, disable}]).
 
+-ignore_xref([race_set/2]).
+
 -include("cauder.hrl").
 
 %%------------------------------------------------------------------------------
@@ -694,54 +696,61 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
     Traces :: cauder_types:trace(),
     RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
 
-race_set({P, {'receive', L} = Ar} = _Er, Traces) ->
+race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     % Assert that p:receive(l) ∈ T
-    true = lists:member(Ar, maps:get(P, Traces)),
+    true = lists:member(Ar, maps:get(P, Trace)),
+
+    Graph = trace_graph(Trace),
+
     % Type: [{Pid, {send, Uid}}, ...]
     SendEvents = lists:flatmap(
-        fun({P1, Trace}) ->
+        fun({P1, Actions}) ->
             lists:filtermap(
                 fun
                     ({send, L1} = SendEvent) when L1 =/= L -> {true, {P1, SendEvent}};
                     (_) -> false
                 end,
-                Trace
+                Actions
             )
         end,
-        maps:to_list(Traces)
+        maps:to_list(Trace)
     ),
 
     Ed = {P, {deliver, L}},
 
-    lists:foldl(
-        fun({_P1, {send, L1}} = Es, Set) ->
-            InRaceSet =
-                race_set_cond1(Ed, Es, Traces) andalso
-                    race_set_cond2(Ed, L1, Traces) andalso
-                    race_set_cond3(Ed, Es, SendEvents, Traces),
-            case InRaceSet of
-                true -> ordsets:add_element(L1, Set);
-                false -> Set
-            end
-        end,
-        ordsets:new(),
-        SendEvents
-    ).
+    RaceSet =
+        lists:foldl(
+            fun({_P1, {send, L1}} = Es, Set) ->
+                Cond1 = race_set_cond1(Ed, Es, Graph),
+                Cond2 = race_set_cond2(Ed, L1, Trace, Graph),
+                Cond3 = race_set_cond3(Ed, Es, SendEvents, Trace, Graph),
+                InRaceSet =
+                    Cond1 andalso
+                        Cond2 andalso
+                        Cond3,
+                case InRaceSet of
+                    true -> ordsets:add_element(L1, Set);
+                    false -> Set
+                end
+            end,
+            ordsets:new(),
+            SendEvents
+        ),
+    digraph:delete(Graph),
+    RaceSet.
 
-race_set_cond1(Ed, Es, Traces) ->
-    HappenBefore = happened_before(Ed, Es, Traces),
-    io:format("Cond1: ~p - ~p = ~p~n", [Ed, Es, HappenBefore]),
-    not HappenBefore.
+race_set_cond1(Ed, Es, G) ->
+    not happened_before(Ed, Es, G).
 
-race_set_cond2({P, {deliver, _L}} = Ed, L1, Traces) ->
+race_set_cond2({P, {deliver, _L}} = Ed, L1, Trace, G) ->
     Ed1 = {P, Ad1 = {deliver, L1}},
-    lists:member(Ad1, maps:get(P, Traces)) andalso happened_before(Ed, Ed1, Traces).
+    lists:member(Ad1, maps:get(P, Trace)) andalso happened_before(Ed, Ed1, G).
 
-race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Traces) ->
+race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Trace, G) ->
     SendEvents1 = lists:filter(
         fun
             ({Pid, {send, L2}} = SendEvent1) when Pid =:= P1, L2 =/= L1 ->
-                happened_before(SendEvent1, Es, Traces);
+                happened_before(SendEvent1, Es, G);
             (_) ->
                 false
         end,
@@ -751,87 +760,85 @@ race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Trac
     lists:all(
         fun({_, {send, L2}} = _SendEvent1) ->
             DeliverEvent2 = {P, DeliverAction = {deliver, L2}},
-            lists:member(DeliverAction, maps:get(P, Traces)) andalso happened_before(DeliverEvent2, Ed, Traces)
+            lists:member(DeliverAction, maps:get(P, Trace)) andalso happened_before(DeliverEvent2, Ed, G)
         end,
         SendEvents1
     ).
 
 %%%=============================================================================
 
--spec happened_before(Event1, Event2, Trace) -> boolean() when
+-spec happened_before(Event1, Event2, Graph) -> boolean() when
     Event1 :: {cauder_types:proc_id(), cauder_types:action()},
     Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
+    Graph :: digraph:graph().
 
-happened_before(E1, E2, Trace) ->
-    hb_cond1(E1, E2, Trace) orelse
-        hb_cond2(E1, E2, Trace) orelse
-        hb_cond3(E1, E2, Trace) orelse
-        hb_cond4(E1, E2, Trace) orelse
-        hb_cond5(E1, E2, Trace).
+happened_before({_P1, A1}, {_P2, A2}, G) ->
+    case digraph:get_path(G, A1, A2) of
+        false -> false;
+        _Path -> true
+    end.
 
-%%------------------------------------------------------------------------------
-%% @doc Condition 1: p1 = p2, a1 != deliver(_), a2 != deliver(_), and a1 comes before a2 in the sequence T(p1)
+-spec trace_graph(Trace) -> Graph when
+    Trace :: cauder_types:trace(),
+    Graph :: digraph:graph().
 
--spec hb_cond1(Event1, Event2, Trace) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
+trace_graph(Trace) ->
+    G = digraph:new([acyclic]),
 
-hb_cond1({_, {deliver, _}}, _, _) -> false;
-hb_cond1(_, {_, {deliver, _}}, _) -> false;
-hb_cond1({P, A1}, {P, A2}, T) -> is_before(A1, A2, maps:get(P, T));
-hb_cond1(_, _, _) -> false.
+    AuxFun =
+        fun(A, Map) ->
+            digraph:add_vertex(G, A),
+            case A of
+                {spawn, _, success} ->
+                    maps:update_with(spawn, fun(List) -> [A | List] end, [A], Map);
+                {Kind, Uid} when
+                    Kind =:= send;
+                    Kind =:= deliver;
+                    Kind =:= 'receive'
+                ->
+                    maps:update_with(Kind, fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
+                _ ->
+                    Map
+            end
+        end,
 
-%%------------------------------------------------------------------------------
-%% @doc Condition 2: p1 = p2, a1 = deliver(l), a2 != deliver(l'), l != l', and a1 comes before a2 in the sequence T(p1)
+    ActionTypes = lists:foldl(fun(As, Map) -> lists:foldl(AuxFun, Map, As) end, #{}, maps:values(Trace)),
 
--spec hb_cond2(Event1, Event2, Trace) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
+    % Condition 1: p1 = p2, a1 != deliver(_), a2 != deliver(_), and a1 comes before a2 in the sequence T(p1)
+    % Condition 2: p1 = p2, a1 = deliver(l), a2 != deliver(l'), l != l', and a1 comes before a2 in the sequence T(p1)
+    lists:foreach(
+        fun(Actions) ->
+            [
+                case {A1, A2} of
+                    {{deliver, L1}, {deliver, L2}} when L1 =/= L2 -> digraph:add_edge(G, A1, A2);
+                    {{deliver, _}, _} -> skip;
+                    {_, {deliver, _}} -> skip;
+                    {_, _} -> digraph:add_edge(G, A1, A2)
+                end
+             || A1 <- Actions, A2 <- tl(lists:dropwhile(fun(A) -> A =/= A1 end, Actions))
+            ]
+        end,
+        maps:values(Trace)
+    ),
 
-hb_cond2({P, {deliver, L1} = A1}, {P, {deliver, L2} = A2}, T) when L1 =/= L2 -> is_before(A1, A2, maps:get(P, T));
-hb_cond2(_, _, _) -> false.
+    % Condition 3: a1 = spawn(p2), and p1 != p2
+    lists:foreach(
+        fun({spawn, {_, Pid}, success} = A1) ->
+            lists:foreach(fun(A2) -> digraph:add_edge(G, A1, A2) end, maps:get(Pid, Trace))
+        end,
+        maps:get(spawn, ActionTypes, [])
+    ),
 
-%%------------------------------------------------------------------------------
-%% @doc Condition 3: a1 = spawn(p2), and p1 != p2
+    SendUids = maps:get(send, ActionTypes, sets:new()),
+    DeliverUids = maps:get(deliver, ActionTypes, sets:new()),
+    ReceiveUids = maps:get('receive', ActionTypes, sets:new()),
 
--spec hb_cond3(Event1, Event2, Trace) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
+    % Condition 4: a1 = send(l), and a2 = deliver(l)
+    true = sets:is_subset(DeliverUids, SendUids),
+    lists:foreach(fun(Uid) -> digraph:add_edge(G, {send, Uid}, {deliver, Uid}) end, sets:to_list(DeliverUids)),
 
-hb_cond3({P1, {spawn, {_, P2}, _}}, {P2, _}, _) when P1 =/= P2 -> true;
-hb_cond3(_, _, _) -> false.
+    % Condition 5: a1 = deliver(l), and a2 = receive(l)
+    true = sets:is_subset(ReceiveUids, DeliverUids),
+    lists:foreach(fun(Uid) -> digraph:add_edge(G, {deliver, Uid}, {'receive', Uid}) end, sets:to_list(ReceiveUids)),
 
-%%------------------------------------------------------------------------------
-%% @doc Condition 4: a1 = send(l), and a2 = deliver(l)
-
--spec hb_cond4(Event1, Event2, Trace) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
-
-hb_cond4({_, {send, L}}, {_, {deliver, L}}, _) -> true;
-hb_cond4(_, _, _) -> false.
-
-%%------------------------------------------------------------------------------
-%% @doc Condition 5: a1 = deliver(l), and a2 = receive(l)
-
--spec hb_cond5(Event1, Event2, Trace) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
-    Trace :: cauder_trace:trace().
-
-hb_cond5({_, {deliver, L}}, {_, {'receive', L}}, _) -> true;
-hb_cond5(_, _, _) -> false.
-
--spec is_before(Action1, Action2, Actions) -> boolean() when
-    Action1 :: cauder_types:action(),
-    Action2 :: cauder_types:action(),
-    Actions :: [cauder_types:action()].
-
-is_before(A1, _, [A1 | _]) -> true;
-is_before(_, A2, [A2 | _]) -> false;
-is_before(A1, A2, [_ | As]) -> is_before(A1, A2, As).
+    G.
