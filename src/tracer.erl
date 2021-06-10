@@ -21,10 +21,10 @@
     % A map between 'unique integers' and stamps
     stamps = maps:new() :: #{integer() => non_neg_integer()},
     % The trace
-    traces = maps:new() :: cauder_types:trace(),
+    trace = maps:new() :: cauder_types:trace(),
     % A set with all the processes being traced
     processes :: sets:set(pid()),
-    % The value returned by the function application
+    % The value returned by the initial function application
     return = none :: none | {value, term()},
     slave_starters = #{} :: #{pid() => {node(), pid()}}
 }).
@@ -128,7 +128,7 @@ init({MainPid, TracedPid}) ->
     Reply :: Reply,
     NewState :: state().
 
-handle_call(get_traces, _From, #state{traces = Trace} = State) ->
+handle_call(get_traces, _From, #state{trace = Trace} = State) ->
     ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
     {reply, {ok, ReversedTrace}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
@@ -205,7 +205,7 @@ handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
 handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, send_to_non_existing_process, {{stamp, _Stamp}, _Message}, _}, _From, State) ->
-    % TODO Log lost messages
+    % TODO Trace lost messages
     {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
     {reply, ok, State};
@@ -340,7 +340,7 @@ do_trace(Module, Function, Args, Opts) ->
     ReturnValue = gen_server:call(?SERVER, get_return_value),
     gen_server:stop(?SERVER),
 
-    Result = #trace_result{
+    Result = #trace_info{
         node = node(),
         pid = pid_index(TracedPid),
         call = {Module, Function, Args},
@@ -348,7 +348,7 @@ do_trace(Module, Function, Args, Opts) ->
         return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
-        traces = Traces
+        trace = Traces
     },
 
     case Output of
@@ -405,14 +405,14 @@ trace_handler(Trace, []) ->
 
 -spec add_to_trace(Pid, Entry, State) -> NewState when
     Pid :: pid(),
-    Entry :: cauder_types:action(),
+    Entry :: cauder_types:trace_action(),
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
+add_to_trace(Pid, Entry, #state{trace = Trace0} = State) ->
     Index = pid_index(Pid),
     Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
-    State#state{traces = Trace1}.
+    State#state{trace = Trace1}.
 
 -spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
     Pid :: pid(),
@@ -421,12 +421,12 @@ add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, traces = Trace0} = State) when is_atom(Tag) ->
+add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) when is_atom(Tag) ->
     PidIndex = pid_index(Pid),
     {Uid, StampMap1} = get_uid(Stamp, StampMap0, Table),
     Entry = {Tag, Uid},
     Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
-    State#state{stamps = StampMap1, traces = Trace1}.
+    State#state{stamps = StampMap1, trace = Trace1}.
 
 -spec pid_index(Pid) -> Index when
     Pid :: pid(),
@@ -459,8 +459,8 @@ get_uid(Stamp, Map, Table) ->
 
 write_trace(Dir, TraceResult) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_result | Values] = tuple_to_list(TraceResult),
-    Fields = record_info(fields, trace_result),
+    [trace_info | Values] = tuple_to_list(TraceResult),
+    Fields = record_info(fields, trace_info),
     {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),

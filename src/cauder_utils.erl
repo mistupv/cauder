@@ -75,8 +75,8 @@ fundef_lookup({M, F, A}) ->
 %% contains the given entry, or `false' if the entry is not found.
 
 -spec find_item(LMap, Entry) -> {value, Pid} | false when
-    LMap :: cauder_types:trace(),
-    Entry :: cauder_types:action_search(),
+    LMap :: cauder_types:log(),
+    Entry :: cauder_types:log_action_search(),
     Pid :: cauder_types:proc_id().
 
 find_item(LMap, Entry) ->
@@ -93,8 +93,8 @@ find_item(LMap, Entry) ->
 %% called using the wildcard '_' when we are not interested in an element.
 
 -spec compare(LogItem, Entry) -> true | false when
-    LogItem :: [cauder_types:action()],
-    Entry :: cauder_types:action_search().
+    LogItem :: [cauder_types:log_action()],
+    Entry :: cauder_types:log_action_search().
 
 compare([], _) -> false;
 compare([H | _], H) -> true;
@@ -109,7 +109,7 @@ compare([_ | T], Entry) -> compare(T, Entry).
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
     Parent :: cauder_types:proc_id().
 
@@ -120,9 +120,9 @@ find_spawn_parent(LMap, Pid) ->
 %% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
 
 -spec find_spawn_log(LMap, Pid) -> Log when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:action().
+    Log :: cauder_types:log_action().
 
 find_spawn_log(LMap, Pid) ->
     {value, Log} = lists:search(
@@ -141,7 +141,7 @@ find_spawn_log(LMap, Pid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_node_parent(LMap, Node) -> {value, Parent} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Node :: node(),
     Parent :: cauder_types:proc_id().
 
@@ -155,7 +155,7 @@ find_node_parent(LMap, Node) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -169,7 +169,7 @@ find_msg_sender(LMap, Uid) ->
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Uid :: cauder_mailbox:uid(),
     Pid :: cauder_types:proc_id().
 
@@ -217,7 +217,7 @@ find_process_with_failed_start(ProcessMap, Node) ->
 %% this was already part of the network, by looking at its log
 
 -spec find_process_with_failed_spawn(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Node :: node(),
     Process :: cauder_types:proc_id().
 
@@ -228,7 +228,7 @@ find_process_with_failed_spawn(LMap, Node) ->
 %% @doc Searches for the process(es) that will do a read while `Node' was not part of the network
 
 -spec find_process_with_future_reads(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_types:trace(),
+    LMap :: cauder_types:log(),
     Node :: node(),
     Process :: cauder_types:proc_id().
 
@@ -596,7 +596,7 @@ load_trace(Dir) ->
         exec := ExecTime
     } = maps:from_list(ResultTerms),
 
-    Traces =
+    Trace =
         filelib:fold_files(
             Dir,
             "trace_\\d+\\.log",
@@ -618,7 +618,7 @@ load_trace(Dir) ->
             maps:new()
         ),
 
-    #trace_result{
+    #trace_info{
         node = InitialNode,
         pid = InitialPid,
         call = {Mod, Fun, Args},
@@ -626,11 +626,11 @@ load_trace(Dir) ->
         return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
-        traces = Traces
+        trace = Trace
     }.
 
 -spec find_last_message_uid(Terms) -> ok when
-    Terms :: [cauder_types:action()].
+    Terms :: [cauder_types:log_action()].
 
 find_last_message_uid(Terms) ->
     AllUids = lists:filtermap(
@@ -690,10 +690,10 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 
 %%%=============================================================================
 
--spec race_set({Pid, ReceiveEvent}, Traces) -> [RaceSet] when
+-spec race_set({Pid, ReceiveEvent}, Trace) -> [RaceSet] when
     Pid :: cauder_types:proc_id(),
     ReceiveEvent :: {'receive', cauder_mailbox:uid()},
-    Traces :: cauder_types:trace(),
+    Trace :: tracer:trace(),
     RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
 
 race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
@@ -703,17 +703,19 @@ race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     Graph = trace_graph(Trace),
 
     % Type: [{Pid, {send, Uid}}, ...]
-    SendEvents = lists:flatmap(
-        fun({P1, Actions}) ->
-            lists:filtermap(
+    SendEvents = maps:fold(
+        fun(P1, Actions, Acc) ->
+            lists:foldl(
                 fun
-                    ({send, L1} = SendEvent) when L1 =/= L -> {true, {P1, SendEvent}};
-                    (_) -> false
+                    ({send, L1} = Es, List) when L1 =/= L -> [{P1, Es} | List];
+                    (_, List) -> List
                 end,
+                Acc,
                 Actions
             )
         end,
-        maps:to_list(Trace)
+        [],
+        Trace
     ),
 
     Ed = {P, {deliver, L}},
@@ -721,14 +723,11 @@ race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     RaceSet =
         lists:foldl(
             fun({_P1, {send, L1}} = Es, Set) ->
-                Cond1 = race_set_cond1(Ed, Es, Graph),
-                Cond2 = race_set_cond2(Ed, L1, Trace, Graph),
-                Cond3 = race_set_cond3(Ed, Es, SendEvents, Trace, Graph),
-                InRaceSet =
-                    Cond1 andalso
-                        Cond2 andalso
-                        Cond3,
-                case InRaceSet of
+                case
+                    race_set_cond1(Ed, Es, Graph) andalso
+                        race_set_cond2(Ed, L1, Trace, Graph) andalso
+                        race_set_cond3(Ed, Es, SendEvents, Trace, Graph)
+                of
                     true -> ordsets:add_element(L1, Set);
                     false -> Set
                 end
@@ -739,22 +738,40 @@ race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     digraph:delete(Graph),
     RaceSet.
 
+-spec race_set_cond1(DeliverEvent, SendEvent, Graph) -> boolean() when
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
+    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
+    Graph :: digraph:graph().
+
 race_set_cond1(Ed, Es, G) ->
     not happened_before(Ed, Es, G).
+
+-spec race_set_cond2(DeliverEvent, Uid, Trace, Graph) -> boolean() when
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
+    Uid :: cauder_mailbox:uid(),
+    Trace :: tracer:trace(),
+    Graph :: digraph:graph().
 
 race_set_cond2({P, {deliver, _L}} = Ed, L1, Trace, G) ->
     Ed1 = {P, Ad1 = {deliver, L1}},
     lists:member(Ad1, maps:get(P, Trace)) andalso happened_before(Ed, Ed1, G).
 
-race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Trace, G) ->
+-spec race_set_cond3(DeliverEvent, SendEvent, SendPairs, Trace, Graph) -> boolean() when
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
+    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
+    SendPairs :: [{cauder_types:proc_id(), cauder_types:action_send()}],
+    Trace :: tracer:trace(),
+    Graph :: digraph:graph().
+
+race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents, Trace, G) ->
     SendEvents1 = lists:filter(
         fun
-            ({Pid, {send, L2}} = SendEvent1) when Pid =:= P1, L2 =/= L1 ->
-                happened_before(SendEvent1, Es, G);
+            ({Pid, {send, L2}} = Es1) when Pid =:= P1, L2 =/= L1 ->
+                happened_before(Es1, Es, G);
             (_) ->
                 false
         end,
-        SendEvents0
+        SendEvents
     ),
 
     lists:all(
@@ -765,11 +782,9 @@ race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents0, Trac
         SendEvents1
     ).
 
-%%%=============================================================================
-
 -spec happened_before(Event1, Event2, Graph) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:action()},
+    Event1 :: {cauder_types:proc_id(), cauder_types:trace_action()},
+    Event2 :: {cauder_types:proc_id(), cauder_types:trace_action()},
     Graph :: digraph:graph().
 
 happened_before({_P1, A1}, {_P2, A2}, G) ->
@@ -779,7 +794,7 @@ happened_before({_P1, A1}, {_P2, A2}, G) ->
     end.
 
 -spec trace_graph(Trace) -> Graph when
-    Trace :: cauder_types:trace(),
+    Trace :: tracer:trace(),
     Graph :: digraph:graph().
 
 trace_graph(Trace) ->

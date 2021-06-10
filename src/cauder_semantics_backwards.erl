@@ -23,7 +23,7 @@
     Pid :: cauder_types:proc_id(),
     NewSystem :: cauder_types:system().
 
-step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid) ->
+step(#sys{nodes = Nodes, mail = Mail, log = LMap, x_trace = Trace} = Sys, Pid) ->
     {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
     case Entry of
         {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self orelse Label =:= node ->
@@ -47,7 +47,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
             Sys#sys{
                 mail = Mail,
                 procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
+                log = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
             };
         {spawn, Bs, Es, Stk, Node, Gid} ->
             P = P0#proc{
@@ -70,7 +70,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
             Sys#sys{
                 mail = Mail,
                 procs = maps:remove(Gid, PMap#{Pid => P}),
-                traces = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
+                log = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
                 x_trace = lists:delete(T, Trace)
             };
         {start, success, Bs, Es, Stk, Node} ->
@@ -91,7 +91,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 mail = Mail,
                 procs = PMap#{Pid => P},
                 x_trace = lists:delete(T, Trace),
-                traces = maps:update_with(Pid, fun(Log) -> [{start, Node, success} | Log] end, [], LMap)
+                log = maps:update_with(Pid, fun(Log) -> [{start, Node, success} | Log] end, [], LMap)
             };
         {start, failure, Bs, Es, Stk, Node} ->
             P = P0#proc{
@@ -110,7 +110,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 mail = Mail,
                 procs = PMap#{Pid => P},
                 x_trace = lists:delete(T, Trace),
-                traces = maps:update_with(Pid, fun(Log) -> [{start, Node, failure} | Log] end, [], LMap)
+                log = maps:update_with(Pid, fun(Log) -> [{start, Node, failure} | Log] end, [], LMap)
             };
         {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
             {_Msg, OldMsgs} = cauder_mailbox:delete(Msg, Mail),
@@ -131,7 +131,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
             Sys#sys{
                 mail = OldMsgs,
                 procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
+                log = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
                 x_trace = lists:delete(T, Trace)
             };
         {rec, Bs, Es, Stk, M = #message{uid = Uid, value = Value, dest = Pid}, QPos} ->
@@ -151,7 +151,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
             Sys#sys{
                 mail = cauder_mailbox:insert(M, QPos, Mail),
                 procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
+                log = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
                 x_trace = lists:delete(T, Trace)
             }
     end.

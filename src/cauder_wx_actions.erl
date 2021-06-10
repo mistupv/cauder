@@ -407,7 +407,7 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
     ok;
-update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
+update_replay(_, #wx_state{system = #sys{log = Traces}, pid = Pid}) ->
     case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Traces)) of
         true ->
             wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),

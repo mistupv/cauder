@@ -37,7 +37,7 @@
 step(Sys, Pid, Sched, Mode) ->
     {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),
     #result{label = Label, exprs = Es} = Result = cauder_eval:seq(Bs0, Es0, Stk0),
-    #sys{nodes = Nodes, traces = LMap} = Sys,
+    #sys{nodes = Nodes, log = LMap} = Sys,
     case Label of
         tau ->
             fwd_tau(P0, Result, Sys);
@@ -310,7 +310,7 @@ check_reducibility([], _, _, _, 'case') ->
     ?RULE_SEQ;
 check_reducibility([], _, _, _, bif) ->
     ?RULE_SEQ;
-check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, nodes) ->
+check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, nodes) ->
     SNodes = Nodes -- [Node],
     Log = extract_log(LMap, Pid, nodes),
     case Log of
@@ -318,7 +318,7 @@ check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{traces = LMap, nod
         {found, {nodes, {LogNodes}}, _} when LogNodes =:= SNodes -> ?RULE_NODES;
         _ -> ?NOT_EXP
     end;
-check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{traces = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
+check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{log = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
     IsMatch =
         case Mode of
             normal ->
@@ -332,7 +332,7 @@ check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{traces = LMap,
         true -> ?RULE_RECEIVE;
         false -> ?NOT_EXP
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, spawn) ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, spawn) ->
     Log = extract_log(LMap, Pid, spawn),
     case Log of
         not_found ->
@@ -343,7 +343,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, 
                 {_, _} -> ?RULE_START
             end
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, start) ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, start) ->
     Log = extract_log(LMap, Pid, start),
     case Log of
         not_found ->
@@ -468,7 +468,7 @@ fwd_node(
 fwd_nodes(
     #proc{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {nodes, VarNodes}},
-    #sys{nodes = Nodes, traces = LMap, procs = PMap} = Sys,
+    #sys{nodes = Nodes, log = LMap, procs = PMap} = Sys,
     Opts
 ) ->
     NewLog =
@@ -484,7 +484,7 @@ fwd_nodes(
     },
     Sys#sys{
         procs = PMap#{Pid => P},
-        traces = LMap#{Pid => NewLog}
+        log = LMap#{Pid => NewLog}
     }.
 
 -spec fwd_spawn_s(Proc, Result, Sys, Opts) -> NewSystem when
@@ -497,7 +497,7 @@ fwd_nodes(
 fwd_spawn_s(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{label = {spawn, VarPid, N, M, F, As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, procs = PMap, x_trace = Trace} = Sys,
+    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     Inline = maps:get(inline, Opts, false),
@@ -543,7 +543,7 @@ fwd_spawn_s(
     },
     Sys#sys{
         procs = PMap#{Pid => P1, SpawnPid => P2},
-        traces = LMap#{Pid => NewLog},
+        log = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
     }.
 
@@ -557,7 +557,7 @@ fwd_spawn_s(
 fwd_spawn_f(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{label = {spawn, VarPid, N, _M, _F, _As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, procs = PMap, x_trace = Trace} = Sys,
+    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewLog =
@@ -583,7 +583,7 @@ fwd_spawn_f(
     },
     Sys#sys{
         procs = PMap#{Pid => P1},
-        traces = LMap#{Pid => NewLog},
+        log = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
     }.
 
@@ -597,7 +597,7 @@ fwd_spawn_f(
 fwd_start_s(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{nodes = Nodes, traces = LMap, procs = PMap, x_trace = Trace} = Sys,
+    #sys{nodes = Nodes, log = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewNode =
@@ -626,7 +626,7 @@ fwd_start_s(
         procs = PMap#{Pid => P},
         x_trace = [T | Trace],
         nodes = [NewNode] ++ Nodes,
-        traces = LMap#{Pid => NewLog}
+        log = LMap#{Pid => NewLog}
     }.
 
 -spec fwd_start_f(Proc, Result, Sys, Opts) -> NewSystem when
@@ -639,7 +639,7 @@ fwd_start_s(
 fwd_start_f(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, procs = PMap, x_trace = Trace} = Sys,
+    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewNode =
@@ -668,7 +668,7 @@ fwd_start_f(
     Sys#sys{
         procs = PMap#{Pid => P},
         x_trace = [T | Trace],
-        traces = LMap#{Pid => NewLog}
+        log = LMap#{Pid => NewLog}
     }.
 
 -spec fwd_send(Proc, Result, Sys, Opts) -> NewSystem when
@@ -681,7 +681,7 @@ fwd_start_f(
 fwd_send(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}},
-    #sys{mail = Mail, traces = LMap, procs = PMap, x_trace = Trace} = Sys,
+    #sys{mail = Mail, log = LMap, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewLog = maps:get(new_log, Opts, []),
@@ -717,7 +717,7 @@ fwd_send(
     Sys#sys{
         mail = cauder_mailbox:add(M, Mail),
         procs = PMap#{Pid => P},
-        traces = LMap#{Pid => NewLog},
+        log = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
     }.
 
@@ -731,7 +731,7 @@ fwd_send(
 fwd_rec(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs, stack = Stk, label = {rec, _, Cs}},
-    #sys{mail = Mail, traces = LMap0, procs = PMap, x_trace = Trace} = Sys,
+    #sys{mail = Mail, log = LMap0, procs = PMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     Mode =
@@ -776,6 +776,6 @@ fwd_rec(
     Sys#sys{
         mail = Mail1,
         procs = PMap#{Pid => P},
-        traces = LMap1,
+        log = LMap1,
         x_trace = [T | Trace]
     }.
