@@ -10,6 +10,7 @@
 
 %% API
 -export([step/4, options/2]).
+-export([step_deliver/2]).
 
 -ifdef(EUNIT).
 -export([rdep/2]).
@@ -399,33 +400,33 @@ next_send(Pid, Log) ->
             {cauder_mailbox:uid(), Log}
     end.
 
--spec next_receive(Pid, Log) -> {Uid, NewLog} when
-    Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:log(),
-    Uid :: cauder_mailbox:uid(),
-    NewLog :: cauder_types:log().
-
-next_receive(Pid, Log) ->
-    case Log of
-        #{Pid := [{'receive', Uid} | RestLog]} ->
-            {Uid, Log#{Pid => RestLog}};
-        _ ->
-            {cauder_mailbox:uid(), Log}
-    end.
-
--spec next_spawn(Pid, Log) -> {SpawnPid, NewLog} when
-    Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:log(),
-    SpawnPid :: cauder_types:proc_id(),
-    NewLog :: cauder_types:log().
-
-next_spawn(Pid, Log) ->
-    case Log of
-        #{Pid := [{spawn, {SpawnNode, SpawnPid}, Result} | RestLog]} ->
-            {SpawnPid, Log#{Pid => RestLog}};
-        _ ->
-            {cauder_mailbox:uid(), Log}
-    end.
+%%-spec next_receive(Pid, Log) -> {Uid, NewLog} when
+%%    Pid :: cauder_types:proc_id(),
+%%    Log :: cauder_types:log(),
+%%    Uid :: cauder_mailbox:uid(),
+%%    NewLog :: cauder_types:log().
+%%
+%%next_receive(Pid, Log) ->
+%%    case Log of
+%%        #{Pid := [{'receive', Uid} | RestLog]} ->
+%%            {Uid, Log#{Pid => RestLog}};
+%%        _ ->
+%%            {cauder_mailbox:uid(), Log}
+%%    end.
+%%
+%%-spec next_spawn(Pid, Log) -> {SpawnPid, NewLog} when
+%%    Pid :: cauder_types:proc_id(),
+%%    Log :: cauder_types:log(),
+%%    SpawnPid :: cauder_types:proc_id(),
+%%    NewLog :: cauder_types:log().
+%%
+%%next_spawn(Pid, Log) ->
+%%    case Log of
+%%        #{Pid := [{spawn, {SpawnNode, SpawnPid}, Result} | RestLog]} ->
+%%            {SpawnPid, Log#{Pid => RestLog}};
+%%        _ ->
+%%            {cauder_mailbox:uid(), Log}
+%%    end.
 
 -spec admissible(Pid, Log, LocalMail) -> Uid when
     Pid :: cauder_types:proc_id(),
@@ -442,7 +443,7 @@ admissible(Pid, Log, LocalMail) ->
         queue:to_list(LocalMail)
     ),
     case lists:search(fun({'receive', Uid}) -> not sets:is_element(Uid, DeliveredUids) end, Actions) of
-        {'receive', Uid} when Uid =:= NextDeliverUid -> NextDeliverUid;
+        {value, {'receive', NextDeliverUid}} -> NextDeliverUid;
         _ -> error(inadmissible)
     end.
 
