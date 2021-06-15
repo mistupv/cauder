@@ -156,7 +156,7 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 %% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
 %% been removed.
 
--spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
+-spec uid_take(Uid, Mailbox1) -> {{Message, QueuePosition}, Mailbox2} | false when
     Uid :: uid(),
     Mailbox1 :: mailbox(),
     Message :: message(),
@@ -173,7 +173,7 @@ uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
             {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
             QueuePos = queue_index_of(Message, Queue),
             {_, Mailbox} = delete(Message, Mailbox0),
-            {value, {Message, QueuePos}, Mailbox}
+            {{Message, QueuePos}, Mailbox}
     end.
 
 %%------------------------------------------------------------------------------

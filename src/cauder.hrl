@@ -86,6 +86,8 @@
     env = maps:new() :: cauder_types:environment(),
     % List of expressions
     exprs :: [cauder_types:abstract_expr()],
+    % Local message queue
+    mail = queue:new() :: queue:queue(cauder_mailbox:message()),
     % The entry point function for this process
     entry_point :: mfa()
 }).
@@ -93,7 +95,7 @@
 %% Message
 -record(message, {
     % UID
-    uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
+    uid :: cauder_mailbox:uid(),
     % Message
     value :: term(),
     % Sender PID

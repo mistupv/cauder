@@ -37,23 +37,25 @@
 step(Sys, Pid, Sched, Mode) ->
     {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),
     #result{label = Label, exprs = Es} = Result = cauder_eval:seq(Bs0, Es0, Stk0),
-    #sys{nodes = Nodes, log = LMap} = Sys,
+    #sys{nodes = Nodes, log = Log} = Sys,
     case Label of
         tau ->
-            fwd_tau(P0, Result, Sys);
+            step_local(Sys, P0, Result);
+        {send, _Dest, _Val} ->
+            step_send(Sys, P0, Result);
         {self, _VarPid} ->
             fwd_self(P0, Result, Sys);
         {node, _VarNode} ->
             fwd_node(P0, Result, Sys);
         {nodes, _VarNodes} ->
-            case extract_log(LMap, Pid, nodes) of
+            case extract_log(Log, Pid, nodes) of
                 {found, {nodes, _}, NewLog} -> fwd_nodes(P0, Result, Sys, #{new_log => NewLog});
                 not_found -> fwd_nodes(P0, Result, Sys, #{})
             end;
         {spawn, VarPid, {value, _Line, Fun} = FunLiteral} ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, Node, M, F, []},
-            case extract_log(LMap, Pid, spawn) of
+            case extract_log(Log, Pid, spawn) of
                 {found, {spawn, {_N, NewPid}, success}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
@@ -67,7 +69,7 @@ step(Sys, Pid, Sched, Mode) ->
         {spawn, VarPid, N, {value, _Line, Fun} = FunLiteral} ->
             {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
             CLabel = {spawn, VarPid, N, M, F, []},
-            case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
+            case {extract_log(Log, Pid, spawn), Node, lists:member(N, Nodes)} of
                 {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
                         pid => NewPid,
@@ -91,7 +93,7 @@ step(Sys, Pid, Sched, Mode) ->
             end;
         {spawn, VarPid, M, F, As} ->
             CLabel = {spawn, VarPid, Node, M, F, As},
-            case extract_log(LMap, Pid, spawn) of
+            case extract_log(Log, Pid, spawn) of
                 {found, {spawn, {_N, NewPid}, success}, NewLog} ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
                 {found, {spawn, {_N, NewPid}, failure}, NewLog} ->
@@ -100,7 +102,7 @@ step(Sys, Pid, Sched, Mode) ->
                     fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{})
             end;
         {spawn, _VarPid, N, _M, _F, _As} ->
-            case {extract_log(LMap, Pid, spawn), Node, lists:member(N, Nodes)} of
+            case {extract_log(Log, Pid, spawn), Node, lists:member(N, Nodes)} of
                 {{found, {spawn, {_N, NewPid}, failure}, NewLog}, _, _} ->
                     fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
                 {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
@@ -116,7 +118,7 @@ step(Sys, Pid, Sched, Mode) ->
             [_Name, Host] = string:split(atom_to_list(Node), "@"),
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
             CLabel = {start, VarNode, list_to_atom(Host), NewName},
-            case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
+            case {extract_log(Log, Pid, start), Node, lists:member(N, Nodes)} of
                 {{found, {start, N, success}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
                 {{found, {start, N, failure}, NewLog}, _, _} ->
@@ -130,7 +132,7 @@ step(Sys, Pid, Sched, Mode) ->
             end;
         {start, _, Host, NewName} ->
             N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
-            case {extract_log(LMap, Pid, start), Node, lists:member(N, Nodes)} of
+            case {extract_log(Log, Pid, start), Node, lists:member(N, Nodes)} of
                 {{found, {start, N, success}, NewLog}, _, _} ->
                     fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
                 {{found, {start, N, failure}, NewLog}, _, _} ->
@@ -141,11 +143,6 @@ step(Sys, Pid, Sched, Mode) ->
                     fwd_start_s(P0, Result, Sys, #{node => N});
                 {_, _, true} ->
                     fwd_start_f(P0, Result, Sys, #{node => N})
-            end;
-        {send, _Dest, _Val} ->
-            case extract_log(LMap, Pid, send) of
-                {found, Uid, NewLog} -> fwd_send(P0, Result, Sys, #{uid => Uid, new_log => NewLog});
-                not_found -> fwd_send(P0, Result, Sys, #{})
             end;
         {rec, VarBody, _Cs} when Es == [VarBody] ->
             fwd_rec(P0, Result, Sys, #{mode => Mode, sched => Sched})
@@ -241,7 +238,7 @@ entry_dependents({'receive', _Uid}, LMap) -> LMap.
 -spec expression_option(Expr, Proc, Mode, Sys) -> Rule when
     Expr :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
     Proc :: cauder_types:proc(),
-    Sys :: cauder_types:sys(),
+    Sys :: cauder_types:system(),
     Mode :: normal | replay,
     Rule :: cauder_types:rule() | ?NOT_EXP.
 
@@ -386,25 +383,79 @@ extract_log(LMap, Pid, spawn) ->
             {found, {spawn, {Node, LogPid}, Result}, RestLog};
         _ ->
             not_found
-    end;
-extract_log(LMap, Pid, send) ->
-    case LMap of
-        #{Pid := [{send, LogUid} | RestLog]} ->
-            {found, LogUid, RestLog};
-        _ ->
-            not_found
     end.
 
--spec fwd_tau(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
+-spec next_send(Pid, Log) -> {Uid, NewLog} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    Uid :: cauder_mailbox:uid(),
+    NewLog :: cauder_types:log().
+
+next_send(Pid, Log) ->
+    case Log of
+        #{Pid := [{send, Uid} | RestLog]} ->
+            {Uid, Log#{Pid => RestLog}};
+        _ ->
+            {cauder_mailbox:uid(), Log}
+    end.
+
+-spec next_receive(Pid, Log) -> {Uid, NewLog} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    Uid :: cauder_mailbox:uid(),
+    NewLog :: cauder_types:log().
+
+next_receive(Pid, Log) ->
+    case Log of
+        #{Pid := [{'receive', Uid} | RestLog]} ->
+            {Uid, Log#{Pid => RestLog}};
+        _ ->
+            {cauder_mailbox:uid(), Log}
+    end.
+
+-spec next_spawn(Pid, Log) -> {SpawnPid, NewLog} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    SpawnPid :: cauder_types:proc_id(),
+    NewLog :: cauder_types:log().
+
+next_spawn(Pid, Log) ->
+    case Log of
+        #{Pid := [{spawn, {SpawnNode, SpawnPid}, Result} | RestLog]} ->
+            {SpawnPid, Log#{Pid => RestLog}};
+        _ ->
+            {cauder_mailbox:uid(), Log}
+    end.
+
+-spec admissible(Pid, Log, LocalMail) -> Uid when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    LocalMail :: queue:queue(cauder_mailbox:message()),
+    Uid :: cauder_mailbox:uid().
+
+admissible(Pid, Log, LocalMail) ->
+    Actions = maps:get(Pid, Log),
+    {deliver, NextDeliverUid} = lists:keyfind(deliver, 1, Actions),
+    DeliveredUids = lists:foldl(
+        fun(#message{uid = Uid}, Set) -> sets:add_element(Uid, Set) end,
+        sets:new(),
+        queue:to_list(LocalMail)
+    ),
+    case lists:search(fun({'receive', Uid}) -> not sets:is_element(Uid, DeliveredUids) end, Actions) of
+        {'receive', Uid} when Uid =:= NextDeliverUid -> NextDeliverUid;
+        _ -> error(inadmissible)
+    end.
+
+-spec step_local(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:sys(),
     NewSystem :: cauder_types:system().
 
-fwd_tau(
+step_local(
+    #sys{procs = PMap} = Sys,
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk},
-    #sys{procs = PMap} = Sys
+    #result{env = Bs, exprs = Es, stack = Stk}
 ) ->
     P = P0#proc{
         hist = [{tau, Bs0, Es0, Stk0} | Hist],
@@ -416,10 +467,71 @@ fwd_tau(
         procs = PMap#{Pid => P}
     }.
 
+-spec step_send(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+step_send(
+    #sys{mail = Mail, log = Log, procs = PMap, x_trace = XTrace} = Sys,
+    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}}
+) ->
+    {Uid, NewLog} = next_send(Pid, Log),
+    M = #message{
+        uid = Uid,
+        src = Pid,
+        dest = Dest,
+        value = Val
+    },
+    P = P0#proc{
+        hist = [{send, Bs0, Es0, Stk0, M} | Hist],
+        stack = Stk,
+        env = Bs,
+        exprs = Es
+    },
+    T = #x_trace{
+        type = ?RULE_SEND,
+        from = Pid,
+        to = Dest,
+        val = Val,
+        time = M#message.uid
+    },
+    Sys#sys{
+        mail = cauder_mailbox:add(M, Mail),
+        procs = PMap#{Pid => P},
+        log = NewLog,
+        x_trace = [T | XTrace]
+    }.
+
+-spec step_deliver(System, Process) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    NewSystem :: cauder_types:system().
+
+step_deliver(
+    #sys{mail = Mail, log = Log, procs = PMap} = Sys,
+    #proc{pid = Pid, mail = LocalMail} = P0
+) ->
+    Uid = admissible(Pid, Log, LocalMail),
+    {{M, _QPos}, NewMail} = cauder_mailbox:uid_take(Uid, Mail),
+
+    % Assertion
+    #message{uid = Uid, dest = Pid} = M,
+
+    P = P0#proc{
+        mail = queue:in(M, LocalMail)
+    },
+    Sys#sys{
+        mail = NewMail,
+        procs = PMap#{Pid => P}
+    }.
+
 -spec fwd_self(Proc, Result, Sys) -> NewSystem when
     Proc :: cauder_types:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:sys(),
+    Sys :: cauder_types:system(),
     NewSystem :: cauder_types:system().
 
 fwd_self(
@@ -440,7 +552,7 @@ fwd_self(
 -spec fwd_node(Proc, Result, Sys) -> NewSystem when
     Proc :: cauder_types:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:sys(),
+    Sys :: cauder_types:system(),
     NewSystem :: cauder_types:system().
 
 fwd_node(
@@ -461,7 +573,7 @@ fwd_node(
 -spec fwd_nodes(Proc, Result, Sys, Opts) -> NewSystem when
     Proc :: cauder_types:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:sys(),
+    Sys :: cauder_types:system(),
     Opts :: cauder_types:fwd_opts(),
     NewSystem :: cauder_types:system().
 
@@ -669,56 +781,6 @@ fwd_start_f(
         procs = PMap#{Pid => P},
         x_trace = [T | Trace],
         log = LMap#{Pid => NewLog}
-    }.
-
--spec fwd_send(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_send(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}},
-    #sys{mail = Mail, log = LMap, procs = PMap, x_trace = Trace} = Sys,
-    Opts
-) ->
-    NewLog = maps:get(new_log, Opts, []),
-    M =
-        case maps:find(uid, Opts) of
-            error ->
-                #message{
-                    src = Pid,
-                    dest = Dest,
-                    value = Val
-                };
-            {ok, Uid} ->
-                #message{
-                    uid = Uid,
-                    src = Pid,
-                    dest = Dest,
-                    value = Val
-                }
-        end,
-    P = P0#proc{
-        hist = [{send, Bs0, Es0, Stk0, M} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = Es
-    },
-    T = #x_trace{
-        type = ?RULE_SEND,
-        from = Pid,
-        to = Dest,
-        val = Val,
-        time = M#message.uid
-    },
-    Sys#sys{
-        mail = cauder_mailbox:add(M, Mail),
-        procs = PMap#{Pid => P},
-        log = LMap#{Pid => NewLog},
-        x_trace = [T | Trace]
     }.
 
 -spec fwd_rec(Proc, Result, Sys, Opts) -> NewSystem when
