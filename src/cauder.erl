@@ -785,7 +785,7 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
                     node = Node,
                     pid = Pid,
                     exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
-                    spf = {Mod, Fun, length(Args)}
+                    entry_point = {Mod, Fun, length(Args)}
                 },
                 #sys{
                     procs = #{Pid => Proc},
@@ -814,7 +814,7 @@ task_start_replay(TracePath, undefined) ->
                     node = Node,
                     pid = Pid,
                     exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
-                    spf = {Mod, Fun, length(Args)}
+                    entry_point = {Mod, Fun, length(Args)}
                 },
                 #sys{
                     procs = #{Pid => Proc},

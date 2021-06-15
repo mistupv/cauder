@@ -524,7 +524,7 @@ fwd_spawn_s(
                     node = N,
                     pid = SpawnPid,
                     exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
-                    spf = {M, F, length(As)}
+                    entry_point = {M, F, length(As)}
                 };
             true ->
                 {_, Line, Fun} = FunLiteral = maps:get(fun_literal, Opts, error_fun_inline),
@@ -533,7 +533,7 @@ fwd_spawn_s(
                     node = N,
                     pid = SpawnPid,
                     exprs = [{apply_fun, Line, FunLiteral, []}],
-                    spf = {M, F, A}
+                    entry_point = {M, F, A}
                 }
         end,
     T = #x_trace{

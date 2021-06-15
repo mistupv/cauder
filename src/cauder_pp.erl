@@ -16,7 +16,7 @@
     Process :: cauder_types:process(),
     String :: string().
 
-process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
+process(#proc{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc) ->
     Icon =
         case cauder_utils:is_dead(Proc) of
             true -> ?ICON_DEAD;

@@ -87,7 +87,7 @@
     % List of expressions
     exprs :: [cauder_types:abstract_expr()],
     % The entry point function for this process
-    spf :: mfa()
+    entry_point :: mfa()
 }).
 
 %% Message
