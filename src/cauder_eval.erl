@@ -2,7 +2,7 @@
 
 %% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([match_rec_pid/6, match_rec_uid/4]).
+-export([matchrec/3, match_rec_pid/6, match_rec_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder.hrl").
@@ -460,6 +460,41 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
     Body :: cauder_types:af_body().
 
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
+
+-spec matchrec(Bindings, Clauses, Mail) -> {NewBindings, Body, NewMail, Message, QPos} | nomatch when
+    Bindings :: cauder_types:environment(),
+    Clauses :: cauder_types:af_clause_seq(),
+    Mail :: queue:queue(cauder_mailbox:message()),
+    QPos :: pos_integer(),
+    NewBindings :: cauder_types:environment(),
+    Body :: cauder_types:af_body(),
+    NewMail :: queue:queue(cauder_mailbox:message()),
+    Message :: cauder_types:message().
+
+matchrec(Bs, Cs, Mail) -> matchrec(Bs, Cs, queue:to_list(Mail), 1, []).
+
+-spec matchrec(Bindings, Clauses, Mail, QPos, CheckedMail) ->
+    {NewBindings, Body, NewMail, Message, QPos} | nomatch
+when
+    Bindings :: cauder_types:environment(),
+    Clauses :: cauder_types:af_clause_seq(),
+    Mail :: [cauder_mailbox:message()],
+    QPos :: pos_integer(),
+    CheckedMail :: [cauder_mailbox:message()],
+    NewBindings :: cauder_types:environment(),
+    Body :: cauder_types:af_body(),
+    NewMail :: queue:queue(cauder_mailbox:message()),
+    Message :: cauder_types:message().
+
+matchrec(_, _, [], _, _) ->
+    nomatch;
+matchrec(Bs, Cs, [Msg | RestMail], QPos, CheckedMail) ->
+    case match_rec(Cs, Bs, Msg) of
+        nomatch ->
+            matchrec(Bs, Cs, RestMail, QPos + 1, [Msg | CheckedMail]);
+        {match, NewBindings, Body} ->
+            {NewBindings, Body, queue:from_list(lists:reverse(CheckedMail, RestMail)), Msg, QPos}
+    end.
 
 -spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch

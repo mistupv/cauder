@@ -134,7 +134,7 @@
     | {spawn, af_variable(), module(), atom(), [term()]}
     | {spawn, af_variable(), node(), module(), atom(), [term()]}
     | {start, af_variable(), node()}
-    | {start, af_variable(), atom(), atom()}
+    | {start, af_variable(), Host :: atom(), Name :: atom()}
     | {self, af_variable()}
     | {node, af_variable()}
     | {nodes, af_variable()}

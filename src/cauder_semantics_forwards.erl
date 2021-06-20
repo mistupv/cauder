@@ -12,9 +12,11 @@
 -export([step/4, options/2]).
 -export([step_deliver/2]).
 
--ifdef(EUNIT).
--export([rdep/2]).
--endif.
+-ignore_xref([step_deliver/2]).
+
+%%-ifdef(EUNIT).
+%%-export([rdep/2]).
+%%-endif.
 
 -import(cauder_eval, [is_reducible/2]).
 
@@ -35,118 +37,45 @@
     Mode :: normal | replay,
     NewSystem :: cauder_types:system().
 
-step(Sys, Pid, Sched, Mode) ->
-    {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),
-    #result{label = Label, exprs = Es} = Result = cauder_eval:seq(Bs0, Es0, Stk0),
-    #sys{nodes = Nodes, log = Log} = Sys,
-    case Label of
+step(Sys0, Pid, Sched, Mode) ->
+    #proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys0#sys.procs),
+    Result = cauder_eval:seq(Bs0, Es0, Stk0),
+    #sys{nodes = Nodes, log = Log} = Sys0,
+    case Result#result.label of
         tau ->
-            step_local(Sys, P0, Result);
+            rule_local(Sys0, P0, Result);
         {send, _Dest, _Val} ->
-            step_send(Sys, P0, Result);
-        {self, _VarPid} ->
-            fwd_self(P0, Result, Sys);
-        {node, _VarNode} ->
-            fwd_node(P0, Result, Sys);
-        {nodes, _VarNodes} ->
-            case extract_log(Log, Pid, nodes) of
-                {found, {nodes, _}, NewLog} -> fwd_nodes(P0, Result, Sys, #{new_log => NewLog});
-                not_found -> fwd_nodes(P0, Result, Sys, #{})
-            end;
-        {spawn, VarPid, {value, _Line, Fun} = FunLiteral} ->
-            {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
-            CLabel = {spawn, VarPid, Node, M, F, []},
-            case extract_log(Log, Pid, spawn) of
-                {found, {spawn, {_N, NewPid}, success}, NewLog} ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
-                        pid => NewPid,
-                        new_log => NewLog,
-                        inline => true,
-                        fun_literal => FunLiteral
-                    });
-                not_found ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral})
-            end;
-        {spawn, VarPid, N, {value, _Line, Fun} = FunLiteral} ->
-            {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
-            CLabel = {spawn, VarPid, N, M, F, []},
-            case {extract_log(Log, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{
-                        pid => NewPid,
-                        new_log => NewLog,
-                        inline => true,
-                        fun_literal => FunLiteral
-                    });
-                {{found, {spawn, {_N, NewPid}, failure}, NewLog}, _, _} ->
-                    fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{
-                        pid => NewPid,
-                        new_log => NewLog,
-                        inline => true,
-                        fun_literal => FunLiteral
-                    });
-                {_, 'nonode@nohost', _} ->
-                    fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{});
-                {_, _, true} ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{inline => true, fun_literal => FunLiteral});
-                {_, _, false} ->
-                    fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{})
-            end;
-        {spawn, VarPid, M, F, As} ->
-            CLabel = {spawn, VarPid, Node, M, F, As},
-            case extract_log(Log, Pid, spawn) of
-                {found, {spawn, {_N, NewPid}, success}, NewLog} ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
-                {found, {spawn, {_N, NewPid}, failure}, NewLog} ->
-                    fwd_spawn_f(P0, Result#result{label = CLabel}, Sys, #{pid => NewPid, new_log => NewLog});
-                not_found ->
-                    fwd_spawn_s(P0, Result#result{label = CLabel}, Sys, #{})
-            end;
-        {spawn, _VarPid, N, _M, _F, _As} ->
-            case {extract_log(Log, Pid, spawn), Node, lists:member(N, Nodes)} of
-                {{found, {spawn, {_N, NewPid}, failure}, NewLog}, _, _} ->
-                    fwd_spawn_f(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-                {{found, {spawn, {_N, NewPid}, success}, NewLog}, _, _} ->
-                    fwd_spawn_s(P0, Result, Sys, #{pid => NewPid, new_log => NewLog});
-                {_, 'nonode@nohost', _} ->
-                    fwd_spawn_f(P0, Result, Sys, #{});
-                {_, _, false} ->
-                    fwd_spawn_f(P0, Result, Sys, #{});
-                {_, _, true} ->
-                    fwd_spawn_s(P0, Result, Sys, #{})
-            end;
-        {start, VarNode, NewName} ->
-            [_Name, Host] = string:split(atom_to_list(Node), "@"),
-            N = list_to_atom(atom_to_list(NewName) ++ "@" ++ Host),
-            CLabel = {start, VarNode, list_to_atom(Host), NewName},
-            case {extract_log(Log, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, N, success}, NewLog}, _, _} ->
-                    fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, N, failure}, NewLog}, _, _} ->
-                    fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N, new_log => NewLog});
-                {_, 'nonode@nohost', _} ->
+            rule_send(Sys0, P0, Result);
+        {rec, VarBody, _Cs} when Result#result.exprs =:= [VarBody] ->
+            rule_receive(Sys0, P0, Result);
+        {self, _TmpVar} ->
+            rule_self(Sys0, P0, Result);
+        {node, _TmpVar} ->
+            rule_node(Sys0, P0, Result);
+        {nodes, _TmpVar} ->
+            rule_nodes(Sys0, P0, Result);
+        {spawn, TmpVar, AbsFun} ->
+            rule_spawn(Sys0, P0, Result#result{label = {spawn, TmpVar, Node, AbsFun}});
+        {spawn, _TmpVar, _N, _AbsFun} ->
+            rule_spawn(Sys0, P0, Result);
+        {spawn, TmpVar, M, F, As} ->
+            rule_spawn(Sys0, P0, Result#result{label = {spawn, TmpVar, Node, M, F, As}});
+        {spawn, _TmpVar, _N, _M, _F, _As} ->
+            rule_spawn(Sys0, P0, Result);
+        % FIXME Shouldn't this be the host instead of the name??
+        {start, TmpVar, NewName} ->
+            case Node of
+                'nonode@nohost' ->
                     error(no_alive);
-                {_, _, false} ->
-                    fwd_start_s(P0, Result#result{label = CLabel}, Sys, #{node => N});
-                {_, _, true} ->
-                    fwd_start_f(P0, Result#result{label = CLabel}, Sys, #{node => N})
+                _ ->
+                    [$@ | Host] = lists:dropwhile(fun(C) -> C =/= $@ end, atom_to_list(Node)),
+                    rule_start(Sys0, P0, Result#result{label = {start, TmpVar, list_to_atom(Host), NewName}})
             end;
-        {start, _, Host, NewName} ->
-            N = list_to_atom(atom_to_list(NewName) ++ "@" ++ atom_to_list(Host)),
-            case {extract_log(Log, Pid, start), Node, lists:member(N, Nodes)} of
-                {{found, {start, N, success}, NewLog}, _, _} ->
-                    fwd_start_s(P0, Result, Sys, #{node => N, new_log => NewLog});
-                {{found, {start, N, failure}, NewLog}, _, _} ->
-                    fwd_start_f(P0, Result, Sys, #{node => N, new_log => NewLog});
-                {_, 'nonode@nohost', _} ->
-                    error(no_alive);
-                {_, _, false} ->
-                    fwd_start_s(P0, Result, Sys, #{node => N});
-                {_, _, true} ->
-                    fwd_start_f(P0, Result, Sys, #{node => N})
-            end;
-        {rec, VarBody, _Cs} when Es == [VarBody] ->
-            fwd_rec(P0, Result, Sys, #{mode => Mode, sched => Sched})
+        {start, _TmpVar, _Host, _Name} ->
+            case Node of
+                'nonode@nohost' -> error(no_alive);
+                _ -> rule_start(Sys0, P0, Result)
+            end
     end.
 
 %%------------------------------------------------------------------------------
@@ -180,56 +109,56 @@ options(#sys{procs = PMap} = Sys, Mode) ->
 %%% Internal functions
 %%%=============================================================================
 
-rdep(Pid, LMap0) ->
-    LMap = remove_dependents_spawn(Pid, LMap0),
-    DropEmpty =
-        fun
-            (_, []) -> false;
-            (_, _) -> true
-        end,
-    maps:filter(DropEmpty, LMap).
-
-remove_dependents_spawn(Pid0, LMap0) when is_map_key(Pid0, LMap0) ->
-    lists:foldl(
-        fun entry_dependents/2,
-        maps:remove(Pid0, LMap0),
-        maps:get(Pid0, LMap0)
-    );
-remove_dependents_spawn(_Pid, LMap) ->
-    LMap.
-
-remove_dependents_receive(Uid0, LMap0) ->
-    RemoveAfterReceive =
-        fun(Pid0, LMap1) ->
-            {Independent, Dependent} = lists:splitwith(
-                fun(Entry) -> Entry =/= {'receive', Uid0} end,
-                maps:get(Pid0, LMap1)
-            ),
-            case Dependent of
-                [] ->
-                    LMap1;
-                _ ->
-                    LMap = lists:foldl(
-                        fun entry_dependents/2,
-                        maps:put(Pid0, Independent, LMap1),
-                        Dependent
-                    ),
-                    throw(LMap)
-            end
-        end,
-    try
-        lists:foldl(
-            RemoveAfterReceive,
-            LMap0,
-            maps:keys(LMap0)
-        )
-    catch
-        throw:LMap -> LMap
-    end.
-
-entry_dependents({spawn, Pid}, LMap) -> remove_dependents_spawn(Pid, LMap);
-entry_dependents({send, Uid}, LMap) -> remove_dependents_receive(Uid, LMap);
-entry_dependents({'receive', _Uid}, LMap) -> LMap.
+%%rdep(Pid, LMap0) ->
+%%    LMap = remove_dependents_spawn(Pid, LMap0),
+%%    DropEmpty =
+%%        fun
+%%            (_, []) -> false;
+%%            (_, _) -> true
+%%        end,
+%%    maps:filter(DropEmpty, LMap).
+%%
+%%remove_dependents_spawn(Pid0, LMap0) when is_map_key(Pid0, LMap0) ->
+%%    lists:foldl(
+%%        fun entry_dependents/2,
+%%        maps:remove(Pid0, LMap0),
+%%        maps:get(Pid0, LMap0)
+%%    );
+%%remove_dependents_spawn(_Pid, LMap) ->
+%%    LMap.
+%%
+%%remove_dependents_receive(Uid0, LMap0) ->
+%%    RemoveAfterReceive =
+%%        fun(Pid0, LMap1) ->
+%%            {Independent, Dependent} = lists:splitwith(
+%%                fun(Entry) -> Entry =/= {'receive', Uid0} end,
+%%                maps:get(Pid0, LMap1)
+%%            ),
+%%            case Dependent of
+%%                [] ->
+%%                    LMap1;
+%%                _ ->
+%%                    LMap = lists:foldl(
+%%                        fun entry_dependents/2,
+%%                        maps:put(Pid0, Independent, LMap1),
+%%                        Dependent
+%%                    ),
+%%                    throw(LMap)
+%%            end
+%%        end,
+%%    try
+%%        lists:foldl(
+%%            RemoveAfterReceive,
+%%            LMap0,
+%%            maps:keys(LMap0)
+%%        )
+%%    catch
+%%        throw:LMap -> LMap
+%%    end.
+%%
+%%entry_dependents({spawn, Pid}, LMap) -> remove_dependents_spawn(Pid, LMap);
+%%entry_dependents({send, Uid}, LMap) -> remove_dependents_receive(Uid, LMap);
+%%entry_dependents({'receive', _Uid}, LMap) -> LMap.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation option for the given Expression, in the given
@@ -308,12 +237,11 @@ check_reducibility([], _, _, _, 'case') ->
     ?RULE_SEQ;
 check_reducibility([], _, _, _, bif) ->
     ?RULE_SEQ;
-check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, nodes) ->
+check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{log = Log, nodes = Nodes}, nodes) ->
     SNodes = Nodes -- [Node],
-    Log = extract_log(LMap, Pid, nodes),
-    case Log of
-        not_found -> ?RULE_NODES;
-        {found, {nodes, {LogNodes}}, _} when LogNodes =:= SNodes -> ?RULE_NODES;
+    case log_consume_nodes(Pid, Log) of
+        {'_', Log} -> ?RULE_NODES;
+        {SNodes, _} -> ?RULE_NODES;
         _ -> ?NOT_EXP
     end;
 check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{log = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
@@ -330,25 +258,23 @@ check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{log = LMap, ma
         true -> ?RULE_RECEIVE;
         false -> ?NOT_EXP
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, spawn) ->
-    Log = extract_log(LMap, Pid, spawn),
-    case Log of
-        not_found ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, spawn) ->
+    case log_consume_spawn(Pid, Log) of
+        {{{'_', _}, _}, Log} ->
             ?RULE_START;
-        {found, {spawn, {Node, _}, Result}, _} ->
-            case {Result, lists:member(Node, Nodes)} of
+        {{{SpawnNode, _SpawnPid}, Result}, _} ->
+            case {Result, lists:member(SpawnNode, Nodes)} of
                 {success, false} -> ?NOT_EXP;
                 {_, _} -> ?RULE_START
             end
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{log = LMap, nodes = Nodes}, start) ->
-    Log = extract_log(LMap, Pid, start),
-    case Log of
-        not_found ->
+check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, start) ->
+    case log_consume_start(Pid, Log) of
+        {{'_', _}, Log} ->
             ?RULE_START;
-        {found, {start, Node, Result}, _} ->
-            FailedSpawnsExist = cauder_utils:find_process_with_failed_spawn(LMap, Node),
-            FutureReads = cauder_utils:find_process_with_future_reads(LMap, Node),
+        {{Node, Result}, _} ->
+            FailedSpawnsExist = cauder_utils:find_process_with_failed_spawn(Log, Node),
+            FutureReads = cauder_utils:find_process_with_future_reads(Log, Node),
             NodeAlreadyExists = lists:member(Node, Nodes),
             case {Result, FailedSpawnsExist, NodeAlreadyExists, FutureReads} of
                 %at least one spawn has still to fail
@@ -364,69 +290,78 @@ check_reducibility([H | T], #proc{env = Bs} = P, Mode, Sys, ExprType) ->
         false -> check_reducibility(T, P, Mode, Sys, ExprType)
     end.
 
-extract_log(LMap, Pid, nodes) ->
-    case LMap of
-        #{Pid := [{nodes, Nodes} | RestLog]} ->
-            {found, {nodes, Nodes}, RestLog};
-        _ ->
-            not_found
-    end;
-extract_log(LMap, Pid, start) ->
-    case LMap of
-        #{Pid := [{start, Node, Result} | RestLog]} ->
-            {found, {start, Node, Result}, RestLog};
-        _ ->
-            not_found
-    end;
-extract_log(LMap, Pid, spawn) ->
-    case LMap of
-        #{Pid := [{spawn, {Node, LogPid}, Result} | RestLog]} ->
-            {found, {spawn, {Node, LogPid}, Result}, RestLog};
-        _ ->
-            not_found
-    end.
-
--spec next_send(Pid, Log) -> {Uid, NewLog} when
+-spec log_consume_send(Pid, Log) -> {Uid, NewLog} when
     Pid :: cauder_types:proc_id(),
     Log :: cauder_types:log(),
     Uid :: cauder_mailbox:uid(),
     NewLog :: cauder_types:log().
 
-next_send(Pid, Log) ->
-    case Log of
-        #{Pid := [{send, Uid} | RestLog]} ->
+log_consume_send(Pid, Log) ->
+    case maps:get(Pid, Log, []) of
+        [{send, Uid} | RestLog] ->
             {Uid, Log#{Pid => RestLog}};
-        _ ->
+        [] ->
             {cauder_mailbox:uid(), Log}
     end.
 
-%%-spec next_receive(Pid, Log) -> {Uid, NewLog} when
-%%    Pid :: cauder_types:proc_id(),
-%%    Log :: cauder_types:log(),
-%%    Uid :: cauder_mailbox:uid(),
-%%    NewLog :: cauder_types:log().
-%%
-%%next_receive(Pid, Log) ->
-%%    case Log of
-%%        #{Pid := [{'receive', Uid} | RestLog]} ->
-%%            {Uid, Log#{Pid => RestLog}};
-%%        _ ->
-%%            {cauder_mailbox:uid(), Log}
-%%    end.
-%%
-%%-spec next_spawn(Pid, Log) -> {SpawnPid, NewLog} when
-%%    Pid :: cauder_types:proc_id(),
-%%    Log :: cauder_types:log(),
-%%    SpawnPid :: cauder_types:proc_id(),
-%%    NewLog :: cauder_types:log().
-%%
-%%next_spawn(Pid, Log) ->
-%%    case Log of
-%%        #{Pid := [{spawn, {SpawnNode, SpawnPid}, Result} | RestLog]} ->
-%%            {SpawnPid, Log#{Pid => RestLog}};
-%%        _ ->
-%%            {cauder_mailbox:uid(), Log}
-%%    end.
+-spec log_consume_receive(Pid, Log) -> {Uid, NewLog} | {'_', Log} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    Uid :: cauder_mailbox:uid(),
+    NewLog :: cauder_types:log().
+
+log_consume_receive(Pid, Log) ->
+    case maps:get(Pid, Log, []) of
+        [{'receive', Uid} | RestLog] ->
+            {Uid, Log#{Pid => RestLog}};
+        [] ->
+            {'_', Log}
+    end.
+
+-spec log_consume_nodes(Pid, Log) -> {[Node], NewLog} | {'_', Log} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    Node :: node(),
+    NewLog :: cauder_types:log().
+
+log_consume_nodes(Pid, Log) ->
+    case maps:get(Pid, Log, []) of
+        [{'nodes', Nodes} | RestLog] ->
+            {Nodes, Log#{Pid => RestLog}};
+        [] ->
+            {'_', Log}
+    end.
+
+-spec log_consume_start(Pid, Log) -> {{Node, Result}, NewLog} | {{'_', success}, Log} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    Node :: node(),
+    Result :: success | failure,
+    NewLog :: cauder_types:log().
+
+log_consume_start(Pid, Log) ->
+    case maps:get(Pid, Log, []) of
+        [{start, Node, Result} | RestLog] ->
+            {{Node, Result}, Log#{Pid => RestLog}};
+        [] ->
+            {{'_', success}, Log}
+    end.
+
+-spec log_consume_spawn(Pid, Log) -> {{{SpawnNode, SpawnPid}, Result}, NewLog} | {{{'_', SpawnPid}, success}, Log} when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    SpawnNode :: node(),
+    SpawnPid :: cauder_types:proc_id(),
+    Result :: success | failure,
+    NewLog :: cauder_types:log().
+
+log_consume_spawn(Pid, Log) ->
+    case maps:get(Pid, Log, []) of
+        [{spawn, {SpawnNode, SpawnPid}, Result} | RestLog] ->
+            {{{SpawnNode, SpawnPid}, Result}, Log#{Pid => RestLog}};
+        [] ->
+            {{{'_', cauder_utils:fresh_pid()}, success}, Log}
+    end.
 
 -spec admissible(Pid, Log, LocalMail) -> Uid when
     Pid :: cauder_types:proc_id(),
@@ -447,50 +382,51 @@ admissible(Pid, Log, LocalMail) ->
         _ -> error(inadmissible)
     end.
 
--spec step_local(System, Process, Result) -> NewSystem when
+-spec rule_local(System, Process, Result) -> NewSystem when
     System :: cauder_types:system(),
     Process :: cauder_types:proc(),
     Result :: cauder_types:result(),
     NewSystem :: cauder_types:system().
 
-step_local(
+rule_local(
     #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk}
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1}
 ) ->
-    P = P0#proc{
-        hist = [{tau, Bs0, Es0, Stk0} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = Es
+    P1 = P0#proc{
+        hist = [{tau, Bs0, Es0, Stk0} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = Es1
     },
     Sys#sys{
-        procs = PMap#{Pid => P}
+        procs = PMap#{Pid => P1}
     }.
 
--spec step_send(System, Process, Result) -> NewSystem when
+-spec rule_send(System, Process, Result) -> NewSystem when
     System :: cauder_types:system(),
     Process :: cauder_types:proc(),
     Result :: cauder_types:result(),
     NewSystem :: cauder_types:system().
 
-step_send(
-    #sys{mail = Mail, log = Log, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}}
+rule_send(
+    #sys{mail = Mail0, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {send, Dest, Val}}
 ) ->
-    {Uid, NewLog} = next_send(Pid, Log),
+    {Uid, Log1} = log_consume_send(Pid, Log0),
+
     M = #message{
         uid = Uid,
         src = Pid,
         dest = Dest,
         value = Val
     },
-    P = P0#proc{
-        hist = [{send, Bs0, Es0, Stk0, M} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = Es
+    P1 = P0#proc{
+        hist = [{send, Bs0, Es0, Stk0, M} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = Es1
     },
     T = #x_trace{
         type = ?RULE_SEND,
@@ -500,9 +436,9 @@ step_send(
         time = M#message.uid
     },
     Sys#sys{
-        mail = cauder_mailbox:add(M, Mail),
-        procs = PMap#{Pid => P},
-        log = NewLog,
+        mail = cauder_mailbox:add(M, Mail0),
+        procs = PMap#{Pid => P1},
+        log = Log1,
         x_trace = [T | XTrace]
     }.
 
@@ -512,333 +448,250 @@ step_send(
     NewSystem :: cauder_types:system().
 
 step_deliver(
-    #sys{mail = Mail, log = Log, procs = PMap} = Sys,
-    #proc{pid = Pid, mail = LocalMail} = P0
+    #sys{mail = Mail0, log = Log0, procs = PMap} = Sys,
+    #proc{pid = Pid, mail = LocalMail0} = P0
 ) ->
-    Uid = admissible(Pid, Log, LocalMail),
-    {{M, _QPos}, NewMail} = cauder_mailbox:uid_take(Uid, Mail),
+    % TODO What happens when there is no log?
+    Uid = admissible(Pid, Log0, LocalMail0),
+    {{#message{uid = Uid, dest = Pid} = M, _QPos}, Mail1} = cauder_mailbox:uid_take(Uid, Mail0),
 
-    % Assertion
-    #message{uid = Uid, dest = Pid} = M,
-
-    P = P0#proc{
-        mail = queue:in(M, LocalMail)
-    },
-    Sys#sys{
-        mail = NewMail,
-        procs = PMap#{Pid => P}
-    }.
-
--spec fwd_self(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    NewSystem :: cauder_types:system().
-
-fwd_self(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {self, VarPid}},
-    #sys{procs = PMap} = Sys
-) ->
-    P = P0#proc{
-        hist = [{self, Bs0, Es0, Stk0} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarPid, Pid)
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P}
-    }.
-
--spec fwd_node(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    NewSystem :: cauder_types:system().
-
-fwd_node(
-    #proc{node = Node, hist = Hist, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {node, VarNode}},
-    #sys{procs = PMap} = Sys
-) ->
-    P = P0#proc{
-        hist = [{node, Bs0, Es0, Stk0} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarNode, Node)
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P}
-    }.
-
--spec fwd_nodes(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_nodes(
-    #proc{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {nodes, VarNodes}},
-    #sys{nodes = Nodes, log = LMap, procs = PMap} = Sys,
-    Opts
-) ->
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NLog -> NLog
-        end,
-    P = P0#proc{
-        hist = [{nodes, Bs0, Es0, Stk0, Nodes -- [Node]} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarNodes, Nodes -- [Node])
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P},
-        log = LMap#{Pid => NewLog}
-    }.
-
--spec fwd_spawn_s(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_spawn_s(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{label = {spawn, VarPid, N, M, F, As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
-    Opts
-) ->
-    Inline = maps:get(inline, Opts, false),
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NLog -> NLog
-        end,
-    SpawnPid =
-        case maps:get(pid, Opts, not_found) of
-            not_found -> cauder_utils:fresh_pid();
-            LogPid -> LogPid
-        end,
     P1 = P0#proc{
-        hist = [{spawn, Bs0, Es0, Stk0, N, SpawnPid} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
-    },
-    P2 =
-        case Inline of
-            false ->
-                #proc{
-                    node = N,
-                    pid = SpawnPid,
-                    exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
-                    entry_point = {M, F, length(As)}
-                };
-            true ->
-                {_, Line, Fun} = FunLiteral = maps:get(fun_literal, Opts, error_fun_inline),
-                {arity, A} = erlang:fun_info(Fun, arity),
-                #proc{
-                    node = N,
-                    pid = SpawnPid,
-                    exprs = [{apply_fun, Line, FunLiteral, []}],
-                    entry_point = {M, F, A}
-                }
-        end,
-    T = #x_trace{
-        type = ?RULE_SPAWN,
-        from = Pid,
-        to = SpawnPid
+        mail = queue:in(M, LocalMail0)
     },
     Sys#sys{
-        procs = PMap#{Pid => P1, SpawnPid => P2},
-        log = LMap#{Pid => NewLog},
-        x_trace = [T | Trace]
+        mail = Mail1,
+        procs = PMap#{Pid => P1}
     }.
 
--spec fwd_spawn_f(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+-spec rule_receive(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
     NewSystem :: cauder_types:system().
 
-fwd_spawn_f(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{label = {spawn, VarPid, N, _M, _F, _As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
-    Opts
+rule_receive(
+    #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = LocalMail} = P0,
+    #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}}
 ) ->
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NLog -> NLog
+    % TODO Manual mode
+    {Bs2, Es2, LocalMail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, LocalMail),
+
+    {Uid, Log1} =
+        case log_consume_receive(Pid, Log0) of
+            {'_', Log0} -> {Uid, Log0};
+            {Uid, NewLog} -> {Uid, NewLog}
         end,
-    SpawnPid =
-        case maps:get(pid, Opts, not_found) of
-            not_found -> cauder_utils:fresh_pid();
-            LogPid -> LogPid
-        end,
+
     P1 = P0#proc{
-        hist = [{spawn, Bs0, Es0, Stk0, N, SpawnPid} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
-    },
-    T = #x_trace{
-        type = ?RULE_SPAWN,
-        from = Pid,
-        to = SpawnPid
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P1},
-        log = LMap#{Pid => NewLog},
-        x_trace = [T | Trace]
-    }.
-
--spec fwd_start_s(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_start_s(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{nodes = Nodes, log = LMap, procs = PMap, x_trace = Trace} = Sys,
-    Opts
-) ->
-    NewNode =
-        case maps:get(node, Opts, not_found) of
-            not_found -> error;
-            RemoteNode -> RemoteNode
-        end,
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NLog -> NLog
-        end,
-    P = P0#proc{
-        hist = [{start, success, Bs0, Es0, Stk0, NewNode} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarNode, {ok, NewNode})
-    },
-    T = #x_trace{
-        type = ?RULE_START,
-        from = Pid,
-        res = success,
-        node = NewNode
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P},
-        x_trace = [T | Trace],
-        nodes = [NewNode] ++ Nodes,
-        log = LMap#{Pid => NewLog}
-    }.
-
--spec fwd_start_f(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_start_f(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{log = LMap, procs = PMap, x_trace = Trace} = Sys,
-    Opts
-) ->
-    NewNode =
-        case maps:get(node, Opts, not_found) of
-            not_found -> error;
-            RemoteNode -> RemoteNode
-        end,
-    NewLog =
-        case maps:get(new_log, Opts, not_found) of
-            not_found -> [];
-            NewLog0 -> NewLog0
-        end,
-    Err = {error, {already_running, NewNode}},
-    P = P0#proc{
-        hist = [{start, failure, Bs0, Es0, Stk0, NewNode} | Hist],
-        stack = Stk,
-        env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarNode, Err)
-    },
-    T = #x_trace{
-        type = ?RULE_START,
-        from = Pid,
-        res = failure,
-        node = NewNode
-    },
-    Sys#sys{
-        procs = PMap#{Pid => P},
-        x_trace = [T | Trace],
-        log = LMap#{Pid => NewLog}
-    }.
-
--spec fwd_rec(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
-    Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
-    Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
-
-fwd_rec(
-    #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs, stack = Stk, label = {rec, _, Cs}},
-    #sys{mail = Mail, log = LMap0, procs = PMap, x_trace = Trace} = Sys,
-    Opts
-) ->
-    Mode =
-        case maps:get(mode, Opts, not_found) of
-            not_found -> error(mode_not_found);
-            Mode0 -> Mode0
-        end,
-    Sched =
-        case maps:get(sched, Opts, not_found) of
-            not_found -> error(sched_not_found);
-            Sched0 -> Sched0
-        end,
-    {{Bs1, Es1, {Msg, QPos}, Mail1}, LMap1} =
-        case Mode of
-            normal ->
-                {_, _, {#message{uid = Uid}, _}, _} = Match = cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys),
-                LMap =
-                    case maps:get(Pid, LMap0, []) of
-                        %% If the chosen message is the same specified in the log don't invalidate the log
-                        [{'receive', Uid} | RestLog] -> maps:put(Pid, RestLog, LMap0);
-                        _ -> rdep(Pid, LMap0)
-                    end,
-                {Match, LMap};
-            replay ->
-                #{Pid := [{'receive', LogUid} | RestLog]} = LMap0,
-                Match = cauder_eval:match_rec_uid(Cs, Bs, LogUid, Mail),
-                LMap = LMap0#{Pid => RestLog},
-                {Match, LMap}
-        end,
-    P = P0#proc{
-        hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist],
-        stack = Stk,
-        env = cauder_utils:merge_bindings(Bs, Bs1),
-        exprs = Es1
+        hist = [{rec, Bs0, Es0, Stk0, M, QPos} | Hist0],
+        stack = Stk1,
+        env = cauder_utils:merge_bindings(Bs1, Bs2),
+        exprs = Es2,
+        mail = LocalMail1
     },
     T = #x_trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val = Msg#message.value,
-        time = Msg#message.uid
+        val = Value,
+        time = Uid
     },
     Sys#sys{
-        mail = Mail1,
-        procs = PMap#{Pid => P},
-        log = LMap1,
-        x_trace = [T | Trace]
+        procs = PMap#{Pid => P1},
+        log = Log1,
+        x_trace = [T | XTrace]
+    }.
+
+-spec rule_self(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+rule_self(
+    #sys{procs = PMap} = Sys,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {self, VarPid}}
+) ->
+    P1 = P0#proc{
+        hist = [{self, Bs0, Es0, Stk0} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = cauder_syntax:replace_variable(Es1, VarPid, Pid)
+    },
+    Sys#sys{
+        procs = PMap#{Pid => P1}
+    }.
+
+-spec rule_node(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+rule_node(
+    #sys{procs = PMap} = Sys,
+    #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {node, VarNode}}
+) ->
+    P0 = P0#proc{
+        hist = [{node, Bs0, Es0, Stk0} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = cauder_syntax:replace_variable(Es1, VarNode, Node)
+    },
+    Sys#sys{
+        procs = PMap#{Pid => P0}
+    }.
+
+-spec rule_nodes(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+rule_nodes(
+    #sys{nodes = Nodes, log = Log0, procs = PMap} = Sys,
+    #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {nodes, VarNodes}}
+) ->
+    {Nodes, Log1} =
+        case log_consume_nodes(Pid, Log0) of
+            {'_', Log0} -> {Nodes, Log0};
+            {Nodes, NewLog} -> {Nodes, NewLog}
+        end,
+
+    OtherNodes = Nodes -- [Node],
+
+    P1 = P0#proc{
+        hist = [{nodes, Bs0, Es0, Stk0, OtherNodes} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
+    },
+    Sys#sys{
+        procs = PMap#{Pid => P1},
+        log = Log1
+    }.
+
+-spec rule_spawn(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+rule_spawn(
+    #sys{procs = PMap0, log = Log0, nodes = Nodes, x_trace = XTrace} = Sys,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = Label}
+) ->
+    VarPid = element(2, Label),
+    Node = element(3, Label),
+
+    {{{SpawnNode, SpawnPid}, SpawnResult}, Log1} =
+        case log_consume_spawn(Pid, Log0) of
+            {{{'_', SPid}, success}, Log0} ->
+                SResult =
+                    case lists:member(Node, Nodes) of
+                        true -> success;
+                        false -> failure
+                    end,
+                {{{Node, SPid}, SResult}, Log0};
+            % TODO SNode =:= Node ??
+            {{{SNode, SPid}, SResult}, NewLog} ->
+                % Assert node is started
+                true = lists:member(SNode, Nodes),
+                {{{SNode, SPid}, SResult}, NewLog}
+        end,
+
+    P1 = P0#proc{
+        hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = cauder_syntax:replace_variable(Es1, VarPid, SpawnPid)
+    },
+    P2 =
+        case Label of
+            {spawn, VarPid, Node, {value, Line, Fun} = FunLiteral} ->
+                {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
+                {arity, A} = erlang:fun_info(Fun, arity),
+                #proc{
+                    node = SpawnNode,
+                    pid = SpawnPid,
+                    exprs = [{apply_fun, Line, FunLiteral, []}],
+                    entry_point = {M, F, A}
+                };
+            {spawn, VarPid, Node, M, F, As} ->
+                #proc{
+                    node = SpawnNode,
+                    pid = SpawnPid,
+                    exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
+                    entry_point = {M, F, length(As)}
+                }
+        end,
+    PMap1 =
+        case SpawnResult of
+            success -> PMap0#{Pid := P1, SpawnPid => P2};
+            failure -> PMap0#{Pid := P1}
+        end,
+    T = #x_trace{
+        type = ?RULE_SPAWN,
+        from = Pid,
+        to = SpawnPid
+    },
+    Sys#sys{
+        procs = PMap1,
+        log = Log1,
+        x_trace = [T | XTrace]
+    }.
+
+-spec rule_start(System, Process, Result) -> NewSystem when
+    System :: cauder_types:system(),
+    Process :: cauder_types:proc(),
+    Result :: cauder_types:result(),
+    NewSystem :: cauder_types:system().
+
+rule_start(
+    #sys{nodes = Nodes, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
+    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
+) ->
+    Node = list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)),
+
+    {{StartNode, StartResult}, Log1} =
+        case log_consume_start(Pid, Log0) of
+            {{'_', success}, Log0} ->
+                Result =
+                    case lists:member(Node, Nodes) of
+                        true -> failure;
+                        false -> success
+                    end,
+                {{Node, Result}, Log0};
+            {{Node, Result}, NewLog} ->
+                % Assert node is not started
+                false = lists:member(Node, Nodes),
+                {{Node, Result}, NewLog}
+        end,
+    Return =
+        case StartResult of
+            success -> {ok, StartNode};
+            failure -> {error, {already_running, StartNode}}
+        end,
+    P1 = P0#proc{
+        hist = [{start, StartResult, Bs0, Es0, Stk0, StartNode} | Hist0],
+        stack = Stk1,
+        env = Bs1,
+        exprs = cauder_syntax:replace_variable(Es1, VarNode, Return)
+    },
+    T = #x_trace{
+        type = ?RULE_START,
+        from = Pid,
+        res = StartResult,
+        node = StartNode
+    },
+    Sys#sys{
+        procs = PMap#{Pid => P1},
+        nodes = [StartNode | Nodes],
+        log = Log1,
+        x_trace = [T | XTrace]
     }.
