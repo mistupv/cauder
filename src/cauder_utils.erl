@@ -660,6 +660,7 @@ is_dead(#proc{}) -> false.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the process node
+
 -spec process_node(PMap, Pid) -> Result when
     PMap :: cauder_types:process_map(),
     Pid :: cauder_types:proc_id(),
