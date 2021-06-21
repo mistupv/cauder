@@ -4,6 +4,8 @@
 -export([uid/0]).
 -export([new/0, add/2, insert/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
 
+-ignore_xref([insert/3]).
+
 -export_type([mailbox/0, uid/0, message/0]).
 
 -include("cauder.hrl").
