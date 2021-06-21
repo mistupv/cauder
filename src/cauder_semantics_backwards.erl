@@ -258,7 +258,7 @@ rule_receive(
 ) ->
     #message{uid = Uid, value = Value, dest = Pid} = Msg,
     Log1 = log_prepend(Pid, Log0, {'receive', Uid}),
-    Mail1 = queue:in_r(Msg, Mail0),
+    Mail1 = cauder_mailbox:queue_insert(QPos, Msg, Mail0),
 
     P1 = P0#proc{
         hist = Hist0,
