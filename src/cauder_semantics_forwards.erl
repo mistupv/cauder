@@ -10,9 +10,9 @@
 
 %% API
 -export([step/4, options/2]).
--export([step_deliver/2]).
+-export([rule_deliver/2]).
 
--ignore_xref([step_deliver/2]).
+-ignore_xref([rule_deliver/2]).
 
 %%-ifdef(EUNIT).
 %%-export([rdep/2]).
@@ -40,7 +40,6 @@
 step(Sys0, Pid, Sched, Mode) ->
     #proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys0#sys.procs),
     Result = cauder_eval:seq(Bs0, Es0, Stk0),
-    #sys{nodes = Nodes, log = Log} = Sys0,
     case Result#result.label of
         tau ->
             rule_local(Sys0, P0, Result);
@@ -400,7 +399,7 @@ rule_local(
         exprs = Es1
     },
     Sys#sys{
-        procs = PMap#{Pid => P1}
+        procs = PMap#{Pid := P1}
     }.
 
 -spec rule_send(System, Process, Result) -> NewSystem when
@@ -437,17 +436,17 @@ rule_send(
     },
     Sys#sys{
         mail = cauder_mailbox:add(M, Mail0),
-        procs = PMap#{Pid => P1},
+        procs = PMap#{Pid := P1},
         log = Log1,
         x_trace = [T | XTrace]
     }.
 
--spec step_deliver(System, Process) -> NewSystem when
+-spec rule_deliver(System, Process) -> NewSystem when
     System :: cauder_types:system(),
     Process :: cauder_types:proc(),
     NewSystem :: cauder_types:system().
 
-step_deliver(
+rule_deliver(
     #sys{mail = Mail0, log = Log0, procs = PMap} = Sys,
     #proc{pid = Pid, mail = LocalMail0} = P0
 ) ->
@@ -460,7 +459,7 @@ step_deliver(
     },
     Sys#sys{
         mail = Mail1,
-        procs = PMap#{Pid => P1}
+        procs = PMap#{Pid := P1}
     }.
 
 -spec rule_receive(System, Process, Result) -> NewSystem when
@@ -471,11 +470,11 @@ step_deliver(
 
 rule_receive(
     #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = LocalMail} = P0,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = Mail0} = P0,
     #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}}
 ) ->
     % TODO Manual mode
-    {Bs2, Es2, LocalMail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, LocalMail),
+    {Bs2, Es2, Mail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, Mail0),
 
     {Uid, Log1} =
         case log_consume_receive(Pid, Log0) of
@@ -488,7 +487,7 @@ rule_receive(
         stack = Stk1,
         env = cauder_utils:merge_bindings(Bs1, Bs2),
         exprs = Es2,
-        mail = LocalMail1
+        mail = Mail1
     },
     T = #x_trace{
         type = ?RULE_RECEIVE,
@@ -497,7 +496,7 @@ rule_receive(
         time = Uid
     },
     Sys#sys{
-        procs = PMap#{Pid => P1},
+        procs = PMap#{Pid := P1},
         log = Log1,
         x_trace = [T | XTrace]
     }.
@@ -520,7 +519,7 @@ rule_self(
         exprs = cauder_syntax:replace_variable(Es1, VarPid, Pid)
     },
     Sys#sys{
-        procs = PMap#{Pid => P1}
+        procs = PMap#{Pid := P1}
     }.
 
 -spec rule_node(System, Process, Result) -> NewSystem when
@@ -570,7 +569,7 @@ rule_nodes(
         exprs = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
     },
     Sys#sys{
-        procs = PMap#{Pid => P1},
+        procs = PMap#{Pid := P1},
         log = Log1
     }.
 
@@ -690,7 +689,7 @@ rule_start(
         node = StartNode
     },
     Sys#sys{
-        procs = PMap#{Pid => P1},
+        procs = PMap#{Pid := P1},
         nodes = [StartNode | Nodes],
         log = Log1,
         x_trace = [T | XTrace]
