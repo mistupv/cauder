@@ -807,7 +807,7 @@ task_start_replay(TracePath, undefined) ->
                     node = Node,
                     pid = Pid,
                     call = {Mod, Fun, Args},
-                    trace = Traces
+                    trace = Trace
                 } = cauder_utils:load_trace(TracePath),
                 AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, Args)),
                 Proc = #proc{
@@ -816,9 +816,21 @@ task_start_replay(TracePath, undefined) ->
                     exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
                     entry_point = {Mod, Fun, length(Args)}
                 },
+                Log = maps:map(
+                    fun(_Pid, Actions) ->
+                        lists:filter(
+                            fun
+                                ({deliver, _Uid}) -> false;
+                                (_) -> true
+                            end,
+                            Actions
+                        )
+                    end,
+                    Trace
+                ),
                 #sys{
                     procs = #{Pid => Proc},
-                    log = Traces,
+                    log = Log,
                     nodes = [Node]
                 }
             end
@@ -1171,11 +1183,11 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
     System :: cauder_types:system(),
     NewSystem :: cauder_types:system().
 
-replay_full_log(Sys = #sys{log = LMap}) ->
-    case lists:filter(fun({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
-        [] ->
+replay_full_log(Sys = #sys{log = Log}) ->
+    case lists:search(fun({_Pid, Actions}) -> Actions /= [] end, maps:to_list(Log)) of
+        false ->
             Sys;
-        [{Pid, _Log} | _] ->
+        {value, {Pid, _Actions}} ->
             Sys1 = cauder_replay:replay_step(Sys, Pid),
             replay_full_log(Sys1)
     end.

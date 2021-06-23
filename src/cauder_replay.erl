@@ -35,8 +35,8 @@
     Pid :: cauder_types:proc_id(),
     CanReplay :: boolean().
 
-can_replay_step(#sys{procs = PMap, log = LMap}, Pid) when
-    is_map_key(Pid, PMap), is_map_key(Pid, LMap), map_get(Pid, LMap) =/= []
+can_replay_step(#sys{procs = PMap, log = Log}, Pid) when
+    is_map_key(Pid, PMap), is_map_key(Pid, Log), map_get(Pid, Log) =/= []
 ->
     true;
 can_replay_step(_, _) ->
@@ -51,7 +51,7 @@ can_replay_step(_, _) ->
     Pid :: cauder_types:proc_id(),
     CanReplay :: boolean().
 
-can_replay_spawn(#sys{log = LMap}, Pid) -> cauder_utils:find_spawn_parent(LMap, Pid) =/= false.
+can_replay_spawn(#sys{log = Log}, Pid) -> cauder_utils:find_spawn_parent(Log, Pid) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the starting of the node with the given name can be
@@ -62,7 +62,7 @@ can_replay_spawn(#sys{log = LMap}, Pid) -> cauder_utils:find_spawn_parent(LMap, 
     Node :: node(),
     CanReplay :: boolean().
 
-can_replay_start(#sys{log = LMap}, Node) -> cauder_utils:find_node_parent(LMap, Node) =/= false.
+can_replay_start(#sys{log = Log}, Node) -> cauder_utils:find_node_parent(Log, Node) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the sending of the message with the given uid can be
@@ -73,7 +73,7 @@ can_replay_start(#sys{log = LMap}, Node) -> cauder_utils:find_node_parent(LMap, 
     Uid :: cauder_mailbox:uid(),
     CanReplay :: boolean().
 
-can_replay_send(#sys{log = LMap}, Uid) -> cauder_utils:find_msg_sender(LMap, Uid) =/= false.
+can_replay_send(#sys{log = Log}, Uid) -> cauder_utils:find_msg_sender(Log, Uid) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the reception of the message with the given uid can be
@@ -84,7 +84,7 @@ can_replay_send(#sys{log = LMap}, Uid) -> cauder_utils:find_msg_sender(LMap, Uid
     Uid :: cauder_mailbox:uid(),
     CanReplay :: boolean().
 
-can_replay_receive(#sys{log = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMap, Uid) =/= false.
+can_replay_receive(#sys{log = Log}, Uid) -> cauder_utils:find_msg_receiver(Log, Uid) =/= false.
 
 %%%=============================================================================
 
@@ -97,10 +97,10 @@ can_replay_receive(#sys{log = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMap
     Pid :: cauder_types:proc_id(),
     NewSystem :: cauder_types:system().
 
-replay_step(#sys{log = LMap} = Sys, Pid) ->
+replay_step(#sys{log = Log} = Sys, Pid) ->
     case options(Sys, Pid) of
         [] ->
-            case maps:get(Pid, LMap) of
+            case maps:get(Pid, Log) of
                 [{send, Uid} | _] -> replay_send(Sys, Uid);
                 [{'receive', Uid} | _] -> replay_receive(Sys, Uid);
                 [{start, Node, success} | _] -> replay_start(Sys, Node);
@@ -114,18 +114,18 @@ replay_step(#sys{log = LMap} = Sys, Pid) ->
 %% @doc Replays the spawning of the process with the given pid, in the given
 %% system.
 
--spec replay_spawn(System, Pid, SpawnInfo) -> NewSystem when
+-spec replay_spawn(System, Pid, SpawnAction) -> NewSystem when
     System :: cauder_types:system(),
     Pid :: cauder_types:proc_id() | '_',
-    SpawnInfo :: cauder_types:log_action() | '_',
+    SpawnAction :: cauder_types:log_action() | '_',
     NewSystem :: cauder_types:system().
 
 replay_spawn(#sys{procs = PMap} = Sys, Pid, _) when is_map_key(Pid, PMap) -> Sys;
-replay_spawn(#sys{log = LMap} = Sys, Pid, _) when Pid =/= '_' ->
-    LogItem = cauder_utils:find_spawn_log(LMap, Pid),
-    replay_spawn(Sys, '_', LogItem);
-replay_spawn(#sys{log = LMap} = Sys, _, {spawn, {_, Pid}, failure}) ->
-    case cauder_utils:find_spawn_parent(LMap, Pid) of
+replay_spawn(#sys{log = Log} = Sys, Pid, _) when Pid =/= '_' ->
+    SpawnAction = cauder_utils:find_spawn_action(Log, Pid),
+    replay_spawn(Sys, '_', SpawnAction);
+replay_spawn(#sys{log = Log} = Sys, _, {spawn, {_, Pid}, failure}) ->
+    case cauder_utils:find_spawn_parent(Log, Pid) of
         {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
         false -> Sys
     end;

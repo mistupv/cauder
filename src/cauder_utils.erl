@@ -6,7 +6,7 @@
 -module(cauder_utils).
 
 -export([fundef_lookup/1]).
--export([find_spawn_log/2, find_spawn_parent/2, find_node_parent/2, find_msg_sender/2, find_msg_receiver/2]).
+-export([find_spawn_action/2, find_spawn_parent/2, find_node_parent/2, find_msg_sender/2, find_msg_receiver/2]).
 -export([
     find_process_with_future_reads/2,
     find_process_with_spawn/2,
@@ -108,31 +108,32 @@ compare([_ | T], Entry) -> compare(T, Entry).
 %% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
 %% contains the aforementioned entry, or `false' if the entry is not found.
 
--spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
-    LMap :: cauder_types:log(),
+-spec find_spawn_parent(Log, Pid) -> {value, Parent} | false when
+    Log :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
     Parent :: cauder_types:proc_id().
 
-find_spawn_parent(LMap, Pid) ->
-    find_item(LMap, {spawn, {'_', Pid}, '_'}).
+find_spawn_parent(Log, Pid) ->
+    find_item(Log, {spawn, {'_', Pid}, '_'}).
 
 %%---------------------------------------------------------------------------------
-%% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
+%% @doc Given a Pid and a Log, retrieves the action that will spawn the process
+%% with the given Pid
 
--spec find_spawn_log(LMap, Pid) -> Log when
-    LMap :: cauder_types:log(),
+-spec find_spawn_action(Log, Pid) -> Action when
+    Log :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:log_action().
+    Action :: cauder_types:action_spawn().
 
-find_spawn_log(LMap, Pid) ->
-    {value, Log} = lists:search(
+find_spawn_action(Log, Pid) ->
+    {value, Action} = lists:search(
         fun
             ({spawn, {_, SpawnPid}, _}) when Pid =:= SpawnPid -> true;
             (_) -> false
         end,
-        lists:merge(maps:values(LMap))
+        lists:merge(maps:values(Log))
     ),
-    Log.
+    Action.
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for a process whose log has an entry with the information to
@@ -606,14 +607,7 @@ load_trace(Dir) ->
                 Pid = list_to_integer(StringPid),
                 {ok, Terms0} = file:consult(File),
                 find_last_message_uid(Terms0),
-                Terms1 = lists:filter(
-                    fun
-                        ({deliver, _}) -> false;
-                        (_) -> true
-                    end,
-                    Terms0
-                ),
-                Acc#{Pid => Terms1}
+                Acc#{Pid => Terms0}
             end,
             maps:new()
         ),
