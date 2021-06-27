@@ -580,9 +580,9 @@ gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
 %%------------------------------------------------------------------------------
 %% @doc Load the trace result from the given directory adn returns it.
 
--spec load_trace(TraceDir) -> TraceResult when
+-spec load_trace(TraceDir) -> TraceInfo when
     TraceDir :: file:filename(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_types:trace_info().
 
 load_trace(Dir) ->
     ResultFile = filename:join(Dir, "trace_result.log"),

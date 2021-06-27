@@ -64,23 +64,23 @@
 %%
 %% @see trace/4
 
--spec trace(Module, Function, Arguments) -> TraceResult when
+-spec trace(Module, Function, Arguments) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_types:trace_info().
 
 trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
 
 %%------------------------------------------------------------------------------
 %% @doc Traces the evaluation of the expression `apply(Mod, Fun, Args)'.
 
--spec trace(Module, Function, Arguments, Options) -> TraceResult when
+-spec trace(Module, Function, Arguments, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: some_options() | some_options_proplist(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_types:trace_info().
 
 trace(Mod, Fun, Args, Opts) when is_list(Opts) -> trace(Mod, Fun, Args, maps:from_list(Opts));
 trace(Mod, Fun, Args, Opts) when is_map(Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
@@ -276,12 +276,12 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% Internal functions
 %%%=============================================================================
 
--spec do_trace(Module, Function, Arguments, Options) -> TraceResult when
+-spec do_trace(Module, Function, Arguments, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: all_options(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_types:trace_info().
 
 do_trace(Module, Function, Args, Opts) ->
     Dir = maps:get(dir, Opts),
@@ -453,13 +453,13 @@ get_uid(Stamp, Map, Table) ->
             {Uid, Map}
     end.
 
--spec write_trace(Dir, TraceResult) -> ok when
+-spec write_trace(Dir, TraceInfo) -> ok when
     Dir :: file:filename(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_types:trace_info().
 
-write_trace(Dir, TraceResult) ->
+write_trace(Dir, TraceInfo) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_info | Values] = tuple_to_list(TraceResult),
+    [trace_info | Values] = tuple_to_list(TraceInfo),
     Fields = record_info(fields, trace_info),
     {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
 
