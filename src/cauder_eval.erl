@@ -464,12 +464,12 @@ match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 -spec matchrec(Bindings, Clauses, Mail) -> {NewBindings, Body, NewMail, Message, QPos} | nomatch when
     Bindings :: cauder_types:environment(),
     Clauses :: cauder_types:af_clause_seq(),
-    Mail :: queue:queue(cauder_mailbox:message()),
+    Mail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     QPos :: pos_integer(),
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body(),
-    NewMail :: queue:queue(cauder_mailbox:message()),
-    Message :: cauder_types:message().
+    NewMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()).
 
 matchrec(Bs, Cs, Mail) -> matchrec(Bs, Cs, queue:to_list(Mail), 1, []).
 
@@ -478,13 +478,13 @@ matchrec(Bs, Cs, Mail) -> matchrec(Bs, Cs, queue:to_list(Mail), 1, []).
 when
     Bindings :: cauder_types:environment(),
     Clauses :: cauder_types:af_clause_seq(),
-    Mail :: [cauder_mailbox:message()],
+    Mail :: [cauder_mailbox:message(cauder_types:proc_id())],
     QPos :: pos_integer(),
-    CheckedMail :: [cauder_mailbox:message()],
+    CheckedMail :: [cauder_mailbox:message(cauder_types:proc_id())],
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body(),
-    NewMail :: queue:queue(cauder_mailbox:message()),
-    Message :: cauder_types:message().
+    NewMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()).
 
 matchrec(_, _, [], _, _) ->
     nomatch;
@@ -502,14 +502,14 @@ when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
     RecipientPid :: cauder_types:proc_id(),
-    Mail :: cauder_mailbox:mailbox(),
+    Mail :: cauder_mailbox:mailbox(cauder_types:proc_id()),
     Sched :: cauder_types:message_scheduler(),
     Sys :: cauder_types:system(),
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body(),
-    Message :: cauder_types:message(),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()),
     QueuePosition :: pos_integer(),
-    NewMail :: cauder_mailbox:mailbox().
+    NewMail :: cauder_mailbox:mailbox(cauder_types:proc_id()).
 
 match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
     case cauder_mailbox:pid_get(Pid, Mail) of
@@ -569,7 +569,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
 -spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
-    Message :: cauder_mailbox:message(),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()),
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body().
 
@@ -581,12 +581,12 @@ when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
     Uid :: cauder_mailbox:uid(),
-    Mail :: cauder_mailbox:mailbox(),
+    Mail :: cauder_mailbox:mailbox(cauder_types:proc_id()),
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body(),
-    Message :: cauder_types:message(),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()),
     QueuePosition :: pos_integer(),
-    NewMail :: cauder_mailbox:mailbox().
+    NewMail :: cauder_mailbox:mailbox(cauder_types:proc_id()).
 
 match_rec_uid(Cs, Bs0, Uid, Mail0) ->
     case cauder_mailbox:uid_take(Uid, Mail0) of

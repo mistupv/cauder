@@ -286,7 +286,7 @@ rule_receive(
     NewLog :: cauder_types:log().
 
 log_prepend(Pid, Log, Action) ->
-    maps:update_with(Pid, fun(Log) -> [Action | Log] end, [Action], Log).
+    maps:update_with(Pid, fun(Actions) -> [Action | Actions] end, [Action], Log).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the backwards evaluation options for the given System.

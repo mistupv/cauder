@@ -365,7 +365,7 @@ log_consume_spawn(Pid, Log) ->
 -spec admissible(Pid, Log, LocalMail) -> Uid when
     Pid :: cauder_types:proc_id(),
     Log :: cauder_types:log(),
-    LocalMail :: queue:queue(cauder_mailbox:message()),
+    LocalMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     Uid :: cauder_mailbox:uid().
 
 admissible(Pid, Log, LocalMail) ->

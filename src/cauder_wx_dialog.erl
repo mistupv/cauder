@@ -332,7 +332,7 @@ edit_binding(Parent, {Key, Value}) ->
 -spec choose_message(Parent, {Receiver, Messages}) -> {ok, MessageId} | cancel when
     Parent :: wxWindow:wxWindow(),
     Receiver :: cauder_types:proc_id(),
-    Messages :: [cauder_mailbox:message()],
+    Messages :: [cauder_mailbox:message(cauder_types:proc_id())],
     MessageId :: cauder_mailbox:uid().
 
 choose_message(Parent, {Receiver, Messages}) ->

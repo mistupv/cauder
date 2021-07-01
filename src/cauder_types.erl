@@ -102,8 +102,9 @@
     | {spawn, environment(), [abstract_expr()], stack(), node(), proc_id()}
     | {start, success, environment(), [abstract_expr()], stack(), node()}
     | {start, failure, environment(), [abstract_expr()], stack(), node()}
-    | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
-    | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
+    | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message(cauder_types:proc_id())}
+    | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(cauder_types:proc_id()),
+        QPos :: pos_integer()}.
 
 -type stack() :: [stack_entry()].
 -type stack_entry() ::

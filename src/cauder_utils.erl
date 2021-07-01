@@ -27,7 +27,7 @@
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1]).
--export([load_trace/1]).
+-export([load_trace/1, trace_to_log/1]).
 -export([is_dead/1]).
 -export([is_conc_item/1]).
 -export([race_set/2]).
@@ -557,7 +557,7 @@ gen_log_start(Node) ->
 
 -spec gen_log_send(Pid, Message) -> [Log] when
     Pid :: cauder_types:proc_id(),
-    Message :: cauder_mailbox:message(),
+    Message :: cauder_mailbox:message(cauder_types:proc_id()),
     Log :: [string()].
 
 gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
@@ -622,6 +622,24 @@ load_trace(Dir) ->
         exec = ExecTime,
         trace = Trace
     }.
+
+-spec trace_to_log(Trace) -> Log when
+    Trace :: cauder_types:trace(),
+    Log :: cauder_types:log().
+
+trace_to_log(Trace) ->
+    maps:map(
+        fun(_Pid, Actions) ->
+            lists:filter(
+                fun
+                    ({deliver, _Uid}) -> false;
+                    (_) -> true
+                end,
+                Actions
+            )
+        end,
+        Trace
+    ).
 
 -spec find_last_message_uid(Terms) -> ok when
     Terms :: [cauder_types:log_action()].

@@ -87,7 +87,7 @@
     % List of expressions
     exprs :: [cauder_types:abstract_expr()],
     % Local message queue
-    mail = queue:new() :: queue:queue(cauder_mailbox:message()),
+    mail = queue:new() :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     % The entry point function for this process
     entry_point :: mfa()
 }).
@@ -99,9 +99,9 @@
     % Message
     value :: term(),
     % Sender PID
-    src :: cauder_types:proc_id(),
+    src,
     % Receiver PID
-    dest :: cauder_types:proc_id()
+    dest
 }).
 
 % Option

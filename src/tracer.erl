@@ -125,7 +125,7 @@ init({MainPid, TracedPid}) ->
     Request :: term(),
     From :: {pid(), term()},
     State :: state(),
-    Reply :: Reply,
+    Reply :: term(),
     NewState :: state().
 
 handle_call(get_traces, _From, #state{trace = Trace} = State) ->
