@@ -5,6 +5,10 @@
 
 -ignore_xref([start/3, spawn/3]).
 
+-compile({inline, [send_ack/1, receive_ack/0]}).
+
+-define(ACK, ack).
+
 -spec start(Module, Function, Args) -> term() when
     Module :: module(),
     Function :: atom(),
@@ -27,13 +31,18 @@ spawn(Mod, Fun, Args) ->
         sched ! {Pid, spawn, self()},
         apply(Mod, Fun, Args)
     end),
-    receive
-        {ack} -> ok
-    end,
+    receive_ack(),
     SpawnPid.
 
 -spec send_ack(Pid) -> any() when
     Pid :: pid().
 
-send_ack(_Pid) ->
-    exit(not_transformed).
+send_ack(Pid) ->
+    Pid ! ?ACK.
+
+-spec receive_ack() -> 'ok'.
+
+receive_ack() ->
+    receive
+        ?ACK -> ok
+    end.
