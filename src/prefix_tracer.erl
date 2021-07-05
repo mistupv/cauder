@@ -190,7 +190,7 @@ handle_info({P, spawn, P1}, #state{pids = Pids0, log = Log0, trace = Trace0} = S
     prefix_tracer_erlang:send_ack(P),
     State2 = try_deliver(P, State1),
     {noreply, State2};
-handle_info({P, send, P1, V}, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+handle_info({P, send, P1, V}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, Pids0),
     State2 =
         case maps:get(R, Log0, []) of
@@ -448,9 +448,48 @@ try_deliver(P, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = 
             State0
     end.
 
-process_new_msg({P, P1, L, V}, State) ->
-    % TODO
-    erlang:error(not_implemented).
-process_msg({P, P1, L, V}, State) ->
-    % TODO
-    erlang:error(not_implemented).
+-spec process_new_msg({SenderPid, DestinationPid, Uid, Value}, State) -> NewState when
+    SenderPid :: pid(),
+    DestinationPid :: pid(),
+    Uid :: cauder_mailbox:uid(),
+    Value :: term(),
+    State :: state(),
+    NewState :: state().
+
+process_new_msg({P, P1, L, Value}, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+    R1 = maps:get(P1, Pids0),
+    case maps:get(R1, Log0, []) of
+        [] ->
+            P1 ! {L, Value},
+            Trace1 = update_trace(R1, {deliver, L}, Trace0),
+            State0#state{trace = Trace1};
+        Actions ->
+            Mail1 = cauder_mailbox:add(#message{uid = L, value = Value, src = P, dest = P1}, Mail0),
+            Log1 = Log0#{R1 => Actions ++ [{deliver, L}]},
+            State0#state{log = Log1, mail = Mail1}
+    end.
+
+-spec process_msg({SenderPid, DestinationPid, Uid, Value}, State) -> NewState when
+    SenderPid :: pid(),
+    DestinationPid :: pid(),
+    Uid :: cauder_mailbox:uid(),
+    Value :: term(),
+    State :: state(),
+    NewState :: state().
+
+process_msg({P, P1, L, Value}, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+    R1 = maps:get(P1, Pids0),
+    case maps:get(R1, Log0, []) of
+        [{'receive', L}] ->
+            P1 ! {L, Value},
+            Trace1 = update_trace(R1, {deliver, L}, Trace0),
+            State0#state{trace = Trace1};
+        Actions ->
+            Mail1 = cauder_mailbox:add(#message{uid = L, value = Value, src = P, dest = P1}, Mail0),
+            Log1 =
+                case lists:member({'receive', L}, Actions) of
+                    true -> Log0;
+                    false -> Log0#{R1 => Actions ++ [{deliver, L}]}
+                end,
+            State0#state{log = Log1, mail = Mail1}
+    end.
