@@ -389,7 +389,7 @@ write_trace(Dir, TraceInfo) ->
 new_pid() ->
     TakenPids =
         case ets:member(?SERVER, taken_pids) of
-            true -> ets:lookup_element(?SERVER, taken_pids, 1);
+            true -> ets:lookup_element(?SERVER, taken_pids, 2);
             false -> sets:new()
         end,
     NextPid = fun F() ->
