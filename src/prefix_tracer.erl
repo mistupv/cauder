@@ -221,6 +221,9 @@ handle_info({P, 'receive', L}, #state{pids = Pids0, log = Log0, trace = Trace0} 
         end,
     State2 = try_deliver(P, State1),
     {noreply, State2};
+handle_info({return, ReturnValue}, #state{tracer_pid = TracerPid, return = none} = State) ->
+    TracerPid ! finished,
+    {noreply, State#state{return = {value, ReturnValue}}};
 handle_info(Info, State) ->
     io:format("[~p:~p] Unhandled Info: ~p~n", [?MODULE, ?LINE, Info]),
     {noreply, State}.
@@ -282,10 +285,6 @@ do_trace(Module, Function, Args, Opts) ->
     TracerPid = self(),
     TracedPid = spawn(prefix_tracer_erlang, start, [Module, Function, Args]),
     {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {TracerPid, TracedPid, LogDir}, []),
-
-    receive
-        setup_complete -> ok
-    end,
 
     {ExecTime, Tracing} = timer:tc(
         fun() ->
