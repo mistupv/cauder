@@ -89,14 +89,14 @@ jobs:
         run: brew update
       - name: 'Install Erlang'
         run: brew install erlang@23
-      - name: 'Install rebar3'
-        run: brew install rebar3
+      #- name: 'Install rebar3'
+      #  run: brew install rebar3
       - name: 'Compile'
-        run: rebar3 compile
+        run: ./rebar3 compile
       - name: 'EUnit Tests'
-        run: rebar3 eunit
+        run: ./rebar3 eunit
       - name: 'Common Tests'
-        run: rebar3 ct
+        run: ./rebar3 ct
 
   windows:
     name: 'Test (Windows)'
