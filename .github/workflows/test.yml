@@ -6,11 +6,13 @@ on:
       - 'main'
       - 'dev'
       - 'release/**'
+      - 'paper/**'
   pull_request:
     branches:
       - 'main'
       - 'dev'
       - 'release/**'
+      - 'paper/**'
 
 jobs:
   skip_check:
