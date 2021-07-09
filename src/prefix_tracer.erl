@@ -192,21 +192,19 @@ handle_info({P, spawn, P1}, #state{pids = Pids0, log = Log0, trace = Trace0} = S
     {noreply, State2};
 handle_info({P, send, P1, V}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, Pids0),
-    State2 =
+    State1 =
         case maps:get(R, Log0, []) of
             [] ->
                 L = new_uid(),
                 Trace1 = update_trace(R, {send, L}, Trace0),
-                State1 = process_new_msg({P, P1, L, V}, State0),
-                State1#state{trace = Trace1};
+                process_new_msg({P, P1, L, V}, State0#state{trace = Trace1});
             [{send, L} | Actions] ->
                 Log1 = Log0#{R := Actions},
                 Trace1 = update_trace(R, {send, L}, Trace0),
-                State1 = process_msg({P, P1, L, V}, State0),
-                State1#state{log = Log1, trace = Trace1}
+                process_msg({P, P1, L, V}, State0#state{log = Log1, trace = Trace1})
         end,
-    State3 = try_deliver(P, State2),
-    {noreply, State3};
+    State2 = try_deliver(P, State1),
+    {noreply, State2};
 handle_info({P, 'receive', L}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, Pids0),
     State1 =
