@@ -179,12 +179,12 @@ handle_info({P, spawn, P1}, #state{pids = Pids0, log = Log0, trace = Trace0} = S
             [] ->
                 R1 = new_pid(),
                 Pids1 = maps:put(P1, R1, Pids0),
-                Trace1 = update_trace(R1, {spawn, {'nonode@nohost', R1}, success}, Trace0),
+                Trace1 = update_trace(R, {spawn, {'nonode@nohost', R1}, success}, Trace0),
                 State0#state{pids = Pids1, trace = Trace1};
             [{spawn, {'nonode@nohost', R1}, success} | Actions] ->
                 Pids1 = maps:put(P1, R1, Pids0),
                 NewLog = Log0#{R := Actions},
-                Trace1 = update_trace(R1, {spawn, {'nonode@nohost', R1}, success}, Trace0),
+                Trace1 = update_trace(R, {spawn, {'nonode@nohost', R1}, success}, Trace0),
                 State0#state{pids = Pids1, log = NewLog, trace = Trace1}
         end,
     prefix_tracer_erlang:send_ack(P),
