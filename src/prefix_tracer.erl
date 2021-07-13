@@ -18,7 +18,8 @@
     % The pid of the tracer process, used to notify when the execution of the traced process has finished
     tracer_pid :: pid(),
     initial_pid :: cauder_types:proc_id(),
-    pids :: #{pid() => cauder_types:proc_id()},
+    pid_map :: #{pid() => cauder_types:proc_id()},
+    alive_pids :: sets:set(pid()),
     log = maps:new() :: cauder_types:log(),
     % The actions of this trace are stored in reverse order
     trace = maps:new() :: cauder_types:trace(),
@@ -92,7 +93,7 @@ default_options() ->
         dir => ".",
         log_dir => [],
         modules => [],
-        timeout => infinity,
+        timeout => 10000,
         output => []
     }.
 
@@ -126,7 +127,8 @@ init({TracerPid, TracedPid, TraceDir}) ->
     {ok, #state{
         tracer_pid = TracerPid,
         initial_pid = InitialPid,
-        pids = #{TracedPid => InitialPid},
+        pid_map = #{TracedPid => InitialPid},
+        alive_pids = sets:from_list([TracedPid]),
         log = Log,
         mail = cauder_mailbox:new()
     }}.
@@ -172,26 +174,28 @@ handle_cast(Request, State) ->
     State :: state(),
     NewState :: state().
 
-handle_info({P, spawn, P1}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
-    R = maps:get(P, Pids0),
+handle_info({P, spawn, P1}, #state{pid_map = PidMap0, alive_pids = AlivePids0, log = Log0, trace = Trace0} = State0) ->
+    R = maps:get(P, PidMap0),
     State1 =
         case maps:get(R, Log0, []) of
             [] ->
                 R1 = new_pid(),
-                Pids1 = maps:put(P1, R1, Pids0),
+                PidMap1 = maps:put(P1, R1, PidMap0),
+                AlivePids1 = sets:add_element(P1, AlivePids0),
                 Trace1 = update_trace(R, {spawn, {'nonode@nohost', R1}, success}, Trace0),
-                State0#state{pids = Pids1, trace = Trace1};
+                State0#state{pid_map = PidMap1, alive_pids = AlivePids1, trace = Trace1};
             [{spawn, {'nonode@nohost', R1}, success} | Actions] ->
-                Pids1 = maps:put(P1, R1, Pids0),
+                PidMap1 = maps:put(P1, R1, PidMap0),
+                AlivePids1 = sets:add_element(P1, AlivePids0),
                 NewLog = Log0#{R := Actions},
                 Trace1 = update_trace(R, {spawn, {'nonode@nohost', R1}, success}, Trace0),
-                State0#state{pids = Pids1, log = NewLog, trace = Trace1}
+                State0#state{pid_map = PidMap1, alive_pids = AlivePids1, log = NewLog, trace = Trace1}
         end,
     prefix_tracer_erlang:send_ack(P),
     State2 = try_deliver(P, State1),
     {noreply, State2};
-handle_info({P, send, P1, V}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
-    R = maps:get(P, Pids0),
+handle_info({P, send, P1, V}, #state{pid_map = PidMap0, log = Log0, trace = Trace0} = State0) ->
+    R = maps:get(P, PidMap0),
     State1 =
         case maps:get(R, Log0, []) of
             [] ->
@@ -205,8 +209,8 @@ handle_info({P, send, P1, V}, #state{pids = Pids0, log = Log0, trace = Trace0} =
         end,
     State2 = try_deliver(P, State1),
     {noreply, State2};
-handle_info({P, 'receive', L}, #state{pids = Pids0, log = Log0, trace = Trace0} = State0) ->
-    R = maps:get(P, Pids0),
+handle_info({P, 'receive', L}, #state{pid_map = PidMap0, log = Log0, trace = Trace0} = State0) ->
+    R = maps:get(P, PidMap0),
     State1 =
         case maps:get(R, Log0, []) of
             [] ->
@@ -219,9 +223,16 @@ handle_info({P, 'receive', L}, #state{pids = Pids0, log = Log0, trace = Trace0} 
         end,
     State2 = try_deliver(P, State1),
     {noreply, State2};
-handle_info({return, ReturnValue}, #state{tracer_pid = TracerPid, return = none} = State) ->
-    TracerPid ! finished,
+handle_info({return, ReturnValue}, #state{return = none} = State) ->
     {noreply, State#state{return = {value, ReturnValue}}};
+handle_info({P, exit}, #state{tracer_pid = TracerPid, alive_pids = AlivePids0} = State0) ->
+    AlivePids1 = sets:del_element(P, AlivePids0),
+    State1 = State0#state{alive_pids = AlivePids1},
+    case sets:is_empty(AlivePids1) of
+        true -> TracerPid ! finished;
+        false -> ok
+    end,
+    {noreply, State1};
 handle_info(Info, State) ->
     io:format("[~p:~p] Unhandled Info: ~p~n", [?MODULE, ?LINE, Info]),
     {noreply, State}.
@@ -235,7 +246,7 @@ handle_info(Info, State) ->
 
 terminate(_Reason, State) ->
     ets:delete(?SERVER),
-    lists:foreach(fun(P) -> true = erlang:exit(P, kill) end, maps:keys(State#state.pids)),
+    lists:foreach(fun(P) -> true = erlang:exit(P, kill) end, maps:keys(State#state.pid_map)),
     ok.
 
 %%------------------------------------------------------------------------------
@@ -417,8 +428,8 @@ update_trace(Pid, Action, Trace) ->
     State :: state(),
     NewState :: state().
 
-try_deliver(P, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
-    R = maps:get(P, Pids0),
+try_deliver(P, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+    R = maps:get(P, PidMap0),
     case maps:get(R, Log0, []) of
         [{'receive', L} | _] ->
             case cauder_mailbox:uid_take_oldest(L, Mail0) of
@@ -453,8 +464,8 @@ try_deliver(P, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = 
     State :: state(),
     NewState :: state().
 
-process_new_msg({P, P1, L, Value}, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
-    R1 = maps:get(P1, Pids0),
+process_new_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+    R1 = maps:get(P1, PidMap0),
     case maps:get(R1, Log0, []) of
         [] ->
             P1 ! {L, Value},
@@ -474,8 +485,8 @@ process_new_msg({P, P1, L, Value}, #state{pids = Pids0, log = Log0, trace = Trac
     State :: state(),
     NewState :: state().
 
-process_msg({P, P1, L, Value}, #state{pids = Pids0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
-    R1 = maps:get(P1, Pids0),
+process_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail0} = State0) ->
+    R1 = maps:get(P1, PidMap0),
     case maps:get(R1, Log0, []) of
         [{'receive', L}] ->
             P1 ! {L, Value},

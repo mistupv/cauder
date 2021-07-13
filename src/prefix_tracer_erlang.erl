@@ -18,7 +18,8 @@ start(Module, Function, Args) ->
     receive
         start -> ok
     end,
-    sched ! {return, apply(Module, Function, Args)}.
+    sched ! {return, apply(Module, Function, Args)},
+    sched ! {self(), exit}.
 
 -spec spawn(Module, Function, Args) -> pid() when
     Module :: module(),
@@ -29,7 +30,8 @@ spawn(Mod, Fun, Args) ->
     Pid = self(),
     SpawnPid = spawn(fun() ->
         sched ! {Pid, spawn, self()},
-        apply(Mod, Fun, Args)
+        apply(Mod, Fun, Args),
+        sched ! {self(), exit}
     end),
     receive_ack(),
     SpawnPid.
