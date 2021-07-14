@@ -6,7 +6,8 @@
 -define(LOAD_FAIL, "Failed to load file, there are compilation errors").
 
 -define(INIT_START, "Starting system...").
--define(INIT_FINISH, "Started system in ~s").
+-define(INIT_MANUAL_FINISH, "Started system manual mode in ~s").
+-define(INIT_REPLAY_FINISH, "Started system in replay mode in ~s").
 
 -define(STOP_FINISH, "Stopped system!").
 

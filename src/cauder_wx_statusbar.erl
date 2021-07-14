@@ -4,7 +4,7 @@
 -export([create/1, update/2, update_position/2]).
 %% Predefined statuses
 -export([load_start/1, load_finish/2, load_fail/0]).
--export([init_start/0, init_finish/1]).
+-export([init_start/0, init_manual_finish/1, init_replay_finish/1]).
 -export([stop_finish/0]).
 % Manual
 -export([step_start/1, step_finish/3]).
@@ -149,12 +149,20 @@ load_fail() -> set_text(?LOAD_FAIL).
 
 init_start() -> set_text(?INIT_START).
 
--spec init_finish(Time) -> ok when
+-spec init_manual_finish(Time) -> ok when
     Time :: non_neg_integer().
 
-init_finish(Time) ->
+init_manual_finish(Time) ->
     TimeStr = time_to_string(Time),
-    Status = io_lib:format(?INIT_FINISH, [TimeStr]),
+    Status = io_lib:format(?INIT_MANUAL_FINISH, [TimeStr]),
+    set_text(Status).
+
+-spec init_replay_finish(Time) -> ok when
+    Time :: non_neg_integer().
+
+init_replay_finish(Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?INIT_REPLAY_FINISH, [TimeStr]),
     set_text(Status).
 
 %%%=============================================================================
@@ -238,12 +246,12 @@ replay_spawn_finish(Pid, Time) ->
 replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
 
 -spec replay_start_start(Node) -> ok when
-    Node :: cauder_types:net_node().
+    Node :: node().
 
 replay_start_start(Node) -> set_text(io_lib:format(?REPLAY_START_START, [Node])).
 
 -spec replay_start_finish(Node, Time) -> ok when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     Time :: non_neg_integer().
 
 replay_start_finish(Node, Time) ->
@@ -344,7 +352,7 @@ rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 %%%=============================================================================
 
 -spec rollback_start_begin(Node) -> ok when
-    Node :: cauder_types:net_node().
+    Node :: node().
 
 rollback_start_begin(Node) -> set_text(io_lib:format(?ROLLBACK_START_BEGIN, [Node])).
 

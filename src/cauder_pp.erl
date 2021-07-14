@@ -27,15 +27,16 @@ process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
 %%%=============================================================================
 
 -spec log_entry(LogEntry) -> String when
-    LogEntry :: cauder_types:log_entry(),
+    LogEntry :: cauder_types:trace_entry(),
     String :: string().
-log_entry({nodes, {Nodes}}) -> "nodes(" ++ to_string(Nodes) ++ ")";
-log_entry({spawn, {Node, fail, Pid}}) -> "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
-log_entry({spawn, {Node, succ, Pid}}) -> "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+
+log_entry({nodes, Nodes}) -> "nodes(" ++ to_string(Nodes) ++ ")";
+log_entry({spawn, {Node, Pid}, success}) -> "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_entry({spawn, {Node, Pid}, failure}) -> "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
 log_entry({send, Uid}) -> "send(" ++ red(to_string(Uid)) ++ ")";
 log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")";
-log_entry({start, {succ, NodeName}}) -> "start(" ++ green(to_string(NodeName)) ++ ")";
-log_entry({start, {fail, NodeName}}) -> "start(" ++ red(to_string(NodeName)) ++ ")".
+log_entry({start, NodeName, success}) -> "start(" ++ green(to_string(NodeName)) ++ ")";
+log_entry({start, NodeName, failure}) -> "start(" ++ red(to_string(NodeName)) ++ ")".
 
 %%%=============================================================================
 
@@ -53,7 +54,7 @@ history_entry({spawn, _Bs, _Es, _Stk, Node, Pid}) ->
     "spawn(" ++ to_string(Node) ++ ", " ++ to_string(Pid) ++ ")";
 history_entry({start, success, _Bs, _Es, _Stk, Node}) ->
     "start(" ++ green(to_string(Node)) ++ ")";
-history_entry({start, fail, _Bs, _Es, _Stk, Node}) ->
+history_entry({start, failure, _Bs, _Es, _Stk, Node}) ->
     "start(" ++ red(to_string(Node)) ++ ")";
 history_entry({send, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}}) ->
     "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
@@ -81,18 +82,18 @@ expression(Expr) ->
 %%%=============================================================================
 
 -spec trace_entry(Trace) -> String when
-    Trace :: cauder_types:trace(),
+    Trace :: cauder_types:x_trace(),
     String :: string().
 
-trace_entry(#trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Uid}) ->
+trace_entry(#x_trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Uid}) ->
     io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
-trace_entry(#trace{type = ?RULE_SPAWN, from = From, to = To}) ->
+trace_entry(#x_trace{type = ?RULE_SPAWN, from = From, to = To}) ->
     io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
-trace_entry(#trace{type = ?RULE_START, from = From, res = succ, node = Node}) ->
+trace_entry(#x_trace{type = ?RULE_START, from = From, res = success, node = Node}) ->
     io_lib:format("~s starts ~s", [pid(From), Node]);
-trace_entry(#trace{type = ?RULE_START, from = From, res = fail, node = Node}) ->
+trace_entry(#x_trace{type = ?RULE_START, from = From, res = failure, node = Node}) ->
     io_lib:format("Warning: ~s tried to start ~s and failed", [pid(From), Node]);
-trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
+trace_entry(#x_trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
     io_lib:format("~s receives ~p (~p)", [pid(From), Val, Uid]).
 
 %%%=============================================================================
@@ -104,7 +105,7 @@ trace_entry(#trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
 pid(Pid) -> "Proc. " ++ to_string(Pid).
 
 -spec pp_node(Node) -> String when
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     String :: string().
 
 pp_node(Node) -> "Node " ++ to_string(Node).
@@ -116,7 +117,7 @@ pp_node(Node) -> "Node " ++ to_string(Node).
 to_string(Term) -> io_lib:format("~p", [Term]).
 
 -spec pp_nodes(Nodes) -> String when
-    Nodes :: [cauder_types:net_node()],
+    Nodes :: [node()],
     String :: string().
 
 pp_nodes([]) ->

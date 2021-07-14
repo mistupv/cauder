@@ -304,8 +304,10 @@ handle_event(?MENU_EVENT(?MENU_View_StatusBar, Check), #wx_state{config = Config
 
 handle_event(?MENU_EVENT(?MENU_Run_Start), State) ->
     case start_session(State) of
-        true ->
-            {noreply, refresh(State, State#wx_state{task = start})};
+        {true, manual} ->
+            {noreply, refresh(State, State#wx_state{task = start_manual})};
+        {true, replay} ->
+            {noreply, refresh(State, State#wx_state{task = start_replay})};
         false ->
             {noreply, State}
     end;
@@ -561,8 +563,11 @@ handle_info(?DBG_FAILURE(load, {compile_error, _Errors}, _Stacktrace), #wx_state
     cauder_wx_statusbar:load_fail(),
 
     {noreply, refresh(State, State#wx_state{task = undefined})};
-handle_info(?DBG_SUCCESS(start, {}, Time, System), #wx_state{task = start} = State) ->
-    cauder_wx_statusbar:init_finish(Time),
+handle_info(?DBG_SUCCESS(start_manual, Time, System), #wx_state{task = start_manual} = State) ->
+    cauder_wx_statusbar:init_manual_finish(Time),
+    {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
+handle_info(?DBG_SUCCESS(start_replay, Time, System), #wx_state{task = start_replay} = State) ->
+    cauder_wx_statusbar:init_replay_finish(Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
 %%%=============================================================================
 
@@ -618,7 +623,7 @@ handle_info(?DBG_SUCCESS(rollback_steps, Steps, Time, System), #wx_state{task = 
 handle_info(?DBG_SUCCESS(rollback_start, Node, Time, System), #wx_state{task = rollback_start} = State) ->
     cauder_wx_statusbar:rollback_start_finish(Node, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-handle_info({dbg, {fail, rollback_start, no_rollback}}, #wx_state{task = rollback_start} = State) ->
+handle_info(?DBG_FAILURE(rollback_start, no_rollback, _Stacktrace), #wx_state{task = rollback_start} = State) ->
     cauder_wx_statusbar:rollback_start_fail(),
     {noreply, refresh(State, State#wx_state{task = undefined})};
 handle_info(?DBG_SUCCESS(rollback_spawn, Pid, Time, System), #wx_state{task = rollback_spawn} = State) ->
@@ -685,22 +690,22 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%--------------------------------------------------------------------
 %% @doc Starts a new debugging session.
 
--spec start_session(State) -> IsStarting when
+-spec start_session(State) -> {true, Mode} | false when
     State :: state(),
-    IsStarting :: boolean().
+    Mode :: manual | replay.
 
 start_session(#wx_state{module = Module}) ->
     Frame = cauder_wx:find(?FRAME, wxFrame),
     EntryPoints = cauder:get_entry_points(Module),
     case cauder_wx_dialog:start_session(Frame, EntryPoints) of
-        {manual, {Mod, Fun, Node, Args}} ->
-            ok = cauder:init_system(Mod, Fun, Node, Args),
+        {manual, {Node, Mod, Fun, Args}} ->
+            ok = cauder:init_system(Node, Mod, Fun, Args),
             cauder_wx_statusbar:init_start(),
-            true;
+            {true, manual};
         {replay, Path} ->
             ok = cauder:init_system(Path),
             cauder_wx_statusbar:init_start(),
-            true;
+            {true, replay};
         false ->
             false
     end.

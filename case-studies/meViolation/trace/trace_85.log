@@ -1,0 +1,6 @@
+{'receive',0}.
+{send,2}.
+{'receive',6}.
+{'receive',1}.
+{send,7}.
+{'receive',11}.

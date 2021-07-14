@@ -4,10 +4,10 @@
 
 -export_type([
     system/0,
-    log_map/0,
-    log/0,
-    log_entry/0,
-    log_entry_search/0,
+    trace_map/0,
+    trace/0,
+    trace_entry/0,
+    trace_entry_search/0,
     fwd_opts/0,
     process_map/0,
     proc_id/0,
@@ -23,10 +23,10 @@
     process_scheduler/0,
     message_scheduler/0,
     rule/0,
-    trace/0,
-    replay/0,
+    x_trace/0,
     result/0,
-    label/0
+    label/0,
+    trace_result/0
 ]).
 
 % Abstract format types
@@ -51,28 +51,28 @@
 
 -type system() :: #sys{}.
 
--type log_map() :: #{proc_id() => log()}.
--type log() :: [log_entry()].
--type log_entry() ::
+-type trace_map() :: #{proc_id() => trace()}.
+-type trace() :: [trace_entry()].
+-type trace_entry() ::
     {send, cauder_mailbox:uid()}
+    %| {deliver, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
-    | {nodes, {[net_node()]}}
-    | {start, {succ, net_node()}}
-    | {start, {fail, net_node()}}
-    | {spawn, {net_node(), succ, proc_id()}}
-    | {spawn, {net_node(), fail, proc_id()}}.
+    | {nodes, [node()]}
+    | {start, node(), success}
+    | {start, node(), failure}
+    | {spawn, {node(), proc_id()}, success}
+    | {spawn, {node(), proc_id()}, failure}.
 
--type log_entry_search() ::
+-type trace_entry_search() ::
     {send, cauder_mailbox:uid()}
     | {'receive', cauder_mailbox:uid()}
-    | {start, {succ, net_node()}}
-    | {spawn, {'_', '_', proc_id()}}
-    | {spawn, {net_node(), fail, '_'}}.
+    | {start, node(), success}
+    | {spawn, {'_', proc_id()}, '_'}
+    | {spawn, {node(), '_'}, failure}.
 
 % Not empty
 -type process_map() :: #{proc_id() := process()}.
 -type proc_id() :: pos_integer().
--type net_node() :: atom().
 -type process() :: #proc{}.
 
 -type history() :: [history_entry()].
@@ -80,10 +80,10 @@
     {tau, environment(), [abstract_expr()], stack()}
     | {self, environment(), [abstract_expr()], stack()}
     | {node, environment(), [abstract_expr()], stack()}
-    | {nodes, environment(), [abstract_expr()], stack(), [net_node()]}
-    | {spawn, environment(), [abstract_expr()], stack(), net_node(), proc_id()}
-    | {start, success, environment(), [abstract_expr()], stack(), net_node()}
-    | {start, fail, environment(), [abstract_expr()], stack(), net_node()}
+    | {nodes, environment(), [abstract_expr()], stack(), [node()]}
+    | {spawn, environment(), [abstract_expr()], stack(), node(), proc_id()}
+    | {start, success, environment(), [abstract_expr()], stack(), node()}
+    | {start, failure, environment(), [abstract_expr()], stack(), node()}
     | {send, environment(), [abstract_expr()], stack(), cauder_mailbox:message()}
     | {rec, environment(), [abstract_expr()], stack(), cauder_mailbox:message(), QPos :: pos_integer()}.
 
@@ -105,24 +105,25 @@
 -type rule() ::
     ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
 
--type trace() :: #trace{}.
-
--type replay() :: #replay{}.
+% TODO What is the purpose of this?
+-type x_trace() :: #x_trace{}.
 
 -type result() :: #result{}.
 -type label() ::
     tau
     | {spawn, af_variable(), af_literal()}
-    | {spawn, af_variable(), net_node(), af_literal()}
+    | {spawn, af_variable(), node(), af_literal()}
     | {spawn, af_variable(), module(), atom(), [term()]}
-    | {spawn, af_variable(), net_node(), module(), atom(), [term()]}
-    | {start, af_variable(), net_node()}
+    | {spawn, af_variable(), node(), module(), atom(), [term()]}
+    | {start, af_variable(), node()}
     | {start, af_variable(), atom(), atom()}
     | {self, af_variable()}
     | {node, af_variable()}
     | {nodes, af_variable()}
     | {send, proc_id(), term()}
     | {rec, af_variable(), af_clause_seq()}.
+
+-type trace_result() :: #trace_result{}.
 
 %% Custom of abstract format
 

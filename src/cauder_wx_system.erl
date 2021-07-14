@@ -227,15 +227,15 @@ create_trace(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_trace(#wx_state{system = #sys{trace = Trace}}, #wx_state{system = #sys{trace = Trace}}) ->
+update_trace(#wx_state{system = #sys{x_trace = Trace}}, #wx_state{system = #sys{x_trace = Trace}}) ->
     ok;
 update_trace(_, #wx_state{system = undefined}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #sys{trace = []}}) ->
+update_trace(_, #wx_state{system = #sys{x_trace = []}}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #sys{trace = Trace}}) ->
+update_trace(_, #wx_state{system = #sys{x_trace = Trace}}) ->
     wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
     TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
     wxListBox:freeze(TraceArea),

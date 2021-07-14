@@ -1,0 +1,15 @@
+{spawn,{nonode@nohost,88},success}.
+{'receive',0}.
+{'receive',1}.
+{send,3}.
+{'receive',2}.
+{send,4}.
+{'receive',5}.
+{send,7}.
+{'receive',6}.
+{send,8}.
+{'receive',9}.
+{send,11}.
+{'receive',10}.
+{'receive',12}.
+{'receive',14}.

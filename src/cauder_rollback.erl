@@ -60,7 +60,7 @@ can_rollback_spawn(#sys{procs = PMap}, Pid) -> cauder_utils:find_process_with_sp
 
 -spec can_rollback_start(System, Node) -> CanRollback when
     System :: cauder_types:system(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     CanRollback :: boolean().
 
 can_rollback_start(#sys{nodes = Nodes, procs = PMap}, Node) ->
@@ -158,7 +158,7 @@ rollback_spawn(#sys{procs = PMap} = Sys, Pid) ->
 
 -spec rollback_start(System, Node) -> NewSystem when
     System :: cauder_types:system(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     NewSystem :: cauder_types:system().
 
 rollback_start(#sys{procs = PMap} = Sys, Node) ->
@@ -211,7 +211,7 @@ rollback_variable(#sys{procs = PMap} = Sys, Name) ->
 -spec rollback_nodes(System, Pid, Nodes) -> NewSystem when
     System :: cauder_types:system(),
     Pid :: cauder_types:proc_id(),
-    Nodes :: [cauder_types:net_node()],
+    Nodes :: [node()],
     NewSystem :: cauder_types:system().
 
 rollback_nodes(#sys{nodes = SysNodes, procs = PMap} = Sys0, Pid, Nodes) ->
@@ -243,7 +243,7 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
 -spec rollback_start(System, Pid, SpawnNode) -> NewSystem when
     System :: cauder_types:system(),
     Pid :: cauder_types:proc_id(),
-    SpawnNode :: cauder_types:net_node(),
+    SpawnNode :: node(),
     NewSystem :: cauder_types:system().
 
 rollback_start(Sys0, Pid, SpawnNode) ->
@@ -300,7 +300,7 @@ rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
 -spec rollback_until_start(System, Pid, Node) -> NewSystem when
     System :: cauder_types:system(),
     Pid :: cauder_types:proc_id(),
-    Node :: cauder_types:net_node(),
+    Node :: node(),
     NewSystem :: cauder_types:system().
 
 rollback_until_start(#sys{procs = PMap} = Sys0, Pid, SpawnNode) ->
