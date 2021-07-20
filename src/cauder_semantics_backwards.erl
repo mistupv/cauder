@@ -26,25 +26,27 @@
     Pid :: cauder_types:proc_id(),
     NewSystem :: cauder_types:system().
 
-step(Sys, Pid) ->
-    #proc{pid = Pid, hist = [Entry | _]} = P0 = maps:get(Pid, Sys#sys.procs),
+step(Sys0, Pid) ->
+    #proc{pid = Pid, hist = [Entry | _]} = P0 = maps:get(Pid, Sys0#sys.procs),
     case Entry of
         {tau, _Bs, _Es, _Stk} ->
-            rule_local(Sys, P0);
+            rule_local(Sys0, P0);
         {self, _Bs, _Es, _Stk} ->
-            rule_self(Sys, P0);
+            rule_self(Sys0, P0);
         {node, _Bs, _Es, _Stk} ->
-            rule_node(Sys, P0);
+            rule_node(Sys0, P0);
         {nodes, _Bs, _Es, _Stk, _Nodes} ->
-            rule_nodes(Sys, P0);
+            rule_nodes(Sys0, P0);
         {spawn, _Bs, _Es, _Stk, _SpawnNode, _SpawnPid} ->
-            rule_spawn(Sys, P0);
+            rule_spawn(Sys0, P0);
         {start, _Result, _Bs, _Es, _Stk, _Node} ->
-            rule_start(Sys, P0);
+            rule_start(Sys0, P0);
         {send, _Bs, _Es, _Stk, _Msg} ->
-            rule_send(Sys, P0);
+            rule_send(Sys0, P0);
         {rec, _Bs, _Es, _Stk, _Msg, _QPos} ->
-            rule_receive(Sys, P0)
+            Sys1 = rule_receive(Sys0, P0),
+            P1 = maps:get(Pid, Sys1#sys.procs),
+            rule_deliver(Sys1, P1)
     end.
 
 -spec rule_local(System, Process) -> NewSystem when
