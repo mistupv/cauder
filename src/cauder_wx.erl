@@ -187,10 +187,6 @@ init([]) ->
     % Disable action
 
     wxChoice:disable(cauder_wx:find(?ACTION_Process, wxChoice)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
     % Show window
 
