@@ -34,7 +34,8 @@
 
 -elvis([{elvis_style, god_modules, disable}]).
 
--ignore_xref([race_set/2]).
+% TODO Remove
+-ignore_xref([race_sets/1, race_set/2]).
 
 -include("cauder.hrl").
 
