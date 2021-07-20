@@ -12,6 +12,7 @@
 ]).
 -export_type([trace/0, trace_action/0]).
 -export_type([log/0, log_action/0, log_action_search/0]).
+-export_type([race_set/0, race_sets/0]).
 -export_type([
     system/0,
     fwd_opts/0,
@@ -87,6 +88,9 @@
     | {start, node(), success}
     | {spawn, {'_', proc_id()}, '_'}
     | {spawn, {node(), '_'}, failure}.
+
+-type race_set() :: ordsets:ordset(cauder_mailbox:uid()).
+-type race_sets() :: #{proc_id() := #{cauder_mailbox:uid() := race_set()}}.
 
 % Not empty
 -type process_map() :: #{proc_id() := process()}.

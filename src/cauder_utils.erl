@@ -30,7 +30,7 @@
 -export([load_trace/1]).
 -export([is_dead/1]).
 -export([is_conc_item/1]).
--export([race_set/2]).
+-export([race_sets/1, race_set/2]).
 
 -elvis([{elvis_style, god_modules, disable}]).
 
@@ -685,11 +685,41 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 
 %%%=============================================================================
 
--spec race_set({Pid, ReceiveEvent}, Trace) -> [RaceSet] when
+-spec race_sets(Trace) -> RaceSets when
+    Trace :: tracer:trace(),
+    RaceSets :: cauder_types:race_sets().
+
+race_sets(Trace) ->
+    % TODO: OTP 24 - maps:filtermap/2
+    RaceSets = maps:map(
+        fun(Pid, Actions) ->
+            lists:foldl(
+                fun(Action, Acc) ->
+                    case Action of
+                        {'receive', Uid} ->
+                            case race_set({Pid, Action}, Trace) of
+                                [] ->
+                                    Acc;
+                                RaceSet ->
+                                    Acc#{Uid => RaceSet}
+                            end;
+                        _ ->
+                            Acc
+                    end
+                end,
+                maps:new(),
+                Actions
+            )
+        end,
+        Trace
+    ),
+    maps:filter(fun(_, Map) -> maps:size(Map) =/= 0 end, RaceSets).
+
+-spec race_set({Pid, ReceiveEvent}, Trace) -> RaceSet when
     Pid :: cauder_types:proc_id(),
     ReceiveEvent :: {'receive', cauder_mailbox:uid()},
     Trace :: tracer:trace(),
-    RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
+    RaceSet :: cauder_types:race_set().
 
 race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     % Assert that p:receive(l) ∈ T
