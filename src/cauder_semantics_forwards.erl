@@ -46,7 +46,10 @@ step(Sys0, Pid, Sched, Mode) ->
         {send, _Dest, _Val} ->
             rule_send(Sys0, P0, Result);
         {rec, VarBody, _Cs} when Result#result.exprs =:= [VarBody] ->
-            rule_receive(Sys0, P0, Result);
+            % TODO Manual mode
+            Sys1 = rule_deliver(Sys0, P0),
+            P1 = maps:get(Pid, Sys1#sys.procs),
+            rule_receive(Sys1, P1, Result);
         {self, _TmpVar} ->
             rule_self(Sys0, P0, Result);
         {node, _TmpVar} ->
@@ -362,23 +365,21 @@ log_consume_spawn(Pid, Log) ->
             {{{'_', cauder_utils:fresh_pid()}, success}, Log}
     end.
 
--spec admissible(Pid, Log, LocalMail) -> Uid when
+-spec admissible(Pid, Log, LocalMail) -> Uid | false when
     Pid :: cauder_types:proc_id(),
     Log :: cauder_types:log(),
     LocalMail :: queue:queue(cauder_mailbox:message()),
     Uid :: cauder_mailbox:uid().
 
 admissible(Pid, Log, LocalMail) ->
-    Actions = maps:get(Pid, Log),
-    {deliver, NextDeliverUid} = lists:keyfind(deliver, 1, Actions),
     DeliveredUids = lists:foldl(
         fun(#message{uid = Uid}, Set) -> sets:add_element(Uid, Set) end,
         sets:new(),
         queue:to_list(LocalMail)
     ),
-    case lists:search(fun({'receive', Uid}) -> not sets:is_element(Uid, DeliveredUids) end, Actions) of
-        {value, {'receive', NextDeliverUid}} -> NextDeliverUid;
-        _ -> error(inadmissible)
+    case lists:search(fun({'receive', Uid}) -> not sets:is_element(Uid, DeliveredUids) end, maps:get(Pid, Log)) of
+        {value, {'receive', NextReceiveUid}} -> NextReceiveUid;
+        _ -> false
     end.
 
 -spec rule_local(System, Process, Result) -> NewSystem when
@@ -450,17 +451,22 @@ rule_deliver(
     #sys{mail = Mail0, log = Log0, procs = PMap} = Sys,
     #proc{pid = Pid, mail = LocalMail0} = P0
 ) ->
-    % TODO What happens when there is no log?
-    Uid = admissible(Pid, Log0, LocalMail0),
-    {{#message{uid = Uid, dest = Pid} = M, _QPos}, Mail1} = cauder_mailbox:uid_take(Uid, Mail0),
+    % TODO What happens when there is no log? Any matching message
+    case admissible(Pid, Log0, LocalMail0) of
+        false ->
+            error(not_implemented);
+        Uid ->
+            {{#message{uid = Uid, dest = Pid} = Message, _QPos}, Mail1} = cauder_mailbox:uid_take(Uid, Mail0),
+            LocalMail1 = queue:in(Message, LocalMail0),
 
-    P1 = P0#proc{
-        mail = queue:in(M, LocalMail0)
-    },
-    Sys#sys{
-        mail = Mail1,
-        procs = PMap#{Pid := P1}
-    }.
+            P1 = P0#proc{
+                mail = LocalMail1
+            },
+            Sys#sys{
+                mail = Mail1,
+                procs = PMap#{Pid := P1}
+            }
+    end.
 
 -spec rule_receive(System, Process, Result) -> NewSystem when
     System :: cauder_types:system(),
@@ -470,11 +476,11 @@ rule_deliver(
 
 rule_receive(
     #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = Mail0} = P0,
+    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = LocalMail0} = P0,
     #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}}
 ) ->
     % TODO Manual mode
-    {Bs2, Es2, Mail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, Mail0),
+    {Bs2, Es2, LocalMail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, LocalMail0),
 
     {Uid, Log1} =
         case log_consume_receive(Pid, Log0) of
@@ -487,7 +493,7 @@ rule_receive(
         stack = Stk1,
         env = cauder_utils:merge_bindings(Bs1, Bs2),
         exprs = Es2,
-        mail = Mail1
+        mail = LocalMail1
     },
     T = #x_trace{
         type = ?RULE_RECEIVE,
