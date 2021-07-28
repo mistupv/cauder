@@ -20,7 +20,7 @@
 -define(DBG_SUCCESS(Task, Time, System), {dbg, {success, Task, {}, Time, System}}).
 -define(DBG_SUCCESS(Task, Value, Time, System), {dbg, {success, Task, Value, Time, System}}).
 -define(DBG_CANCEL(Task, Value, Time, System), {dbg, {cancel, Task, Value, Time, System}}).
--define(DBG_SUSPEND(Task, Value, System), {dbg, {suspend, Task, Value, System}}).
+-define(DBG_SUSPEND(Task, Value), {dbg, {suspend, Task, Value}}).
 -define(DBG_FAILURE(Task, Reason, Stacktrace), {dbg, {failure, Task, Reason, Stacktrace}}).
 
 -include("cauder.hrl").
@@ -573,12 +573,12 @@ handle_info(?DBG_SUCCESS(step, {Sem, Steps}, Time, System), #wx_state{task = ste
 handle_info(?DBG_CANCEL(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
     cauder_wx_statusbar:step_finish(Sem, Steps, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-handle_info(?DBG_SUSPEND(step, {Receiver, Messages}, System), #wx_state{frame = Frame, task = step} = State) ->
-    case cauder_wx_dialog:choose_message(Frame, {Receiver, Messages}) of
-        {ok, MessageId} -> cauder:resume(MessageId);
+handle_info(?DBG_SUSPEND(step, {Receiver, InitialUid, AlternativeUids}), #wx_state{frame = Frame, task = step} = State) ->
+    case cauder_wx_dialog:choose_message(Frame, {Receiver, InitialUid, AlternativeUids}) of
+        {ok, Uid} -> cauder:resume(Uid);
         cancel -> cauder:cancel()
     end,
-    {noreply, refresh(State, State#wx_state{system = System})};
+    {noreply, State};
 handle_info(?DBG_SUCCESS(step_multiple, {Sem, Steps}, Time, System), #wx_state{task = step_multiple} = State) ->
     cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};

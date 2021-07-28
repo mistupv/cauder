@@ -329,13 +329,14 @@ edit_binding(Parent, {Key, Value}) ->
 %% @doc Shows a dialog that allows the user to choose a messages from a lists of
 %% messages.
 
--spec choose_message(Parent, {Receiver, Messages}) -> {ok, MessageId} | cancel when
+-spec choose_message(Parent, {Receiver, InitialUid, AlternativeUids}) -> {ok, SelectedUid} | cancel when
     Parent :: wxWindow:wxWindow(),
     Receiver :: cauder_types:proc_id(),
-    Messages :: [cauder_mailbox:message()],
-    MessageId :: cauder_mailbox:uid().
+    InitialUid :: cauder_mailbox:uid(),
+    AlternativeUids :: [cauder_mailbox:uid()],
+    SelectedUid :: cauder_mailbox:uid().
 
-choose_message(Parent, {Receiver, Messages}) ->
+choose_message(Parent, {Receiver, InitialUid, AlternativeUids}) ->
     Dialog = wxDialog:new(Parent, ?wxID_ANY, "Choose a message"),
 
     Sizer = wxBoxSizer:new(?wxVERTICAL),
@@ -369,37 +370,24 @@ choose_message(Parent, {Receiver, Messages}) ->
     wxListItem:setFont(Item, Font),
     wxListCtrl:insertColumn(MessageList, 0, Item),
 
-    wxListItem:setText(Item, "Value"),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MessageList, 1, Item),
-
-    wxListItem:setText(Item, "Source"),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MessageList, 2, Item),
-
-    wxListItem:setText(Item, "Destination"),
-    wxListItem:setFont(Item, Font),
-    wxListCtrl:insertColumn(MessageList, 3, Item),
-
     wxListItem:destroy(Item),
 
-    wxListCtrl:setColumnWidth(MessageList, 0, 50),
-    wxListCtrl:setColumnWidth(MessageList, 1, 200),
-    wxListCtrl:setColumnWidth(MessageList, 2, 75),
-    wxListCtrl:setColumnWidth(MessageList, 3, 75),
+    wxListCtrl:setColumnWidth(MessageList, 0, 150),
 
     lists:foldl(
-        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+        fun(Uid, Row) ->
             wxListCtrl:insertItem(MessageList, Row, ""),
             wxListCtrl:setItemFont(MessageList, Row, Font),
-            wxListCtrl:setItem(MessageList, Row, 0, cauder_pp:to_string(Uid)),
-            wxListCtrl:setItem(MessageList, Row, 1, cauder_pp:to_string(Value)),
-            wxListCtrl:setItem(MessageList, Row, 2, cauder_pp:to_string(Src)),
-            wxListCtrl:setItem(MessageList, Row, 3, cauder_pp:to_string(Dest)),
+            case Uid of
+                InitialUid ->
+                    wxListCtrl:setItem(MessageList, Row, 0, [cauder_pp:to_string(Uid), " (initial)"]);
+                Uid ->
+                    wxListCtrl:setItem(MessageList, Row, 0, cauder_pp:to_string(Uid))
+            end,
             Row + 1
         end,
         0,
-        Messages
+        AlternativeUids
     ),
 
     %% -----
@@ -440,8 +428,8 @@ choose_message(Parent, {Receiver, Messages}) ->
     case wxDialog:showModal(Dialog) of
         ?wxID_OK ->
             Idx = wxListCtrl:getNextItem(MessageList, -1, [{state, ?wxLIST_STATE_SELECTED}]),
-            Message = lists:nth(Idx + 1, Messages),
-            {ok, Message#message.uid};
+            Uid = lists:nth(Idx + 1, AlternativeUids),
+            {ok, Uid};
         _ ->
             cancel
     end.

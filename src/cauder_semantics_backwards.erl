@@ -7,7 +7,6 @@
 
 %% API
 -export([step/2, options/1]).
--export([rule_deliver/2]).
 
 -ignore_xref([rule_deliver/2]).
 
@@ -41,12 +40,11 @@ step(Sys0, Pid) ->
             rule_spawn(Sys0, P0);
         {start, _Result, _Bs, _Es, _Stk, _Node} ->
             rule_start(Sys0, P0);
-        {send, _Bs, _Es, _Stk, _Msg} ->
-            rule_send(Sys0, P0);
+        {send, _Bs, _Es, _Stk, #message{uid = Uid, dest = Dest}} ->
+            Sys1 = rule_deliver(Sys0, maps:get(Dest, Sys0#sys.procs), Uid),
+            rule_send(Sys1, maps:get(Pid, Sys1#sys.procs));
         {rec, _Bs, _Es, _Stk, _Msg, _QPos} ->
-            Sys1 = rule_receive(Sys0, P0),
-            P1 = maps:get(Pid, Sys1#sys.procs),
-            rule_deliver(Sys1, P1)
+            rule_receive(Sys0, P0)
     end.
 
 -spec rule_local(System, Process) -> NewSystem when
@@ -205,7 +203,7 @@ rule_send(
     #sys{mail = Mail0, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
     #proc{pid = Pid, hist = [{send, Bs0, Es0, Stk0, #message{dest = Dest, value = Val, uid = Uid} = Msg} | Hist0]} = P0
 ) ->
-    {_QPos, Mail1} = cauder_mailbox:delete(Msg, Mail0),
+    Mail1 = cauder_mailbox:delete(Msg, Mail0),
     Log1 = log_prepend(Pid, Log0, {send, Uid}),
 
     P = P0#proc{
@@ -228,17 +226,18 @@ rule_send(
         x_trace = lists:delete(T, XTrace)
     }.
 
--spec rule_deliver(System, Process) -> NewSystem when
+-spec rule_deliver(System, Process, Uid) -> NewSystem when
     System :: cauder_types:system(),
     Process :: cauder_types:proc(),
+    Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_types:system().
 
 rule_deliver(
     #sys{mail = Mail0, procs = PMap} = Sys,
-    #proc{pid = Pid, mail = LocalMail0} = P0
+    #proc{pid = Pid, mail = LocalMail0} = P0,
+    Uid
 ) ->
-    {{value, Msg}, LocalMail1} = queue:out_r(LocalMail0),
-    % TODO Position??
+    {{Msg, _}, LocalMail1} = cauder_utils:queue_take(Uid, LocalMail0),
     Mail1 = cauder_mailbox:add(Msg, Mail0),
 
     P1 = P0#proc{
@@ -256,18 +255,19 @@ rule_deliver(
 
 rule_receive(
     #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0], mail = Mail0} = P0
+    #proc{pid = Pid, hist = [{rec, Bs0, Es0, Stk0, Msg, _QPos} | Hist0], mail = LocalMail0} = P0
 ) ->
+    % TODO Is QPos necessary??
     #message{uid = Uid, value = Value, dest = Pid} = Msg,
     Log1 = log_prepend(Pid, Log0, {'receive', Uid}),
-    Mail1 = cauder_mailbox:queue_insert(QPos, Msg, Mail0),
+    LocalMail1 = queue:in_r(Msg, LocalMail0),
 
     P1 = P0#proc{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
         exprs = Es0,
-        mail = Mail1
+        mail = LocalMail1
     },
     T = #x_trace{
         type = ?RULE_RECEIVE,
@@ -358,8 +358,9 @@ process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{start, success, _Bs
     end;
 process_option(_, #proc{pid = Pid, hist = [{start, failure, _Bs, _Es, _Stk, _Node} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _]}) ->
-    case cauder_mailbox:uid_member(Uid, Mail) of
+process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{dest = Dest} = Msg} | _]}) ->
+    #proc{mail = LocalMail} = maps:get(Dest, PMap),
+    case queue:member(Msg, LocalMail) of
         true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
         false -> ?NULL_OPT
     end;

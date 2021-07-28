@@ -117,24 +117,20 @@ rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) 
     case Entry of
         {spawn, _Bs, _E, _Stk, _Node, SpawnPid} ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
-            ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
             rollback_spawn(Sys, Pid, SpawnPid);
         {start, success, _Bs, _E, _Stk, SpawnNode} ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_start(SpawnNode)},
-            ?LOG("ROLLing back START of " ++ ?TO_STRING(SpawnNode)),
             rollback_start(Sys, Pid, SpawnNode);
         {nodes, _Bs, _E, _Stk, Nodes} when ProcViewOfNodes =/= Nodes ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_nodes(Pid)},
-            ?LOG("ROLLing back NODES" ++ ?TO_STRING(Nodes)),
             rollback_nodes(Sys, Pid, Nodes);
         {send, _Bs, _E, _Stk, #message{dest = Dest, uid = Uid} = Msg} ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
-            ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
             rollback_send(Sys, Pid, Dest, Uid);
         _ ->
             [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
             case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
                 ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
             end
     end.
@@ -235,7 +231,7 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
             rollback_spawn(Sys1, Pid, SpawnPid);
         {value, #opt{pid = Pid, sem = Sem}} ->
             case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
                 ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
             end
     end.
@@ -254,7 +250,7 @@ rollback_start(Sys0, Pid, SpawnNode) ->
             rollback_start(Sys1, Pid, SpawnNode);
         {value, #opt{pid = Pid, sem = Sem}} ->
             case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
                 ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
             end
     end.
@@ -274,7 +270,7 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
             rollback_send(Sys1, Pid, DestPid, Uid);
         {value, #opt{pid = Pid, sem = Sem}} ->
             case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
                 ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
             end
     end.
@@ -408,6 +404,6 @@ options(Sys, Pid) ->
 undo_step(System, Pid) ->
     [#opt{pid = Pid, sem = Sem} | _] = options(System, Pid),
     case Sem of
-        ?FWD_SEM -> cauder_semantics_forwards:step(System, Pid, ?SCHEDULER_Random, normal);
+        ?FWD_SEM -> cauder_semantics_forwards:step(System, Pid);
         ?BWD_SEM -> cauder_semantics_backwards:step(System, Pid)
     end.

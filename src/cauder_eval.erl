@@ -2,7 +2,7 @@
 
 %% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([matchrec/3, match_rec_pid/6, match_rec_uid/4]).
+-export([matchrec/3, matchrec_race/5, matchrec_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder.hrl").
@@ -461,109 +461,108 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
--spec matchrec(Bindings, Clauses, Mail) -> {NewBindings, Body, NewMail, Message, QPos} | nomatch when
-    Bindings :: cauder_types:environment(),
+%%------------------------------------------------------------------------------
+%% @doc Sequentially matches the patterns in the clauses `Clauses' against the
+%% first message in the message queue `LocalMail', then the second, and so on.
+%% If a match succeeds and the optional guard sequence is `true', a tuple with:
+%%  - the updated bindings
+%%  - the corresponding body
+%%  - the message queue (without the matching message)
+%%  - the matching message
+%%  - the position of the message in the queue
+%% is returned, otherwise the atom `nomatch' is returned.
+
+-spec matchrec(Clauses, Bindings, LocalMail) -> {Body, NewBindings, Message, NewLocalMail, QPos} | nomatch when
     Clauses :: cauder_types:af_clause_seq(),
-    Mail :: queue:queue(cauder_mailbox:message()),
-    QPos :: pos_integer(),
-    NewBindings :: cauder_types:environment(),
+    Bindings :: cauder_types:environment(),
+    LocalMail :: queue:queue(cauder_mailbox:message()),
     Body :: cauder_types:af_body(),
-    NewMail :: queue:queue(cauder_mailbox:message()),
-    Message :: cauder_types:message().
+    NewBindings :: cauder_types:environment(),
+    Message :: cauder_types:message(),
+    NewLocalMail :: queue:queue(cauder_mailbox:message()),
+    QPos :: pos_integer().
 
-matchrec(Bs, Cs, Mail) -> matchrec(Bs, Cs, queue:to_list(Mail), 1, []).
+matchrec(Cs, Bs, Mail) -> matchrec(Cs, Bs, queue:to_list(Mail), 1, []).
 
--spec matchrec(Bindings, Clauses, Mail, QPos, CheckedMail) ->
-    {NewBindings, Body, NewMail, Message, QPos} | nomatch
+-spec matchrec(Clauses, Bindings, Mail, QPos, CheckedMail) ->
+    {Body, NewBindings, Message, NewLocalMail, QPos} | nomatch
 when
-    Bindings :: cauder_types:environment(),
     Clauses :: cauder_types:af_clause_seq(),
+    Bindings :: cauder_types:environment(),
     Mail :: [cauder_mailbox:message()],
-    QPos :: pos_integer(),
     CheckedMail :: [cauder_mailbox:message()],
-    NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body(),
-    NewMail :: queue:queue(cauder_mailbox:message()),
-    Message :: cauder_types:message().
+    NewBindings :: cauder_types:environment(),
+    Message :: cauder_types:message(),
+    NewLocalMail :: queue:queue(cauder_mailbox:message()),
+    QPos :: pos_integer().
 
 matchrec(_, _, [], _, _) ->
     nomatch;
-matchrec(Bs, Cs, [Msg | RestMail], QPos, CheckedMail) ->
+matchrec(Cs, Bs, [Msg | RestMail], QPos, CheckedMail) ->
     case match_rec(Cs, Bs, Msg) of
         nomatch ->
-            matchrec(Bs, Cs, RestMail, QPos + 1, [Msg | CheckedMail]);
+            matchrec(Cs, Bs, RestMail, QPos + 1, [Msg | CheckedMail]);
         {match, NewBindings, Body} ->
-            {NewBindings, Body, queue:from_list(lists:reverse(CheckedMail, RestMail)), Msg, QPos}
+            NewLocalMail = queue:from_list(lists:reverse(CheckedMail, RestMail)),
+            {Body, NewBindings, Msg, NewLocalMail, QPos}
     end.
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) ->
-    {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
+-spec matchrec_race(Clauses, Bindings, Uid, Pid, System) ->
+    {{Body, NewBindings, Message, NewLocalMail, QPos}, NewSystem} | nomatch
 when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
-    RecipientPid :: cauder_types:proc_id(),
-    Mail :: cauder_mailbox:mailbox(),
-    Sched :: cauder_types:message_scheduler(),
-    Sys :: cauder_types:system(),
-    NewBindings :: cauder_types:environment(),
+    Uid :: cauder_mailbox:uid(),
+    Pid :: cauder_types:proc_id(),
+    System :: cauder_types:system(),
     Body :: cauder_types:af_body(),
+    NewBindings :: cauder_types:environment(),
     Message :: cauder_types:message(),
-    QueuePosition :: pos_integer(),
-    NewMail :: cauder_mailbox:mailbox().
+    NewLocalMail :: queue:queue(cauder_mailbox:message()),
+    QPos :: pos_integer(),
+    NewSystem :: cauder_types:system().
 
-match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
-    case cauder_mailbox:pid_get(Pid, Mail) of
-        [] ->
-            nomatch;
-        QueueList ->
-            case Sched of
-                ?SCHEDULER_Manual ->
-                    FoldQueue =
-                        fun(Msg, Map1) ->
-                            case match_rec(Cs, Bs, #message{uid = Uid} = Msg) of
-                                {match, Bs1, Body} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
-                                nomatch -> skip
-                            end
-                        end,
-                    FoldQueueList = fun(Queue, Map0) -> lists:foldl(FoldQueue, Map0, queue:to_list(Queue)) end,
-                    MatchingBranchesMap = lists:foldl(FoldQueueList, maps:new(), QueueList),
-                    case maps:size(MatchingBranchesMap) of
-                        0 ->
-                            nomatch;
-                        _ ->
-                            MatchingMessages = lists:map(fun({_, _, Msg}) -> Msg end, maps:values(MatchingBranchesMap)),
-                            case cauder:suspend_task(Pid, MatchingMessages, Sys) of
-                                % TODO Use suspend time
-                                {_SuspendTime, {resume, Uid}} ->
-                                    cauder:resume_task(),
-                                    {Bs1, Body, Msg} = maps:get(Uid, MatchingBranchesMap),
-                                    {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
-                                    {Bs1, Body, {Msg, QPos}, NewMail};
-                                % TODO Use suspend time
-                                {_SuspendTime, cancel} ->
-                                    throw(cancel)
-                            end
-                    end;
-                ?SCHEDULER_Random ->
-                    MatchingBranches = lists:filtermap(
-                        fun(Queue) ->
-                            {value, Msg} = queue:peek(Queue),
-                            case match_rec(Cs, Bs, Msg) of
-                                {match, Bs1, Body} -> {true, {Bs1, Body, Msg}};
-                                nomatch -> false
-                            end
-                        end,
-                        QueueList
-                    ),
-                    case length(MatchingBranches) of
-                        0 ->
-                            nomatch;
-                        Length ->
-                            {Bs1, Body, Msg} = lists:nth(rand:uniform(Length), MatchingBranches),
-                            {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
-                            {Bs1, Body, {Msg, QPos}, NewMail}
-                    end
-            end
+matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = Sys0) ->
+    RaceSet = maps:get(InitialUid, maps:get(Pid, RaceSets)),
+    SendUidLog = lists:foldl(
+        fun(Actions, Set0) ->
+            lists:foldl(
+                fun
+                    ({send, L}, Set1) -> sets:add_element(L, Set1);
+                    (_, Set1) -> Set1
+                end,
+                Set0,
+                Actions
+            )
+        end,
+        sets:new(),
+        maps:values(Log0)
+    ),
+
+    AlternativeUids = lists:filter(fun(L) -> sets:is_element(L, SendUidLog) end, ordsets:to_list(RaceSet)),
+
+    case cauder:suspend_task(Pid, InitialUid, [InitialUid | AlternativeUids]) of
+        % TODO Use suspend time
+        {_SuspendTime, {resume, InitialUid}} ->
+            cauder:resume_task(),
+            #proc{mail = LocalMail} = maps:get(Pid, Sys0#sys.procs),
+            case matchrec(Cs, Bs, LocalMail) of
+                nomatch -> nomatch;
+                Match -> {Match, Sys0}
+            end;
+        {_SuspendTime, {resume, ChosenUid}} ->
+            cauder:resume_task(),
+            Sys1 = cauder_rollback:rollback_send(Sys0, InitialUid),
+            Sys2 = cauder_replay:replay_send(Sys1, ChosenUid),
+            Sys3 = Sys2#sys{log = rdep(Pid, Sys2#sys.log)},
+            #proc{mail = LocalMail} = maps:get(Pid, Sys3#sys.procs),
+            case matchrec(Cs, Bs, LocalMail) of
+                nomatch -> nomatch;
+                Match -> {Match, Sys3}
+            end;
+        {_SuspendTime, cancel} ->
+            throw(cancel)
     end.
 
 -spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
@@ -575,26 +574,26 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
 
 match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
--spec match_rec_uid(Clauses, Bindings, Uid, Mail) ->
-    {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
+-spec matchrec_uid(Clauses, Bindings, Uid, LocalMail) ->
+    {Body, NewBindings, Message, NewLocalMail, QPos} | nomatch
 when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
     Uid :: cauder_mailbox:uid(),
-    Mail :: cauder_mailbox:mailbox(),
-    NewBindings :: cauder_types:environment(),
+    LocalMail :: queue:queue(cauder_mailbox:message()),
     Body :: cauder_types:af_body(),
+    NewBindings :: cauder_types:environment(),
     Message :: cauder_types:message(),
-    QueuePosition :: pos_integer(),
-    NewMail :: cauder_mailbox:mailbox().
+    NewLocalMail :: queue:queue(cauder_mailbox:message()),
+    QPos :: pos_integer().
 
-match_rec_uid(Cs, Bs0, Uid, Mail0) ->
-    case cauder_mailbox:uid_take(Uid, Mail0) of
-        false ->
+matchrec_uid(Cs, Bs0, Uid, LocalMail0) ->
+    case cauder_utils:queue_take(Uid, LocalMail0) of
+        error ->
             nomatch;
-        {{Msg, QPos}, Mail1} ->
+        {{Msg, QPos}, LocalMail1} ->
             case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
-                {match, Bs, Body} -> {Bs, Body, {Msg, QPos}, Mail1};
+                {match, Bs, Body} -> {Body, Bs, Msg, LocalMail1, QPos};
                 nomatch -> nomatch
             end
     end.
@@ -812,3 +811,51 @@ eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
 eval_and_update({Bs, E, Stk}, {Index, Tuple}) ->
     R = #result{exprs = [E1]} = expr(Bs, E, Stk),
     R#result{exprs = [setelement(Index, Tuple, E1)]}.
+
+-spec rdep(Pid, Log) -> PrunedLog when
+    Pid :: cauder_types:proc_id(),
+    Log :: cauder_types:log(),
+    PrunedLog :: cauder_types:log().
+
+rdep(Pid, Log0) ->
+    Log1 = remove_dependents_spawn(Pid, Log0),
+    maps:filter(fun(_, L) -> L =/= [] end, Log1).
+
+remove_dependents_spawn(Pid0, Log0) when is_map_key(Pid0, Log0) ->
+    {Actions, Log1} = maps:take(Pid0, Log0),
+    lists:foldl(fun entry_dependents/2, Log1, Actions);
+remove_dependents_spawn(_Pid, Log) ->
+    Log.
+
+remove_dependents_receive(Uid0, Log0) ->
+    RemoveAfterReceive =
+        fun(Pid0, Log1) ->
+            {Independent, Dependent} = lists:splitwith(
+                fun(Entry) -> Entry =/= {'receive', Uid0} end,
+                maps:get(Pid0, Log1)
+            ),
+            case Dependent of
+                [] ->
+                    Log1;
+                _ ->
+                    Log = lists:foldl(
+                        fun entry_dependents/2,
+                        maps:put(Pid0, Independent, Log1),
+                        Dependent
+                    ),
+                    throw(Log)
+            end
+        end,
+    try
+        lists:foldl(
+            RemoveAfterReceive,
+            Log0,
+            maps:keys(Log0)
+        )
+    catch
+        throw:Log -> Log
+    end.
+
+entry_dependents({spawn, Pid}, Log) -> remove_dependents_spawn(Pid, Log);
+entry_dependents({send, Uid}, Log) -> remove_dependents_receive(Uid, Log);
+entry_dependents({'receive', _Uid}, Log) -> Log.

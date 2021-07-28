@@ -31,6 +31,7 @@
 -export([is_dead/1]).
 -export([is_conc_item/1]).
 -export([race_sets/1, race_set/2]).
+-export([queue_take/2]).
 
 -elvis([{elvis_style, god_modules, disable}]).
 
@@ -883,3 +884,33 @@ trace_graph(Trace) ->
     lists:foreach(fun(Uid) -> digraph:add_edge(G, {deliver, Uid}, {'receive', Uid}) end, sets:to_list(ReceiveUids)),
 
     G.
+
+-spec queue_take(Uid, Queue) -> {{Message, QPos}, NewQueue} | error when
+    Uid :: cauder_mailbox:uid(),
+    Queue :: queue:queue(cauder_mailbox:message()),
+    Message :: cauder_mailbox:message(),
+    QPos :: pos_integer(),
+    NewQueue :: queue:queue(cauder_mailbox:message()).
+
+queue_take(Uid, Queue) ->
+    List0 = queue:to_list(Queue),
+    case list_take(Uid, List0, [], 1) of
+        {{Msg, QPos}, List1} -> {{Msg, QPos}, queue:from_list(List1)};
+        error -> error
+    end.
+
+-spec list_take(Uid, List, Rest, Index) -> {{Message, MessageIndex}, NewList} | error when
+    Uid :: cauder_mailbox:uid(),
+    List :: [cauder_mailbox:message()],
+    Rest :: [cauder_mailbox:message()],
+    Index :: pos_integer(),
+    Message :: cauder_mailbox:message(),
+    MessageIndex :: pos_integer(),
+    NewList :: [cauder_mailbox:message()].
+
+list_take(Uid, [#message{uid = Uid} = Msg | List], Rest, Index) ->
+    {{Msg, Index}, lists:reverse(Rest, List)};
+list_take(Uid, [Msg | List], Rest, Index) ->
+    list_take(Uid, List, [Msg | Rest], Index + 1);
+list_take(_, [], _, _) ->
+    error.

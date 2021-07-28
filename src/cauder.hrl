@@ -66,6 +66,7 @@
     procs :: cauder_types:process_map(),
     % System log
     log = maps:new() :: cauder_types:log(),
+    race_sets :: undefined | cauder_types:race_sets(),
     % System nodes
     nodes = [] :: [node()],
     x_trace = [] :: [cauder_types:x_trace()],
