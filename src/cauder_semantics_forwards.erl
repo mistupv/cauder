@@ -453,25 +453,25 @@ rule_deliver(
     NewSystem :: cauder_types:system().
 
 rule_receive(
-    #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, mail = LocalMail0} = P,
+    #sys{log = Log0} = Sys0,
+    #proc{pid = Pid, mail = LocalMail0},
     #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}},
     Sched,
     Mode
 ) ->
-    {{Es2, Bs2, Msg, LocalMail1, QPos}, Log1, Sys1} =
+    {{Es2, Bs2, Msg, LocalMail1, QPos}, #sys{procs = PMap, x_trace = XTrace} = Sys1} =
         case Mode of
             normal ->
                 case log_consume_receive(Pid, Log0) of
                     {'_', Log0} ->
                         case cauder_eval:matchrec(Cs, Bs1, LocalMail0) of
                             nomatch -> throw(nomatch);
-                            Match -> {Match, Log0, Sys}
+                            Match -> {Match, Sys0}
                         end;
                     {Uid, NewLog} ->
-                        case cauder_eval:matchrec_race(Cs, Bs1, Uid, Pid, Sys) of
+                        case cauder_eval:matchrec_race(Cs, Bs1, Uid, Pid, Sys0#sys{log = NewLog}) of
                             nomatch -> throw(nomatch);
-                            {Match, NewSys} -> {Match, NewLog, NewSys}
+                            {Match, NewSys} -> {Match, NewSys}
                         end
                 end;
             replay ->
@@ -483,7 +483,7 @@ rule_receive(
                     {Uid, NewLog} ->
                         case cauder_eval:matchrec(Cs, Bs1, LocalMail0) of
                             nomatch -> throw(nomatch);
-                            {_, _, #message{uid = Uid}, _, _} = Match -> {Match, NewLog, Sys}
+                            {_, _, #message{uid = Uid}, _, _} = Match -> {Match, Sys0#sys{log = NewLog}}
                         end
                 end
         end,
@@ -505,7 +505,6 @@ rule_receive(
     },
     Sys1#sys{
         procs = PMap#{Pid := P1},
-        log = Log1,
         x_trace = [T | XTrace]
     }.
 

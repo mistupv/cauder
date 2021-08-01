@@ -206,7 +206,7 @@ rule_send(
     Mail1 = cauder_mailbox:delete(Msg, Mail0),
     Log1 = log_prepend(Pid, Log0, {send, Uid}),
 
-    P = P0#proc{
+    P1 = P0#proc{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
@@ -221,7 +221,7 @@ rule_send(
     },
     Sys#sys{
         mail = Mail1,
-        procs = PMap#{Pid := P},
+        procs = PMap#{Pid := P1},
         log = Log1,
         x_trace = lists:delete(T, XTrace)
     }.

@@ -553,13 +553,51 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
             end;
         {_SuspendTime, {resume, ChosenUid}} ->
             cauder:resume_task(),
-            Sys1 = cauder_rollback:rollback_send(Sys0, InitialUid),
-            Sys2 = cauder_replay:replay_send(Sys1, ChosenUid),
-            Sys3 = Sys2#sys{log = rdep(Pid, Sys2#sys.log)},
-            #proc{mail = LocalMail} = maps:get(Pid, Sys3#sys.procs),
+
+            % Add back the 'receive' action for the initial uid
+            OldRecAction = {'receive', InitialUid},
+            Sys1 = Sys0#sys{
+                log = maps:update_with(
+                    Pid,
+                    fun(Actions) -> [OldRecAction | Actions] end,
+                    [OldRecAction],
+                    Sys0#sys.log
+                )
+            },
+
+            % Rollback sending of initial message
+            Sys2 = cauder_rollback:rollback_send(Sys1, InitialUid),
+
+            % Add temporary 'receive' action to log to force deliver of new message
+            NewRecAction = {'receive', ChosenUid},
+            Sys3 = Sys2#sys{
+                log = maps:update_with(
+                    Pid,
+                    fun(Actions) -> [NewRecAction | lists:delete(NewRecAction, Actions)] end,
+                    Sys2#sys.log
+                )
+            },
+
+            % Replay sending of chosen message
+            Sys4 = cauder_replay:replay_send(Sys3, ChosenUid),
+
+            % Remove temporary 'receive' action to log to force deliver of new message
+            Sys5 = Sys4#sys{
+                log = maps:update_with(
+                    Pid,
+                    fun([Action | Actions]) when Action =:= NewRecAction -> Actions end,
+                    Sys4#sys.log
+                )
+            },
+
+            % Remove log dependencies
+            Sys6 = Sys5#sys{log = rdep(Pid, Sys5#sys.log)},
+
+            % Match the new message
+            #proc{mail = LocalMail} = maps:get(Pid, Sys6#sys.procs),
             case matchrec(Cs, Bs, LocalMail) of
                 nomatch -> nomatch;
-                Match -> {Match, Sys3}
+                Match -> {Match, Sys6}
             end;
         {_SuspendTime, cancel} ->
             throw(cancel)
