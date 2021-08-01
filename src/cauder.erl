@@ -832,12 +832,10 @@ task_start_replay(TracePath, undefined) ->
                     end,
                     Trace
                 ),
-                RaceSets = cauder_utils:race_sets(Trace),
-                io:format("RaceSets: ~p~n", [RaceSets]),
                 #sys{
                     procs = #{Pid => Proc},
                     log = Log,
-                    race_sets = RaceSets,
+                    race_sets = cauder_utils:race_sets(Trace),
                     nodes = [Node]
                 }
             end

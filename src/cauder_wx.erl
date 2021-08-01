@@ -376,7 +376,6 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
     cauder_wx_statusbar:replay_spawn_start(Pid),
     {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Start_Button), State) ->
-    io:format("Ciao~n"),
     Choice = cauder_wx:find(?ACTION_Replay_Start, wxChoice),
     Idx = wxChoice:getSelection(Choice),
     Node = wxChoice:getClientData(Choice, Idx),
