@@ -656,6 +656,11 @@ find_last_message_uid(Terms) ->
         [] ->
             ok;
         _ ->
+            % TODO Fix missing ETS table
+            case ets:info(?APP_DB, name) of
+                undefined -> ?APP_DB = ets:new(?APP_DB, [set, public, named_table]);
+                ?APP_DB -> ok
+            end,
             true = ets:insert(?APP_DB, {last_uid, lists:max(AllUids)}),
             ok
     end.
