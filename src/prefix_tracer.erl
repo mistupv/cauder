@@ -192,7 +192,7 @@ handle_info({P, spawn, P1}, #state{pid_map = PidMap0, alive_pids = AlivePids0, l
                 State0#state{pid_map = PidMap1, alive_pids = AlivePids1, log = NewLog, trace = Trace1}
         end,
     prefix_tracer_erlang:send_ack(P),
-    State2 = try_deliver(P, State1),
+    State2 = try_deliver(State1),
     {noreply, State2};
 handle_info({P, send, P1, V}, #state{pid_map = PidMap0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, PidMap0),
@@ -207,7 +207,7 @@ handle_info({P, send, P1, V}, #state{pid_map = PidMap0, log = Log0, trace = Trac
                 Trace1 = update_trace(R, {send, L}, Trace0),
                 process_msg({P, P1, L, V}, State0#state{log = Log1, trace = Trace1})
         end,
-    State2 = try_deliver(P, State1),
+    State2 = try_deliver(State1),
     {noreply, State2};
 handle_info({P, 'receive', L}, #state{pid_map = PidMap0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, PidMap0),
@@ -221,7 +221,7 @@ handle_info({P, 'receive', L}, #state{pid_map = PidMap0, log = Log0, trace = Tra
                 Trace1 = update_trace(R, {'receive', L}, Trace0),
                 State0#state{log = Log1, trace = Trace1}
         end,
-    State2 = try_deliver(P, State1),
+    State2 = try_deliver(State1),
     {noreply, State2};
 handle_info({return, ReturnValue}, #state{return = none} = State) ->
     {noreply, State#state{return = {value, ReturnValue}}};
@@ -423,6 +423,13 @@ new_uid() ->
 update_trace(Pid, Action, Trace) ->
     maps:update_with(Pid, fun(Actions) -> [Action | Actions] end, [Action], Trace).
 
+-spec try_deliver(State) -> NewState when
+    State :: state(),
+    NewState :: state().
+
+try_deliver(#state{pid_map = PidMap0} = State0) ->
+    lists:foldl(fun try_deliver/2, State0, maps:keys(PidMap0)).
+
 -spec try_deliver(Pid, State) -> NewState when
     Pid :: pid(),
     State :: state(),
@@ -433,7 +440,7 @@ try_deliver(P, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail
     case maps:get(R, Log0, []) of
         [{'receive', L} | _] ->
             case cauder_mailbox:uid_take_oldest(L, Mail0) of
-                {#message{uid = L, dest = R, value = Value}, Mail1} ->
+                {#message{uid = L, dest = P, value = Value}, Mail1} ->
                     P ! {L, Value},
                     Trace1 = update_trace(R, {deliver, L}, Trace0),
                     State0#state{trace = Trace1, mail = Mail1};
@@ -443,7 +450,7 @@ try_deliver(P, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail
         [{deliver, L} | Actions] ->
             State1 =
                 case cauder_mailbox:uid_take_oldest(L, Mail0) of
-                    {#message{uid = L, dest = R, value = Value}, Mail1} ->
+                    {#message{uid = L, dest = P, value = Value}, Mail1} ->
                         P ! {L, Value},
                         Log1 = Log0#{R := Actions},
                         Trace1 = update_trace(R, {deliver, L}, Trace0),
