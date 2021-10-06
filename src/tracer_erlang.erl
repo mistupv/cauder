@@ -36,7 +36,7 @@ apply(Module, Function, Args) -> erlang:apply(Module, Function, Args).
     Msg :: term().
 
 send_distributed(Dst, Msg) ->
-    Dst ! {{stamp, erlang:unique_integer()}, Msg},
+    Dst ! {send, erlang:unique_integer(), Dst, Msg},
     Msg.
 
 -spec send_centralized(Dst, Msg) -> Msg when
@@ -46,7 +46,7 @@ send_distributed(Dst, Msg) ->
 send_centralized(Dst, Msg) ->
     receive
         {stamp, Stamp} ->
-            Dst ! {{stamp, Stamp}, Msg},
+            Dst ! {send, Stamp, Dst, Msg},
             Msg
     end.
 

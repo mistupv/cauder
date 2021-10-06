@@ -129,10 +129,10 @@ init({MainPid, TracedPid}) ->
     NewState :: state().
 
 handle_call(get_traces, _From, #state{trace = Trace} = State) ->
-    ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
+    ReversedTrace = maps:map(fun(_, V) -> lists:reverse(map_pids(V)) end, Trace),
     {reply, {ok, ReversedTrace}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
-    {reply, ReturnValue, State};
+    {reply, map_pids(ReturnValue), State};
 %% ========== 'call' trace messages ========== %%
 %% Generate message stamp
 handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
@@ -148,12 +148,12 @@ handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, 
     {reply, ok, State1};
 %% ========== 'send' trace messages ========== %%
 %% Send message
-handle_call({trace, Pid, send, {{stamp, Stamp}, _Message}, _}, _From, State) ->
-    State1 = add_to_trace(Pid, send, Stamp, State),
+handle_call({trace, Pid, send, {send, Stamp, Dst, Msg}, _}, _From, State) ->
+    State1 = add_to_trace(Pid, {send, Stamp, Dst, Msg}, State),
     {reply, ok, State1};
 %% Receive message
-handle_call({trace, Pid, send, {receive_evaluated, Stamp}, {undefined, _}}, _From, State) ->
-    State1 = add_to_trace(Pid, 'receive', Stamp, State),
+handle_call({trace, Pid, send, {'receive', Stamp, Constraints}, {undefined, _}}, _From, State) ->
+    State1 = add_to_trace(Pid, {'receive', Stamp, Constraints}, State),
     {reply, ok, State1};
 %% Slave started
 handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
@@ -167,8 +167,8 @@ handle_call({trace, Pid, send, {result, {error, _}}, ParentPid}, _From, State) -
     {reply, ok, State1};
 %% ========== 'receive' trace messages ========== %%
 %% Deliver message
-handle_call({trace, Pid, 'receive', {{stamp, Stamp}, _Message}}, _From, State) ->
-    State1 = add_to_trace(Pid, deliver, Stamp, State),
+handle_call({trace, Pid, 'receive', {send, Stamp, _Dst, _Msg}}, _From, State) ->
+    State1 = add_to_trace(Pid, {deliver, Stamp}, State),
     {reply, ok, State1};
 %% ========== 'spawn' trace messages ========== %%
 %% Starting a slave
@@ -202,9 +202,11 @@ handle_call({trace, _, call, {tracer_erlang, apply, [_, _, _]}}, _From, State) -
     {reply, ok, State};
 handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
     {reply, ok, State};
+handle_call({trace, _, return_from, {tracer_erlang, send_distributed, 2}, _}, _From, State) ->
+    {reply, ok, State};
 handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _From, State) ->
     {reply, ok, State};
-handle_call({trace, _, send_to_non_existing_process, {{stamp, _Stamp}, _Message}, _}, _From, State) ->
+handle_call({trace, _, send_to_non_existing_process, {send, _Stamp, _Dst, _Msg}, _}, _From, State) ->
     % TODO Trace lost messages
     {reply, ok, State};
 handle_call({trace, _, spawned, _, {_, _, _}}, _From, State) ->
@@ -310,12 +312,19 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:tracer(process, {fun trace_handler/2, []}),
     dbg:p(TracedPid, [m, c, p, sos]),
     dbg:tpe(send, [
-        {['_', {{stamp, '_'}, '_'}], [], []},
-        {[{undefined, '_'}, {receive_evaluated, '_'}], [], []},
-        {['_', {result, {ok, '_'}}], [], []},
-        {['_', {result, {error, '_'}}], [], []}
+        % {send, Stamp, Dst, Msg}
+        {['_', {'send', '_', '_', '_'}], [], []},
+        % {'receive', Stamp, ConstraintsFun}
+        {[{'undefined', '_'}, {'receive', '_', '_'}], [], []},
+        % {result, {ok, Node}}
+        {['_', {'result', {'ok', '_'}}], [], []},
+        % {result, {error, _}}
+        {['_', {'result', {'error', '_'}}], [], []}
     ]),
-    dbg:tpe('receive', [{['_', '_', {{stamp, '_'}, '_'}], [], []}]),
+    dbg:tpe('receive', [
+        % {send, Stamp, Dst, Msg}
+        {['_', '_', {send, '_', '_', '_'}], [], []}
+    ]),
     dbg:tpl(tracer_erlang, apply, 3, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
     dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
@@ -409,23 +418,23 @@ trace_handler(Trace, []) ->
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Entry, #state{trace = Trace0} = State) ->
+add_to_trace(Pid, Entry0, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) ->
     Index = pid_index(Pid),
-    Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
-    State#state{trace = Trace1}.
-
--spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
-    Pid :: pid(),
-    Tag :: send | deliver | 'receive',
-    Stamp :: integer(),
-    State :: state(),
-    NewState :: state().
-
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, trace = Trace0} = State) when is_atom(Tag) ->
-    PidIndex = pid_index(Pid),
-    {Uid, StampMap1} = get_uid(Stamp, StampMap0, Table),
-    Entry = {Tag, Uid},
-    Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
+    {Entry1, StampMap1} =
+        case Entry0 of
+            {send, Stamp, Dst, Msg} ->
+                {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
+                {{send, Uid, Dst, Msg}, StampMap};
+            {deliver, Stamp} ->
+                {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
+                {{deliver, Uid}, StampMap};
+            {'receive', Stamp, Constraints} ->
+                {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
+                {{'receive', Uid, Constraints}, StampMap};
+            _ ->
+                {Entry0, StampMap0}
+        end,
+    Trace1 = maps:update_with(Index, fun(Other) -> [Entry1 | Other] end, [Entry1], Trace0),
     State#state{stamps = StampMap1, trace = Trace1}.
 
 -spec pid_index(Pid) -> Index when
@@ -461,7 +470,7 @@ write_trace(Dir, TraceInfo) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
     [trace_info | Values] = tuple_to_list(TraceInfo),
     Fields = record_info(fields, trace_info),
-    {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
+    {Trace, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),
     case filelib:is_dir(Dir) of
@@ -469,15 +478,44 @@ write_trace(Dir, TraceInfo) ->
         false -> ok = file:make_dir(Dir)
     end,
 
-    ResultFile = filename:join(Dir, "trace_result.log"),
-    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(ResultInfo))),
-    ok = file:write_file(ResultFile, ResultContent),
+    ResultFilename = filename:join(Dir, "trace_result.log"),
+    write_terms(ResultFilename, maps:to_list(ResultInfo)),
 
     lists:foreach(
-        fun({Index, List}) ->
-            File = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, List)),
-            ok = file:write_file(File, Content)
+        fun({Index, Terms}) ->
+            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
+            write_terms(Filename, Terms)
         end,
-        maps:to_list(Traces)
+        maps:to_list(Trace)
     ).
+
+-spec write_terms(Filename, Terms) -> ok when
+    Filename :: file:name_all(),
+    Terms :: [term()].
+
+write_terms(Filename, Terms) ->
+    Format = fun(Term) -> io_lib:format("~tp.~n", [Term]) end,
+    Text = unicode:characters_to_binary(lists:map(Format, Terms)),
+    file:write_file(Filename, Text).
+
+-spec map_pids(term()) -> term().
+
+map_pids(List) when is_list(List) ->
+    lists:map(fun map_pids/1, List);
+map_pids(Tuple) when is_tuple(Tuple) ->
+    list_to_tuple(lists:map(fun map_pids/1, tuple_to_list(Tuple)));
+map_pids(Map) when is_map(Map) ->
+    maps:fold(
+        fun(K, V, Acc) ->
+            K1 = map_pids(K),
+            V1 = map_pids(V),
+            false = maps:is_key(K1, Acc),
+            Acc#{K1 => V1}
+        end,
+        #{},
+        Map
+    );
+map_pids(Pid) when is_pid(Pid) ->
+    pid_index(Pid);
+map_pids(Term) ->
+    Term.

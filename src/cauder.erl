@@ -820,21 +820,9 @@ task_start_replay(TracePath, undefined) ->
                     exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
                     entry_point = {Mod, Fun, length(Args)}
                 },
-                Log = maps:map(
-                    fun(_Pid, Actions) ->
-                        lists:filter(
-                            fun
-                                ({deliver, _Uid}) -> false;
-                                (_) -> true
-                            end,
-                            Actions
-                        )
-                    end,
-                    Trace
-                ),
                 #sys{
                     procs = #{Pid => Proc},
-                    log = Log,
+                    log = cauder_utils:trace_to_log(Trace),
                     race_sets = cauder_utils:race_sets(Trace),
                     nodes = [Node]
                 }

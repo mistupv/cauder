@@ -27,7 +27,7 @@
 -export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1]).
--export([load_trace/1]).
+-export([load_trace/1, trace_to_log/1]).
 -export([is_dead/1]).
 -export([is_conc_item/1]).
 -export([race_sets/1, race_set/2]).
@@ -125,7 +125,7 @@ find_spawn_parent(Log, Pid) ->
 -spec find_spawn_action(Log, Pid) -> Action when
     Log :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
-    Action :: cauder_types:action_spawn().
+    Action :: cauder_types:log_action_spawn().
 
 find_spawn_action(Log, Pid) ->
     {value, Action} = lists:search(
@@ -625,6 +625,29 @@ load_trace(Dir) ->
         trace = Trace
     }.
 
+-spec trace_to_log(Trace) -> Log when
+    Trace :: cauder_types:trace(),
+    Log :: cauder_types:log().
+
+trace_to_log(Trace) ->
+    maps:map(
+        fun(_, Actions) ->
+            lists:filtermap(
+                fun
+                    ({spawn, {Node, Pid}, Result}) -> {true, {spawn, {Node, Pid}, Result}};
+                    ({send, Uid, _Pid, _Msg}) -> {true, {send, Uid}};
+                    ({deliver, _Uid}) -> false;
+                    ({'receive', Uid, _Constraints}) -> {true, {'receive', Uid}};
+                    ({exit}) -> false;
+                    ({nodes, Nodes}) -> {true, {nodes, Nodes}};
+                    ({start, Node, Result}) -> {true, {start, Node, Result}}
+                end,
+                Actions
+            )
+        end,
+        Trace
+    ).
+
 -spec find_last_message_uid(Terms) -> ok when
     Terms :: [cauder_types:log_action()].
 
@@ -688,7 +711,7 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 %%%=============================================================================
 
 -spec race_sets(Trace) -> RaceSets when
-    Trace :: tracer:trace(),
+    Trace :: cauder_types:trace(),
     RaceSets :: cauder_types:race_sets().
 
 race_sets(Trace) ->
@@ -698,7 +721,7 @@ race_sets(Trace) ->
             lists:foldl(
                 fun(Action, Acc) ->
                     case Action of
-                        {'receive', Uid} ->
+                        {'receive', Uid, _} ->
                             case race_set({Pid, Action}, Trace) of
                                 [] ->
                                     Acc;
@@ -717,25 +740,46 @@ race_sets(Trace) ->
     ),
     maps:filter(fun(_, Map) -> maps:size(Map) =/= 0 end, RaceSets).
 
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the condition `Event ∈ Trace' holds or not.
+
+-spec event_belongs_to(Event, Trace) -> boolean() when
+    Event :: {cauder_types:proc_id(), cauder_types:trace_action()},
+    Trace :: cauder_types:trace().
+
+event_belongs_to({P, Action}, Trace) -> lists:member(Action, maps:get(P, Trace)).
+
 -spec race_set({Pid, ReceiveEvent}, Trace) -> RaceSet when
     Pid :: cauder_types:proc_id(),
-    ReceiveEvent :: {'receive', cauder_mailbox:uid()},
-    Trace :: tracer:trace(),
+    ReceiveEvent :: cauder_types:trace_action_receive(),
+    Trace :: cauder_types:trace(),
     RaceSet :: cauder_types:race_set().
 
-race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
-    % Assert that p:receive(l) ∈ T
-    true = lists:member(Ar, maps:get(P, Trace)),
+race_set({P, {'receive', L, Cs}} = Er, Trace) ->
+    Ed = {P, {deliver, L}},
 
-    Graph = trace_graph(Trace),
+    true = event_belongs_to(Ed, Trace),
+    true = event_belongs_to(Er, Trace),
 
-    % Type: [{Pid, {send, Uid}}, ...]
+    CaseClauses = lists:append(
+        lists:map(fun({Pat, Guard}) -> erl_syntax:clause(Pat, Guard, [erl_syntax:atom('true')]) end, Cs),
+        [erl_syntax:clause([erl_syntax:underscore()], none, [erl_syntax:atom('false')])]
+    ),
+    FunExpr = erl_syntax:revert(erl_syntax:fun_expr(CaseClauses)),
+    {value, CheckFun, _Bs} = erl_eval:expr(FunExpr, erl_eval:new_bindings()),
+
+    % Type: [{Pid, {send, Uid, Pid, Msg}}, ...]
     SendEvents = maps:fold(
         fun(P1, Actions, Acc) ->
             lists:foldl(
                 fun
-                    ({send, L1} = Es, List) when L1 =/= L -> [{P1, Es} | List];
-                    (_, List) -> List
+                    ({send, L1, Pid, V1} = Es, List) when P1 =/= Pid, L1 =/= L ->
+                        case CheckFun(V1) of
+                            true -> [{P1, Es} | List];
+                            false -> List
+                        end;
+                    (_, List) ->
+                        List
                 end,
                 Acc,
                 Actions
@@ -745,15 +789,15 @@ race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
         Trace
     ),
 
-    Ed = {P, {deliver, L}},
+    Graph = trace_graph(Trace),
 
     RaceSet =
         lists:foldl(
-            fun({_P1, {send, L1}} = Es, Set) ->
+            fun({_P1, {send, L1, _, _}} = Es, Set) ->
                 case
                     race_set_cond1(Ed, Es, Graph) andalso
                         race_set_cond2(Ed, L1, Trace, Graph) andalso
-                        race_set_cond3(Ed, Es, SendEvents, Trace, Graph)
+                        race_set_cond3(Ed, Es, SendEvents, CheckFun, Trace, Graph)
                 of
                     true -> ordsets:add_element(L1, Set);
                     false -> Set
@@ -766,35 +810,36 @@ race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
     RaceSet.
 
 -spec race_set_cond1(DeliverEvent, SendEvent, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
-    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:trace_action_deliver()},
+    SendEvent :: {cauder_types:proc_id(), cauder_types:trace_action_send()},
     Graph :: digraph:graph().
 
 race_set_cond1(Ed, Es, G) ->
     not happened_before(Ed, Es, G).
 
 -spec race_set_cond2(DeliverEvent, Uid, Trace, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:trace_action_deliver()},
     Uid :: cauder_mailbox:uid(),
-    Trace :: tracer:trace(),
+    Trace :: cauder_types:trace(),
     Graph :: digraph:graph().
 
 race_set_cond2({P, {deliver, _L}} = Ed, L1, Trace, G) ->
-    Ed1 = {P, Ad1 = {deliver, L1}},
-    lists:member(Ad1, maps:get(P, Trace)) andalso happened_before(Ed, Ed1, G).
+    Ed1 = {P, {deliver, L1}},
+    event_belongs_to(Ed1, Trace) andalso happened_before(Ed, Ed1, G).
 
--spec race_set_cond3(DeliverEvent, SendEvent, SendPairs, Trace, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
-    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
-    SendPairs :: [{cauder_types:proc_id(), cauder_types:action_send()}],
-    Trace :: tracer:trace(),
+-spec race_set_cond3(DeliverEvent, SendEvent, SendPairs, Constraints, Trace, Graph) -> boolean() when
+    DeliverEvent :: {cauder_types:proc_id(), cauder_types:trace_action_deliver()},
+    SendEvent :: {cauder_types:proc_id(), cauder_types:trace_action_send()},
+    SendPairs :: [{cauder_types:proc_id(), cauder_types:trace_action_send()}],
+    Constraints :: fun((term()) -> boolean()),
+    Trace :: cauder_types:trace(),
     Graph :: digraph:graph().
 
-race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents, Trace, G) ->
+race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1, P, _V1}} = Es1, SendEvents, Check, Trace, G) ->
     SendEvents1 = lists:filter(
         fun
-            ({Pid, {send, L2}} = Es1) when Pid =:= P1, L2 =/= L1 ->
-                happened_before(Es1, Es, G);
+            ({Pid, {send, L2, _, _}} = Es2) when Pid =:= P1, L2 =/= L1 ->
+                happened_before(Es2, Es1, G);
             (_) ->
                 false
         end,
@@ -802,9 +847,9 @@ race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents, Trace
     ),
 
     lists:all(
-        fun({_, {send, L2}} = _SendEvent1) ->
-            DeliverEvent2 = {P, DeliverAction = {deliver, L2}},
-            lists:member(DeliverAction, maps:get(P, Trace)) andalso happened_before(DeliverEvent2, Ed, G)
+        fun({_, {send, L2, _, V2}} = _SendEvent1) ->
+            Ed2 = {P, {deliver, L2}},
+            (not Check(V2)) orelse (event_belongs_to(Ed2, Trace) andalso happened_before(Ed2, Ed, G))
         end,
         SendEvents1
     ).
@@ -821,7 +866,7 @@ happened_before({_P1, A1}, {_P2, A2}, G) ->
     end.
 
 -spec trace_graph(Trace) -> Graph when
-    Trace :: tracer:trace(),
+    Trace :: cauder_types:trace(),
     Graph :: digraph:graph().
 
 trace_graph(Trace) ->
@@ -833,12 +878,12 @@ trace_graph(Trace) ->
             case A of
                 {spawn, _, success} ->
                     maps:update_with(spawn, fun(List) -> [A | List] end, [A], Map);
-                {Kind, Uid} when
-                    Kind =:= send;
-                    Kind =:= deliver;
-                    Kind =:= 'receive'
-                ->
-                    maps:update_with(Kind, fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
+                {send, Uid, _, _} ->
+                    maps:update_with(send, fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
+                {deliver, Uid} ->
+                    maps:update_with(deliver, fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
+                {'receive', Uid, _} ->
+                    maps:update_with('receive', fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
                 _ ->
                     Map
             end

@@ -25,54 +25,52 @@ parse_transform(Forms, Opts) ->
 
     RForms.
 
--spec instrument(Tree) -> NewTree when
-    NewTree :: erl_syntax:syntaxTree(),
-    Tree :: erl_syntax:syntaxTree().
+-spec instrument(Node) -> erl_syntax:syntaxTree() when
+    Node :: erl_syntax:syntaxTree().
 
-instrument(T) ->
-    case erl_syntax:type(T) of
+instrument(Node) ->
+    case erl_syntax:type(Node) of
         function ->
             atomics:put(get(atomic), 1, 0),
-            T;
+            Node;
         application ->
-            Op = erl_syntax:application_operator(T),
-            Args = erl_syntax:application_arguments(T),
+            Op = erl_syntax:application_operator(Node),
+            Args = erl_syntax:application_arguments(Node),
             case erl_syntax:type(Op) of
                 module_qualifier ->
                     Module = erl_syntax:atom_value(erl_syntax:module_qualifier_argument(Op)),
                     Function = erl_syntax:atom_value(erl_syntax:module_qualifier_body(Op)),
                     case {Module, Function} of
                         {erlang, send} ->
-                            [Target, Message] = erl_syntax:application_arguments(T),
+                            [Target, Message] = erl_syntax:application_arguments(Node),
                             instrument_send(Target, Message);
                         {erlang, nodes} when Args =:= [] ->
                             instrument_nodes();
                         _ ->
-                            T
+                            Node
                     end;
                 _ ->
-                    T
+                    Node
             end;
         infix_expr ->
-            Op = erl_syntax:operator_name(erl_syntax:infix_expr_operator(T)),
+            Op = erl_syntax:operator_name(erl_syntax:infix_expr_operator(Node)),
             case Op of
                 '!' ->
-                    Target = erl_syntax:infix_expr_left(T),
-                    Message = erl_syntax:infix_expr_right(T),
+                    Target = erl_syntax:infix_expr_left(Node),
+                    Message = erl_syntax:infix_expr_right(Node),
                     instrument_send(Target, Message);
                 _ ->
-                    T
+                    Node
             end;
         receive_expr ->
-            instrument_receive(T);
+            instrument_receive(Node);
         _ ->
-            T
+            Node
     end.
 
--spec instrument_send(Destination, Message) -> Expr when
+-spec instrument_send(Destination, Message) -> erl_syntax:syntaxTree() when
     Destination :: erl_syntax:syntaxTree(),
-    Message :: erl_syntax:syntaxTree(),
-    Expr :: erl_syntax:syntaxTree().
+    Message :: erl_syntax:syntaxTree().
 
 instrument_send(Destination, Message) ->
     FunctionName =
@@ -86,24 +84,42 @@ instrument_send(Destination, Message) ->
         [Destination, Message]
     ).
 
--spec instrument_receive(ReceiveExpr) -> NewReceiveExpr when
-    ReceiveExpr :: erl_syntax:syntaxTree(),
-    NewReceiveExpr :: erl_syntax:syntaxTree().
+-spec instrument_receive(ReceiveExpr) -> erl_syntax:syntaxTree() when
+    ReceiveExpr :: erl_syntax:syntaxTree().
 
 instrument_receive(ReceiveExpr) ->
     Clauses = erl_syntax:receive_expr_clauses(ReceiveExpr),
     Timeout = erl_syntax:receive_expr_timeout(ReceiveExpr),
     Action = erl_syntax:receive_expr_action(ReceiveExpr),
 
-    Clauses1 = lists:map(fun instrument_receive_clause/1, Clauses),
+    TmpVar = temp_variable(),
 
-    erl_syntax:receive_expr(Clauses1, Timeout, Action).
+    Constraints = erl_syntax:list(
+        lists:map(
+            fun(Clause) ->
+                Patterns = erl_syntax:clause_patterns(Clause),
+                Guard = erl_syntax:clause_guard(Clause),
+                erl_syntax:tuple([
+                    erl_syntax:abstract(lists:map(fun erl_syntax:revert/1, Patterns)),
+                    erl_syntax:abstract(erl_syntax:revert(Guard))
+                ])
+            end,
+            Clauses
+        )
+    ),
 
--spec instrument_receive_clause(Clause) -> NewClause when
+    NewClauses = lists:map(fun(Clause) -> instrument_receive_clause(Clause, TmpVar) end, Clauses),
+
+    erl_syntax:block_expr([
+        erl_syntax:match_expr(TmpVar, Constraints),
+        erl_syntax:receive_expr(NewClauses, Timeout, Action)
+    ]).
+
+-spec instrument_receive_clause(Clause, ConstraintsFun) -> erl_syntax:syntaxTree() when
     Clause :: erl_syntax:syntaxTree(),
-    NewClause :: erl_syntax:syntaxTree().
+    ConstraintsFun :: erl_syntax:syntaxTree().
 
-instrument_receive_clause(Clause) ->
+instrument_receive_clause(Clause, ConstraintsFun) ->
     StampVar = temp_variable(),
 
     [Pattern] = erl_syntax:clause_patterns(Clause),
@@ -118,19 +134,19 @@ instrument_receive_clause(Clause) ->
             ]),
             erl_syntax:operator("!"),
             erl_syntax:tuple([
-                erl_syntax:atom(receive_evaluated),
-                StampVar
+                erl_syntax:atom('receive'),
+                StampVar,
+                ConstraintsFun
             ])
         ),
 
     erl_syntax:clause(
-        [erl_syntax:tuple([(erl_syntax:tuple([erl_syntax:atom(stamp), StampVar])), Pattern])],
+        [erl_syntax:tuple([erl_syntax:atom(send), StampVar, erl_syntax:underscore(), Pattern])],
         Guard,
         [ReceiveEvaluated | Body]
     ).
 
--spec instrument_nodes() -> Expr when
-    Expr :: erl_syntax:syntaxTree().
+-spec instrument_nodes() -> erl_syntax:syntaxTree().
 
 instrument_nodes() ->
     erl_syntax:application(
@@ -139,8 +155,7 @@ instrument_nodes() ->
         []
     ).
 
--spec temp_variable() -> VarExpr when
-    VarExpr :: erl_syntax:syntaxTree().
+-spec temp_variable() -> erl_syntax:syntaxTree().
 
 temp_variable() ->
     Atomic = atomics:add_get(get(atomic), 1, 1),
