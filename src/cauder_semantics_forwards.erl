@@ -606,7 +606,7 @@ rule_nodes(
     NewSystem :: cauder_types:system().
 
 rule_spawn(
-    #sys{procs = PMap0, log = Log0, nodes = Nodes, x_trace = XTrace} = Sys,
+    #sys{procs = PMap0, log = Log0, trace = Trace0, nodes = Nodes, x_trace = XTrace} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = Label}
 ) ->
@@ -628,6 +628,8 @@ rule_spawn(
                 true = lists:member(SNode, Nodes),
                 {{{SNode, SPid}, SResult}, NewLog}
         end,
+
+    Trace1 = add_to_trace(Pid, {spawn, {SpawnNode, SpawnPid}, SpawnResult}, Trace0),
 
     P1 = P0#proc{
         hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0],
@@ -667,6 +669,7 @@ rule_spawn(
     Sys#sys{
         procs = PMap1,
         log = Log1,
+        trace = Trace1,
         x_trace = [T | XTrace]
     }.
 
@@ -677,7 +680,7 @@ rule_spawn(
     NewSystem :: cauder_types:system().
 
 rule_start(
-    #sys{nodes = Nodes, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap, x_trace = XTrace} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
 ) ->
@@ -697,6 +700,9 @@ rule_start(
                 false = lists:member(Node, Nodes),
                 {{Node, Result}, NewLog}
         end,
+
+    Trace1 = add_to_trace(Pid, {start, StartNode, StartResult}, Trace0),
+
     Return =
         case StartResult of
             success -> {ok, StartNode};
@@ -718,6 +724,7 @@ rule_start(
         procs = PMap#{Pid := P1},
         nodes = [StartNode | Nodes],
         log = Log1,
+        trace = Trace1,
         x_trace = [T | XTrace]
     }.
 
