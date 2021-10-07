@@ -422,7 +422,7 @@ rule_deliver(
     #proc{pid = Pid, mail = LocalMail} = P0
 ) ->
     Delivered =
-        case maps:get(Pid, Log) of
+        case maps:get(Pid, Log, []) of
             [] ->
                 cauder_mailbox:pid_take(Pid, Mail0);
             Actions ->
