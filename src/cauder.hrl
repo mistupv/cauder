@@ -66,10 +66,15 @@
     procs :: cauder_types:process_map(),
     % System log
     log = maps:new() :: cauder_types:log(),
+    % Trace generated as the program is executed
+    trace = maps:new() :: cauder_types:trace(),
+    % Race sets for each process and message
     race_sets :: undefined | cauder_types:race_sets(),
     % System nodes
     nodes = [] :: [node()],
+    % TODO Remove?
     x_trace = [] :: [cauder_types:x_trace()],
+    % TODO Remove?
     roll = []
 }).
 

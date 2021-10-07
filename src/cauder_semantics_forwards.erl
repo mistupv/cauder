@@ -380,11 +380,12 @@ rule_local(
     NewSystem :: cauder_types:system().
 
 rule_send(
-    #sys{mail = Mail0, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{mail = Mail0, log = Log0, trace = Trace0, procs = PMap, x_trace = XTrace} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {send, Dest, Val}}
 ) ->
     {Uid, Log1} = log_consume_send(Pid, Log0),
+    Trace1 = add_to_trace(Pid, {send, Uid, Dest, Val}, Trace0),
 
     M = #message{
         uid = Uid,
@@ -409,6 +410,7 @@ rule_send(
         mail = cauder_mailbox:add(M, Mail0),
         procs = PMap#{Pid := P1},
         log = Log1,
+        trace = Trace1,
         x_trace = [T | XTrace]
     }.
 
@@ -418,7 +420,7 @@ rule_send(
     NewSystem :: cauder_types:system().
 
 rule_deliver(
-    #sys{mail = Mail0, log = Log, procs = PMap} = Sys,
+    #sys{mail = Mail0, log = Log, trace = Trace0, procs = PMap} = Sys,
     #proc{pid = Pid, mail = LocalMail} = P0
 ) ->
     Delivered =
@@ -435,12 +437,15 @@ rule_deliver(
         false ->
             Sys;
         {Message, Mail1} ->
+            Trace1 = add_to_trace(Pid, {deliver, Message#message.uid}, Trace0),
+
             P1 = P0#proc{
                 mail = queue:in(Message, LocalMail)
             },
             Sys#sys{
                 mail = Mail1,
-                procs = PMap#{Pid := P1}
+                procs = PMap#{Pid := P1},
+                trace = Trace1
             }
     end.
 
@@ -453,7 +458,7 @@ rule_deliver(
     NewSystem :: cauder_types:system().
 
 rule_receive(
-    #sys{log = Log0} = Sys0,
+    #sys{log = Log0, trace = Trace0} = Sys0,
     #proc{pid = Pid, mail = LocalMail0},
     #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}},
     Sched,
@@ -490,6 +495,16 @@ rule_receive(
 
     #proc{hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys1#sys.procs),
 
+    Constraints = lists:map(
+        fun(Clause) ->
+            Patterns = erl_syntax:clause_patterns(Clause),
+            Guard = erl_syntax:clause_guard(Clause),
+            {lists:map(fun erl_syntax:revert/1, Patterns), erl_syntax:revert(Guard)}
+        end,
+        Cs
+    ),
+    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid, Constraints}, Trace0),
+
     P1 = P0#proc{
         hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0],
         stack = Stk1,
@@ -505,6 +520,7 @@ rule_receive(
     },
     Sys1#sys{
         procs = PMap#{Pid := P1},
+        trace = Trace1,
         x_trace = [T | XTrace]
     }.
 
@@ -557,7 +573,7 @@ rule_node(
     NewSystem :: cauder_types:system().
 
 rule_nodes(
-    #sys{nodes = Nodes, log = Log0, procs = PMap} = Sys,
+    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {nodes, VarNodes}}
 ) ->
@@ -569,6 +585,8 @@ rule_nodes(
 
     OtherNodes = Nodes -- [Node],
 
+    Trace1 = add_to_trace(Pid, {nodes, OtherNodes}, Trace0),
+
     P1 = P0#proc{
         hist = [{nodes, Bs0, Es0, Stk0, OtherNodes} | Hist0],
         stack = Stk1,
@@ -577,7 +595,8 @@ rule_nodes(
     },
     Sys#sys{
         procs = PMap#{Pid := P1},
-        log = Log1
+        log = Log1,
+        trace = Trace1
     }.
 
 -spec rule_spawn(System, Process, Result) -> NewSystem when
@@ -701,3 +720,12 @@ rule_start(
         log = Log1,
         x_trace = [T | XTrace]
     }.
+
+-spec add_to_trace(Pid, Entry, Trace) -> NewTrace when
+    Pid :: cauder_types:proc_id(),
+    Entry :: cauder_types:trace_action(),
+    Trace :: cauder_types:trace(),
+    NewTrace :: cauder_types:trace().
+
+add_to_trace(Pid, Entry, Trace) ->
+    maps:update_with(Pid, fun(Actions) -> [Entry | Actions] end, [Entry], Trace).
