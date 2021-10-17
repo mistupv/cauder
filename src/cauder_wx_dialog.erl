@@ -55,8 +55,27 @@ start_session(Parent, MFAs) ->
     ManualSizer = wxBoxSizer:new(?wxHORIZONTAL),
     wxPanel:setSizer(ManualPanel, ManualSizer),
 
-    FunChoice = wxChoice:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
-    wxBoxSizer:add(ManualSizer, FunChoice),
+    % -----
+
+    NodeSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ManualPanel, [{label, "Node"}]),
+    wxBoxSizer:add(ManualSizer, NodeSizer),
+
+    NodeText = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {150, -1}}]),
+    wxStaticBoxSizer:add(NodeSizer, NodeText),
+
+    % TODO Add hint 'nonode@nohost'
+
+    % -----
+
+    wxBoxSizer:addSpacer(ManualSizer, ?SPACER_SMALL),
+
+    % -----
+
+    FunSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ManualPanel, [{label, "Function"}]),
+    wxBoxSizer:add(ManualSizer, FunSizer),
+
+    FunChoice = wxChoice:new(ManualPanel, ?wxID_ANY, [{size, {200, -1}}]),
+    wxStaticBoxSizer:add(FunSizer, FunChoice),
 
     lists:foreach(
         fun({M, F, A} = MFA) -> wxChoice:append(FunChoice, io_lib:format("~p:~p/~b", [M, F, A]), MFA) end,
@@ -73,25 +92,21 @@ start_session(Parent, MFAs) ->
             end
     end,
 
-    wxBoxSizer:addSpacer(ManualSizer, ?SPACER_SMALL),
-
-    ArgsLabel = wxStaticText:new(ManualPanel, ?wxID_ANY, "Arguments: "),
-    wxBoxSizer:add(ManualSizer, ArgsLabel),
-
-    ArgsCtrl = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
-    wxBoxSizer:add(ManualSizer, ArgsCtrl),
+    % -----
 
     wxBoxSizer:addSpacer(ManualSizer, ?SPACER_SMALL),
 
-    NodeLabel = wxStaticText:new(ManualPanel, ?wxID_ANY, "Node name: "),
-    wxBoxSizer:add(ManualSizer, NodeLabel),
+    % -----
 
-    NodeName = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {250, -1}}]),
-    wxBoxSizer:add(ManualSizer, NodeName),
+    ArgsSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ManualPanel, [{label, "Arguments"}]),
+    wxBoxSizer:add(ManualSizer, ArgsSizer),
+
+    ArgsText = wxTextCtrl:new(ManualPanel, ?wxID_ANY, [{size, {200, -1}}]),
+    wxBoxSizer:add(ArgsSizer, ArgsText),
 
     Index = wxChoice:getSelection(FunChoice),
     {_, _, Arity} = wxChoice:getClientData(FunChoice, Index),
-    wxTextCtrl:enable(ArgsCtrl, [{enable, Arity > 0}]),
+    wxTextCtrl:enable(ArgsText, [{enable, Arity > 0}]),
 
     %% Replay Radio
 
@@ -106,20 +121,28 @@ start_session(Parent, MFAs) ->
     ReplaySizer = wxBoxSizer:new(?wxHORIZONTAL),
     wxPanel:setSizer(ReplayPanel, ReplaySizer),
 
-    BasePath = cauder:get_path(),
-    TracePath = filename:join(BasePath, "trace"),
-    PickerPath =
-        case filelib:is_dir(TracePath) of
-            true -> TracePath;
-            false -> BasePath
-        end,
-    PickerOpts = [
-        {message, "Select a log folder"},
-        {style, ?wxDIRP_DIR_MUST_EXIST bor ?wxDIRP_USE_TEXTCTRL}
-    ],
+    % -----
 
-    TracePicker = wxDirPickerCtrl:new(ReplayPanel, ?wxID_ANY, [{path, PickerPath} | PickerOpts]),
-    wxBoxSizer:add(ReplaySizer, TracePicker, [{proportion, 1}, {flag, ?wxEXPAND}]),
+    PickerOpts = orddict:update(
+        path,
+        fun(Path) ->
+            case filelib:is_dir(Path) of
+                true -> Path;
+                false -> ""
+            end
+        end,
+        orddict:from_list([
+            {path, filename:join(cauder:get_path(), "trace")},
+            {message, "Select a log folder"},
+            {style, ?wxDIRP_DIR_MUST_EXIST bor ?wxDIRP_USE_TEXTCTRL}
+        ])
+    ),
+
+    TraceSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ReplayPanel, [{label, "Trace folder"}]),
+    wxBoxSizer:add(ReplaySizer, TraceSizer,[{proportion, 1}, {flag, ?wxEXPAND}]),
+
+    TracePicker = wxDirPickerCtrl:new(ReplayPanel, ?wxID_ANY, PickerOpts),
+    wxStaticBoxSizer:add(TraceSizer, TracePicker, [{proportion, 1}, {flag, ?wxEXPAND}]),
     wxDirPickerCtrl:setTextCtrlGrowable(TracePicker),
 
     %% -----
@@ -142,7 +165,7 @@ start_session(Parent, MFAs) ->
             case wxRadioButton:getValue(ManualRadio) of
                 true ->
                     {M1, F1, A1} = wxChoice:getClientData(FunChoice, wxChoice:getSelection(FunChoice)),
-                    case cauder_utils:string_to_expressions(wxTextCtrl:getValue(ArgsCtrl)) of
+                    case cauder_utils:string_to_expressions(wxTextCtrl:getValue(ArgsText)) of
                         error ->
                             Message = ?DIALOG_BadArgs_Message,
                             Options = [{caption, ?DIALOG_BadArgs_Title}, {style, ?wxICON_ERROR}],
@@ -150,7 +173,7 @@ start_session(Parent, MFAs) ->
                         Args ->
                             case length(Args) of
                                 A1 ->
-                                    N1 = wxTextCtrl:getValue(NodeName),
+                                    N1 = wxTextCtrl:getValue(NodeText),
                                     case cauder_utils:check_node_name(N1) of
                                         ok ->
                                             ReturnPid ! {manual, {list_to_atom(N1), M1, F1, Args}};
@@ -188,7 +211,7 @@ start_session(Parent, MFAs) ->
 
     %% -----
 
-    event_handler_entry_point(FunChoice, ArgsCtrl),
+    event_handler_entry_point(FunChoice, ArgsText),
     event_handler_start_mode(#{ManualRadio => ManualPanel, ReplayRadio => ReplayPanel}),
 
     wxWindow:enable(ReplayPanel, [{enable, false}]),
