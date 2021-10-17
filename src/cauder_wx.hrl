@@ -33,7 +33,7 @@
 
 -define(FRAME, 500).
 
--define(FRAME_SIZE_INIT, {1250, 775}).
+-define(FRAME_SIZE_INIT, {900, 900}).
 
 -define(ZOOM_MIN, -10).
 -define(ZOOM_MAX, 20).
