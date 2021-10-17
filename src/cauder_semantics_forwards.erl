@@ -380,12 +380,11 @@ rule_local(
     NewSystem :: cauder_types:system().
 
 rule_send(
-    #sys{mail = Mail0, log = Log0, trace = Trace0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{mail = Mail0, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {send, Dest, Val}}
 ) ->
     {Uid, Log1} = log_consume_send(Pid, Log0),
-    Trace1 = add_to_trace(Pid, {send, Uid, Dest, Val}, Trace0),
 
     M = #message{
         uid = Uid,
@@ -399,19 +398,13 @@ rule_send(
         env = Bs1,
         exprs = Es1
     },
-    T = #x_trace{
-        type = ?RULE_SEND,
-        from = Pid,
-        to = Dest,
-        val = Val,
-        time = M#message.uid
-    },
+    Trace1 = add_to_trace(Pid, {send, Uid, Dest, Val}, Trace0),
+
     Sys#sys{
         mail = cauder_mailbox:add(M, Mail0),
         procs = PMap#{Pid := P1},
         log = Log1,
-        trace = Trace1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_deliver(System, Process) -> NewSystem when
@@ -437,11 +430,11 @@ rule_deliver(
         false ->
             Sys;
         {Message, Mail1} ->
-            Trace1 = add_to_trace(Pid, {deliver, Message#message.uid}, Trace0),
-
             P1 = P0#proc{
                 mail = queue:in(Message, LocalMail)
             },
+            Trace1 = add_to_trace(Pid, {deliver, Message#message.uid}, Trace0),
+
             Sys#sys{
                 mail = Mail1,
                 procs = PMap#{Pid := P1},
@@ -464,7 +457,7 @@ rule_receive(
     Sched,
     Mode
 ) ->
-    {{Es2, Bs2, Msg, LocalMail1, QPos}, #sys{procs = PMap, x_trace = XTrace} = Sys1} =
+    {{Es2, Bs2, Msg, LocalMail1, QPos}, #sys{procs = PMap} = Sys1} =
         case Mode of
             normal ->
                 case log_consume_receive(Pid, Log0) of
@@ -503,7 +496,6 @@ rule_receive(
         end,
         Cs
     ),
-    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid, Constraints}, Trace0),
 
     P1 = P0#proc{
         hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0],
@@ -512,16 +504,11 @@ rule_receive(
         exprs = Es2,
         mail = LocalMail1
     },
-    T = #x_trace{
-        type = ?RULE_RECEIVE,
-        from = Pid,
-        val = Msg#message.value,
-        time = Msg#message.uid
-    },
+    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid, Constraints}, Trace0),
+
     Sys1#sys{
         procs = PMap#{Pid := P1},
-        trace = Trace1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_self(System, Process, Result) -> NewSystem when
@@ -585,14 +572,14 @@ rule_nodes(
 
     OtherNodes = Nodes -- [Node],
 
-    Trace1 = add_to_trace(Pid, {nodes, OtherNodes}, Trace0),
-
     P1 = P0#proc{
         hist = [{nodes, Bs0, Es0, Stk0, OtherNodes} | Hist0],
         stack = Stk1,
         env = Bs1,
         exprs = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
     },
+    Trace1 = add_to_trace(Pid, {nodes, OtherNodes}, Trace0),
+
     Sys#sys{
         procs = PMap#{Pid := P1},
         log = Log1,
@@ -606,7 +593,7 @@ rule_nodes(
     NewSystem :: cauder_types:system().
 
 rule_spawn(
-    #sys{procs = PMap0, log = Log0, trace = Trace0, nodes = Nodes, x_trace = XTrace} = Sys,
+    #sys{procs = PMap0, log = Log0, trace = Trace0, nodes = Nodes} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = Label}
 ) ->
@@ -628,8 +615,6 @@ rule_spawn(
                 true = lists:member(SNode, Nodes),
                 {{{SNode, SPid}, SResult}, NewLog}
         end,
-
-    Trace1 = add_to_trace(Pid, {spawn, {SpawnNode, SpawnPid}, SpawnResult}, Trace0),
 
     P1 = P0#proc{
         hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0],
@@ -661,16 +646,12 @@ rule_spawn(
             success -> PMap0#{Pid := P1, SpawnPid => P2};
             failure -> PMap0#{Pid := P1}
         end,
-    T = #x_trace{
-        type = ?RULE_SPAWN,
-        from = Pid,
-        to = SpawnPid
-    },
+    Trace1 = add_to_trace(Pid, {spawn, {SpawnNode, SpawnPid}, SpawnResult}, Trace0),
+
     Sys#sys{
         procs = PMap1,
         log = Log1,
-        trace = Trace1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_start(System, Process, Result) -> NewSystem when
@@ -680,7 +661,7 @@ rule_spawn(
     NewSystem :: cauder_types:system().
 
 rule_start(
-    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
 ) ->
@@ -701,8 +682,6 @@ rule_start(
                 {{Node, Result}, NewLog}
         end,
 
-    Trace1 = add_to_trace(Pid, {start, StartNode, StartResult}, Trace0),
-
     Return =
         case StartResult of
             success -> {ok, StartNode};
@@ -714,18 +693,13 @@ rule_start(
         env = Bs1,
         exprs = cauder_syntax:replace_variable(Es1, VarNode, Return)
     },
-    T = #x_trace{
-        type = ?RULE_START,
-        from = Pid,
-        res = StartResult,
-        node = StartNode
-    },
+    Trace1 = add_to_trace(Pid, {start, StartNode, StartResult}, Trace0),
+
     Sys#sys{
         procs = PMap#{Pid := P1},
         nodes = [StartNode | Nodes],
         log = Log1,
-        trace = Trace1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec add_to_trace(Pid, Entry, Trace) -> NewTrace when

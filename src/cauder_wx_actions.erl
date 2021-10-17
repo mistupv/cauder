@@ -99,7 +99,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
     {_, NewIdx} =
         lists:foldl(
             fun(Proc, {Idx, Match}) ->
-                Label = cauder_pp:process(Proc),
+                Label = cauder_pp:process(Proc, [{icon, true}, {node, true}, {pid, true}, {mfa, true}]),
                 Pid = Proc#proc.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of

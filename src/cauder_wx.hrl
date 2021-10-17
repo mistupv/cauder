@@ -23,7 +23,8 @@
     position = -1 :: integer(),
     task :: atom() | undefined,
     system :: cauder_types:system() | undefined,
-    pid :: cauder_types:proc_id() | undefined
+    pid :: cauder_types:proc_id() | undefined,
+    trace_pid :: cauder_types:proc_id() | undefined
 }).
 
 -define(GUI_DB, 'cauder_wx/database').
@@ -207,8 +208,9 @@
 
 -define(SYSTEM_Nodes, 2530).
 -define(SYSTEM_Mail, 2531).
--define(SYSTEM_Trace, 2532).
--define(SYSTEM_RollLog, 2533).
+-define(SYSTEM_Trace_Process, 2532).
+-define(SYSTEM_Trace_Content, 2533).
+-define(SYSTEM_RollLog, 2534).
 
 %% ----- Process Info Panel ----- %%
 

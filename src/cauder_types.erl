@@ -41,7 +41,6 @@
     process_scheduler/0,
     message_scheduler/0,
     rule/0,
-    x_trace/0,
     result/0,
     label/0,
     trace_info/0
@@ -147,9 +146,6 @@
 
 -type rule() ::
     ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
-
-% TODO What is the purpose of this?
--type x_trace() :: #x_trace{}.
 
 -type result() :: #result{}.
 -type label() ::

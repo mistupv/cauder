@@ -336,6 +336,8 @@ handle_event(
 
 handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
     {noreply, refresh(State, State)};
+handle_event(#wx{id = ?SYSTEM_Trace_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
+    {noreply, refresh(State, State)};
 %%%=============================================================================
 
 handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when
@@ -747,20 +749,22 @@ stop_session(_State) ->
     NewState :: state(),
     State :: state().
 
-refresh(OldState, NewState) ->
-    cauder_wx_actions:update_process(OldState, NewState),
+refresh(State0, State1) ->
+    cauder_wx_actions:update_process(State0, State1),
+    State2 = State1#wx_state{pid = cauder_wx_actions:selected_pid()},
 
-    State = NewState#wx_state{pid = cauder_wx_actions:selected_pid()},
+    cauder_wx_system:update_trace_process(State0, State2),
+    State3 = State2#wx_state{trace_pid = cauder_wx_system:selected_trace_pid()},
 
-    cauder_wx_menu:update(OldState, State),
-    cauder_wx_statusbar:update(OldState, State),
+    cauder_wx_menu:update(State0, State3),
+    cauder_wx_statusbar:update(State0, State3),
 
-    cauder_wx_code:update(OldState, State),
-    cauder_wx_actions:update(OldState, State),
-    cauder_wx_process:update(OldState, State),
-    cauder_wx_system:update(OldState, State),
+    cauder_wx_code:update(State0, State3),
+    cauder_wx_actions:update(State0, State3),
+    cauder_wx_process:update(State0, State3),
+    cauder_wx_system:update(State0, State3),
 
-    State.
+    State3.
 
 %%%=============================================================================
 

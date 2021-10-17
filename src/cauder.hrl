@@ -73,8 +73,6 @@
     % System nodes
     nodes = [] :: [node()],
     % TODO Remove?
-    x_trace = [] :: [cauder_types:x_trace()],
-    % TODO Remove?
     roll = []
 }).
 
@@ -118,17 +116,6 @@
     sem :: cauder_types:semantics(),
     % seq, spawn, ...
     rule :: cauder_types:rule()
-}).
-
-% TODO What is the purpose of this?
--record(x_trace, {
-    type :: ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE,
-    from :: cauder_types:proc_id(),
-    to :: undefined | cauder_types:proc_id(),
-    node :: undefined | node(),
-    val :: undefined | term(),
-    res :: success | failure | undefined,
-    time :: undefined | cauder_mailbox:uid()
 }).
 
 % Evaluation result

@@ -1,7 +1,8 @@
 -module(cauder_wx_system).
 
 %% API
--export([create/1, update/2]).
+-export([create/1, update/2, update_trace_process/2]).
+-export([selected_trace_pid/0]).
 
 -include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
@@ -53,6 +54,66 @@ update(OldState, NewState) ->
     update_mail(OldState, NewState),
     update_trace(OldState, NewState),
     update_roll_log(OldState, NewState).
+
+%%%=============================================================================
+
+-spec update_trace_process(OldState, NewState) -> ok when
+    OldState :: cauder_wx:state(),
+    NewState :: cauder_wx:state().
+
+update_trace_process(
+    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid},
+    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}
+) ->
+    ok;
+update_trace_process(_, #wx_state{system = undefined}) ->
+    Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
+    wxChoice:disable(Choice),
+    wxChoice:clear(Choice),
+    ok;
+update_trace_process(_, #wx_state{system = #sys{trace = Trace}}) when map_size(Trace) =:= 0 ->
+    Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
+    wxChoice:disable(Choice),
+    wxChoice:clear(Choice),
+    ok;
+update_trace_process(#wx_state{trace_pid = OldPid}, #wx_state{system = #sys{procs = PMap, trace = Trace}}) ->
+    Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
+    wxChoice:freeze(Choice),
+    wxChoice:enable(Choice),
+    wxChoice:clear(Choice),
+    {_, NewIdx} =
+        lists:foldl(
+            fun(Proc, {Idx, Match}) ->
+                Label = cauder_pp:process(Proc, [{icon, false}, {node, auto}, {pid, true}, {mfa, true}]),
+                Pid = Proc#proc.pid,
+                wxChoice:append(Choice, Label, Pid),
+                case Pid of
+                    OldPid -> {Idx + 1, Idx};
+                    Pid -> {Idx + 1, Match}
+                end
+            end,
+            {0, 0},
+            maps:values(maps:with(maps:keys(Trace), PMap))
+        ),
+    wxChoice:setSelection(Choice, NewIdx),
+    wxChoice:thaw(Choice),
+    ok.
+
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the PID of the process currently selected in the "Process"
+%% dropdown in the trace area.
+
+-spec selected_trace_pid() -> Pid | undefined when
+    Pid :: cauder_types:proc_id().
+
+selected_trace_pid() ->
+    Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
+    case wxChoice:getSelection(Choice) of
+        ?wxNOT_FOUND -> undefined;
+        Idx -> wxChoice:getClientData(Choice, Idx)
+    end.
 
 %%%=============================================================================
 %%% Internal functions
@@ -212,11 +273,35 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config
 create_trace(Parent) ->
     Win = wxPanel:new(Parent),
 
-    Sizer = wxBoxSizer:new(?wxHORIZONTAL),
-    wxPanel:setSizer(Win, Sizer),
+    Border = wxBoxSizer:new(?wxVERTICAL),
+    wxWindow:setSizer(Win, Border),
 
-    TraceArea = wxListBox:new(Win, ?SYSTEM_Trace),
-    wxBoxSizer:add(Sizer, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
+    Content = wxBoxSizer:new(?wxVERTICAL),
+    wxBoxSizer:add(Border, Content, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}, {border, ?SPACER_SMALL}]),
+
+    % Process
+
+    Process = wxBoxSizer:new(?wxHORIZONTAL),
+    wxBoxSizer:add(Content, Process, [{flag, ?wxEXPAND}]),
+
+    ProcessText = wxStaticText:new(Win, ?wxID_ANY, "Process:"),
+    wxBoxSizer:add(Process, ProcessText, [{flag, ?wxALIGN_CENTER_VERTICAL}]),
+
+    wxBoxSizer:addSpacer(Process, ?SPACER_SMALL),
+
+    ProcessChoice = wxChoice:new(Win, ?SYSTEM_Trace_Process),
+    wxStaticBoxSizer:add(Process, ProcessChoice, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}]),
+
+    wxEvtHandler:connect(ProcessChoice, command_choice_selected),
+
+    % -----
+
+    wxBoxSizer:addSpacer(Content, ?SPACER_MEDIUM),
+
+    % Trace
+
+    TraceArea = wxListBox:new(Win, ?SYSTEM_Trace_Content),
+    wxBoxSizer:add(Content, TraceArea, [{proportion, 1}, {flag, ?wxEXPAND bor ?wxALL}]),
 
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     wxListBox:setFont(TraceArea, Font),
@@ -227,22 +312,31 @@ create_trace(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_trace(#wx_state{system = #sys{x_trace = Trace}}, #wx_state{system = #sys{x_trace = Trace}}) ->
+update_trace(
+    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid},
+    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}
+) ->
     ok;
 update_trace(_, #wx_state{system = undefined}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace_Content, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #sys{x_trace = []}}) ->
-    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
+update_trace(_, #wx_state{trace_pid = undefined}) ->
+    wxListBox:clear(cauder_wx:find(?SYSTEM_Trace_Content, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #sys{x_trace = Trace}}) ->
+update_trace(_, #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}) ->
     wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
-    TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
-    wxListBox:freeze(TraceArea),
-    wxListBox:clear(TraceArea),
-    Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
-    lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
-    wxListBox:thaw(TraceArea).
+
+    TraceControl = cauder_wx:find(?SYSTEM_Trace_Content, wxListBox),
+    wxListBox:freeze(TraceControl),
+    wxListBox:clear(TraceControl),
+    case Trace of
+        #{Pid := Actions} ->
+            Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_action/1, Actions)),
+            lists:foreach(fun(Entry) -> wxListBox:append(TraceControl, Entry) end, Entries);
+        _ ->
+            ok
+    end,
+    wxListBox:thaw(TraceControl).
 
 %%%=============================================================================
 
