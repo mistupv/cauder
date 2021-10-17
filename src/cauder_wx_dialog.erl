@@ -139,7 +139,7 @@ start_session(Parent, MFAs) ->
     ),
 
     TraceSizer = wxStaticBoxSizer:new(?wxHORIZONTAL, ReplayPanel, [{label, "Trace folder"}]),
-    wxBoxSizer:add(ReplaySizer, TraceSizer,[{proportion, 1}, {flag, ?wxEXPAND}]),
+    wxBoxSizer:add(ReplaySizer, TraceSizer, [{proportion, 1}, {flag, ?wxEXPAND}]),
 
     TracePicker = wxDirPickerCtrl:new(ReplayPanel, ?wxID_ANY, PickerOpts),
     wxStaticBoxSizer:add(TraceSizer, TracePicker, [{proportion, 1}, {flag, ?wxEXPAND}]),
