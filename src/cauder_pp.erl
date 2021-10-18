@@ -13,7 +13,7 @@
 -include_lib("wx/include/wx.hrl").
 
 -spec process(Process) -> String when
-    Process :: cauder_types:process(),
+    Process :: cauder_process:process(),
     String :: string().
 
 process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
@@ -27,7 +27,7 @@ process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
 %%%=============================================================================
 
 -spec log_entry(LogEntry) -> String when
-    LogEntry :: cauder_types:trace_entry(),
+    LogEntry :: cauder_trace:trace_action(),
     String :: string().
 
 log_entry({nodes, Nodes}) -> "nodes(" ++ to_string(Nodes) ++ ")";
@@ -41,7 +41,7 @@ log_entry({start, NodeName, failure}) -> "start(" ++ red(to_string(NodeName)) ++
 %%%=============================================================================
 
 -spec history_entry(HistoryEntry) -> String when
-    HistoryEntry :: cauder_types:history_entry(),
+    HistoryEntry :: cauder_process:history_entry(),
     String :: string().
 
 history_entry({tau, _Bs, _Es, _Stk}) ->
@@ -64,7 +64,7 @@ history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
 %%%=============================================================================
 
 -spec stack_entry(StackEntry) -> String when
-    StackEntry :: cauder_types:stack_entry(),
+    StackEntry :: cauder_process:stack_entry(),
     String :: string().
 
 stack_entry({{M, F, A}, _Bs, _Es, _Var}) -> io_lib:format("~s:~s/~b", [M, F, A]);
@@ -73,7 +73,7 @@ stack_entry({Type, _Es, _Var}) -> atom_to_list(Type).
 %%%=============================================================================
 
 -spec expression(Expression) -> String when
-    Expression :: cauder_types:abstract_expr(),
+    Expression :: cauder_syntax:abstract_expr(),
     String :: string().
 
 expression(Expr) ->
@@ -99,7 +99,7 @@ trace_entry(#x_trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) 
 %%%=============================================================================
 
 -spec pid(Pid) -> String when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     String :: string().
 
 pid(Pid) -> "Proc. " ++ to_string(Pid).

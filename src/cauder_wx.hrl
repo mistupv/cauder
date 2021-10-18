@@ -22,8 +22,8 @@
     module :: atom() | undefined,
     position = -1 :: integer(),
     task :: atom() | undefined,
-    system :: cauder_types:system() | undefined,
-    pid :: cauder_types:proc_id() | undefined
+    system :: cauder_system:system() | undefined,
+    pid :: cauder_process:proc_id() | undefined
 }).
 
 -define(GUI_DB, 'cauder_wx/database').

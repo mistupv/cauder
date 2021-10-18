@@ -28,11 +28,11 @@
 %% given System.
 
 -spec step(System, Pid, MessageScheduler, Mode) -> NewSystem when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
+    System :: cauder_system:system(),
+    Pid :: cauder_process:proc_id(),
     MessageScheduler :: cauder_types:message_scheduler(),
     Mode :: normal | replay,
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 step(Sys, Pid, Sched, Mode) ->
     {#proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0, _} = maps:take(Pid, Sys#sys.procs),
@@ -155,7 +155,7 @@ step(Sys, Pid, Sched, Mode) ->
 %% @doc Returns the forwards evaluation options for the given System.
 
 -spec options(System, Mode) -> Options when
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     Mode :: normal | replay,
     Options :: [cauder_types:option()].
 
@@ -239,8 +239,8 @@ entry_dependents({'receive', _Uid}, LMap) -> LMap.
 %%
 
 -spec expression_option(Expr, Proc, Mode, Sys) -> Rule when
-    Expr :: cauder_types:abstract_expr() | [cauder_types:abstract_expr()],
-    Proc :: cauder_types:proc(),
+    Expr :: cauder_syntax:abstract_expr() | [cauder_syntax:abstract_expr()],
+    Proc :: cauder_process:proc(),
     Sys :: cauder_types:sys(),
     Mode :: normal | replay,
     Rule :: cauder_types:rule() | ?NOT_EXP.
@@ -396,10 +396,10 @@ extract_log(LMap, Pid, send) ->
     end.
 
 -spec fwd_tau(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
     Sys :: cauder_types:sys(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_tau(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -417,10 +417,10 @@ fwd_tau(
     }.
 
 -spec fwd_self(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
     Sys :: cauder_types:sys(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_self(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -438,10 +438,10 @@ fwd_self(
     }.
 
 -spec fwd_node(Proc, Result, Sys) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
     Sys :: cauder_types:sys(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_node(
     #proc{node = Node, hist = Hist, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -459,11 +459,11 @@ fwd_node(
     }.
 
 -spec fwd_nodes(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
     Sys :: cauder_types:sys(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_nodes(
     #proc{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -488,11 +488,11 @@ fwd_nodes(
     }.
 
 -spec fwd_spawn_s(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_spawn_s(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -548,11 +548,11 @@ fwd_spawn_s(
     }.
 
 -spec fwd_spawn_f(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_spawn_f(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -588,11 +588,11 @@ fwd_spawn_f(
     }.
 
 -spec fwd_start_s(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_start_s(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -630,11 +630,11 @@ fwd_start_s(
     }.
 
 -spec fwd_start_f(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_start_f(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -672,11 +672,11 @@ fwd_start_f(
     }.
 
 -spec fwd_send(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_send(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,
@@ -722,11 +722,11 @@ fwd_send(
     }.
 
 -spec fwd_rec(Proc, Result, Sys, Opts) -> NewSystem when
-    Proc :: cauder_types:proc(),
+    Proc :: cauder_process:proc(),
     Result :: cauder_types:result(),
-    Sys :: cauder_types:system(),
+    Sys :: cauder_system:system(),
     Opts :: cauder_types:fwd_opts(),
-    NewSystem :: cauder_types:system().
+    NewSystem :: cauder_system:system().
 
 fwd_rec(
     #proc{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, exprs = Es0} = P0,

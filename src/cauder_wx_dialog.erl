@@ -26,7 +26,7 @@ when
     Node :: node(),
     Module :: module(),
     Function :: atom(),
-    Args :: cauder_types:af_args(),
+    Args :: cauder_syntax:af_args(),
     TracePath :: file:filename().
 
 start_session(Parent, MFAs) ->
@@ -249,8 +249,8 @@ stop_session(Parent) ->
 
 -spec edit_binding(Parent, Binding) -> NewBinding | cancel when
     Parent :: wxWindow:wxWindow(),
-    Binding :: cauder_types:binding(),
-    NewBinding :: cauder_types:binding().
+    Binding :: cauder_process:binding(),
+    NewBinding :: cauder_process:binding().
 
 edit_binding(Parent, {Key, Value}) ->
     Dialog = wxDialog:new(Parent, ?wxID_ANY, "Edit binding"),
@@ -331,7 +331,7 @@ edit_binding(Parent, {Key, Value}) ->
 
 -spec choose_message(Parent, {Receiver, Messages}) -> {ok, MessageId} | cancel when
     Parent :: wxWindow:wxWindow(),
-    Receiver :: cauder_types:proc_id(),
+    Receiver :: cauder_process:proc_id(),
     Messages :: [cauder_mailbox:message()],
     MessageId :: cauder_mailbox:uid().
 

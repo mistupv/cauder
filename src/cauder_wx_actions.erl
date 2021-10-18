@@ -116,7 +116,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
 %% dropdown.
 
 -spec selected_pid() -> Pid | undefined when
-    Pid :: cauder_types:proc_id().
+    Pid :: cauder_process:proc_id().
 
 selected_pid() ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),

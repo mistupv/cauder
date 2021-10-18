@@ -37,7 +37,7 @@
 
 -record(state, {
     subs = [] :: [pid()],
-    system :: cauder_types:system() | undefined,
+    system :: cauder_system:system() | undefined,
     task :: {Name :: atom(), Pid :: pid(), State :: task_state()} | undefined
 }).
 
@@ -46,7 +46,12 @@
 -type task_state() :: running | suspended.
 
 -type task_result() :: task_result({}).
--type task_result(Result) :: {task_completion(), Result, Time :: non_neg_integer(), NewSystem :: cauder_types:system()}.
+-type task_result(Result) :: {
+    task_completion(),
+    Result,
+    Time :: non_neg_integer(),
+    NewSystem :: cauder_system:system()
+}.
 
 -type task_completion() :: success | cancel | failure.
 
@@ -140,7 +145,7 @@ unsubscribe(Pid) -> gen_server:call(?SERVER, {unsubscribe, Pid}).
 -spec load_file(File) -> Reply when
     File :: file:filename(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
 
@@ -159,7 +164,7 @@ load_file(File) -> gen_server:call(?SERVER, {user, {load, File}}).
     Node :: node(),
     Module :: module(),
     Function :: atom(),
-    Arguments :: cauder_types:af_args(),
+    Arguments :: cauder_syntax:af_args(),
     Reply :: ok | busy.
 
 init_system(Node, Mod, Fun, Args) ->
@@ -200,7 +205,7 @@ init_system(Path) ->
 %% subscriber) will be notified.
 
 -spec stop_system() -> {ok, CurrentSystem} when
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 stop_system() -> gen_server:call(?SERVER, {user, stop}).
 
@@ -214,7 +219,7 @@ stop_system() -> gen_server:call(?SERVER, {user, stop}).
 %% @todo Remove argument
 
 -spec eval_opts(System) -> Options when
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     Options :: [cauder_types:option()].
 
 eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_semantics_backwards:options(Sys).
@@ -233,11 +238,11 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_seman
 
 -spec step(Semantics, Pid, Steps, Scheduler) -> Reply when
     Semantics :: cauder_types:semantics(),
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     Scheduler :: cauder_types:message_scheduler(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 step(Sem, Pid, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid, Steps, Scheduler}}}).
 
@@ -257,9 +262,9 @@ step(Sem, Pid, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem,
 -spec step_multiple(Semantics, Steps, Scheduler) -> Reply when
     Semantics :: cauder_types:semantics(),
     Steps :: pos_integer(),
-    Scheduler :: cauder_types:process_scheduler(),
+    Scheduler :: cauder_process:process_scheduler(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 step_multiple(Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step_multiple, {Sem, Steps, Scheduler}}}).
 
@@ -276,10 +281,10 @@ step_multiple(Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step_mu
 %% @see task_replay_steps/2
 
 -spec replay_steps(Pid, Steps) -> Reply when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid, Steps}}}).
 
@@ -294,9 +299,9 @@ replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid,
 %% @see task_replay_spawn/2
 
 -spec replay_spawn(Pid) -> Reply when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 
@@ -313,7 +318,7 @@ replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 -spec replay_start(Node) -> Reply when
     Node :: node(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_start(Node) -> gen_server:call(?SERVER, {user, {replay_start, Node}}).
 
@@ -330,7 +335,7 @@ replay_start(Node) -> gen_server:call(?SERVER, {user, {replay_start, Node}}).
 -spec replay_send(Uid) -> Reply when
     Uid :: cauder_mailbox:uid(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 
@@ -347,7 +352,7 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 -spec replay_receive(Uid) -> Reply when
     Uid :: cauder_mailbox:uid(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
@@ -363,7 +368,7 @@ replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
 -spec replay_full_log() -> Reply when
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 replay_full_log() -> gen_server:call(?SERVER, {user, {replay_full_log, []}}).
 
@@ -380,10 +385,10 @@ replay_full_log() -> gen_server:call(?SERVER, {user, {replay_full_log, []}}).
 %% @see task_rollback_steps/2
 
 -spec rollback_steps(Pid, Steps) -> Reply when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {Pid, Steps}}}).
 
@@ -400,7 +405,7 @@ rollback_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {rollback_steps, {
 -spec rollback_start(Node) -> Reply when
     Node :: node(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_start(Node) -> gen_server:call(?SERVER, {user, {rollback_start, Node}}).
 
@@ -415,9 +420,9 @@ rollback_start(Node) -> gen_server:call(?SERVER, {user, {rollback_start, Node}})
 %% @see task_rollback_spawn/2
 
 -spec rollback_spawn(Pid) -> Reply when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 
@@ -434,7 +439,7 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 -spec rollback_send(Uid) -> Reply when
     Uid :: cauder_mailbox:uid(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 
@@ -451,7 +456,7 @@ rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 -spec rollback_receive(Uid) -> Reply when
     Uid :: cauder_mailbox:uid(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_receive(Uid) -> gen_server:call(?SERVER, {user, {rollback_receive, Uid}}).
 
@@ -468,7 +473,7 @@ rollback_receive(Uid) -> gen_server:call(?SERVER, {user, {rollback_receive, Uid}
 -spec rollback_variable(Name) -> Reply when
     Name :: atom(),
     Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_types:system().
+    CurrentSystem :: cauder_system:system().
 
 rollback_variable(Name) -> gen_server:call(?SERVER, {user, {rollback_variable, Name}}).
 
@@ -497,7 +502,7 @@ get_entry_points(Module) -> gen_server:call(?SERVER, {user, {get, {entry_points,
 %% This is a synchronous action.
 
 -spec get_system() -> System when
-    System :: cauder_types:system() | undefined.
+    System :: cauder_system:system() | undefined.
 
 get_system() -> gen_server:call(?SERVER, {user, {get, system}}).
 
@@ -523,7 +528,7 @@ get_path() -> gen_server:call(?SERVER, {user, {get, path}}).
 %% `busy' will be returned instead.
 
 -spec set_binding(Pid, {Key, Value}) -> ok | busy when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Key :: atom(),
     Value :: term().
 
@@ -720,7 +725,7 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 -spec run_task(TaskFunction, Arguments, InitialSystem) -> TaskPid when
     TaskFunction :: fun((Arguments, InitialSystem) -> task_result(any())),
     Arguments :: term(),
-    InitialSystem :: cauder_types:system(),
+    InitialSystem :: cauder_system:system(),
     TaskPid :: pid().
 
 run_task(Task, Args, System) when is_function(Task, 2) ->
@@ -737,9 +742,9 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
     ).
 
 -spec suspend_task(Receiver, Messages, CurrentSystem) -> {SuspendTime, ({resume, MessageId} | cancel)} when
-    Receiver :: cauder_types:proc_id(),
+    Receiver :: cauder_process:proc_id(),
     Messages :: [cauder_mailbox:uid()],
-    CurrentSystem :: cauder_types:system(),
+    CurrentSystem :: cauder_system:system(),
     SuspendTime :: integer(),
     MessageId :: cauder_mailbox:uid().
 
@@ -760,7 +765,7 @@ resume_task() ->
 
 -spec task_load(File, System) -> task_result({File, Module}) when
     File :: file:filename(),
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     Module :: module().
 
 task_load(File, System) ->
@@ -774,7 +779,7 @@ task_load(File, System) ->
     MFA :: {Module, Function, Arguments},
     Module :: module(),
     Function :: atom(),
-    Arguments :: [cauder_types:af_literal()].
+    Arguments :: [cauder_syntax:af_literal()].
 
 task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
     {Time, System} =
@@ -830,10 +835,10 @@ task_start_replay(TracePath, undefined) ->
 
 -spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
     Semantics :: cauder_types:semantics(),
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: non_neg_integer(),
     Scheduler :: cauder_types:message_scheduler(),
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
@@ -844,8 +849,8 @@ task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
 -spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
     Semantics :: cauder_types:semantics(),
     Steps :: non_neg_integer(),
-    Scheduler :: cauder_types:process_scheduler(),
-    System :: cauder_types:system(),
+    Scheduler :: cauder_process:process_scheduler(),
+    System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
@@ -856,9 +861,9 @@ task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
 %%%=============================================================================
 
 -spec task_replay_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: non_neg_integer(),
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 task_replay_steps({Pid, Steps}, Sys0) ->
@@ -867,8 +872,8 @@ task_replay_steps({Pid, Steps}, Sys0) ->
     {success, {StepsDone, Steps}, Time, Sys1}.
 
 -spec task_replay_spawn(Pid, System) -> task_result(Pid) when
-    Pid :: cauder_types:proc_id(),
-    System :: cauder_types:system().
+    Pid :: cauder_process:proc_id(),
+    System :: cauder_system:system().
 
 task_replay_spawn(Pid, Sys0) ->
     {Time, Sys1} =
@@ -885,7 +890,7 @@ task_replay_spawn(Pid, Sys0) ->
 
 -spec task_replay_start(Node, System) -> task_result(Node) when
     Node :: node(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_replay_start(Node, Sys0) ->
     {Time, Sys1} =
@@ -902,7 +907,7 @@ task_replay_start(Node, Sys0) ->
 
 -spec task_replay_send(Uid, System) -> task_result(Uid) when
     Uid :: cauder_mailbox:uid(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_replay_send(Uid, Sys0) ->
     {Time, Sys1} =
@@ -919,7 +924,7 @@ task_replay_send(Uid, Sys0) ->
 
 -spec task_replay_receive(Uid, System) -> task_result(Uid) when
     Uid :: cauder_mailbox:uid(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_replay_receive(Uid, Sys0) ->
     {Time, Sys1} =
@@ -935,7 +940,7 @@ task_replay_receive(Uid, Sys0) ->
     {success, Uid, Time, Sys1}.
 
 -spec task_replay_full_log([], System) -> task_result() when
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_replay_full_log([], Sys0) ->
     {Time, Sys1} = timer:tc(fun() -> replay_full_log(Sys0) end),
@@ -945,9 +950,9 @@ task_replay_full_log([], Sys0) ->
 %%%=============================================================================
 
 -spec task_rollback_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Steps :: non_neg_integer(),
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 task_rollback_steps({Pid, Steps}, Sys0) ->
@@ -957,7 +962,7 @@ task_rollback_steps({Pid, Steps}, Sys0) ->
 
 -spec task_rollback_start(Node, System) -> task_result(Node) when
     Node :: node(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_rollback_start(Node, Sys0) ->
     {Time, Sys1} =
@@ -973,8 +978,8 @@ task_rollback_start(Node, Sys0) ->
     {success, Node, Time, Sys1}.
 
 -spec task_rollback_spawn(Pid, System) -> task_result(Pid) when
-    Pid :: cauder_types:proc_id(),
-    System :: cauder_types:system().
+    Pid :: cauder_process:proc_id(),
+    System :: cauder_system:system().
 
 task_rollback_spawn(Pid, Sys0) ->
     {Time, Sys1} =
@@ -991,7 +996,7 @@ task_rollback_spawn(Pid, Sys0) ->
 
 -spec task_rollback_send(Uid, System) -> task_result(Uid) when
     Uid :: cauder_mailbox:uid(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_rollback_send(Uid, Sys0) ->
     {Time, Sys1} =
@@ -1008,7 +1013,7 @@ task_rollback_send(Uid, Sys0) ->
 
 -spec task_rollback_receive(Uid, System) -> task_result(Uid) when
     Uid :: cauder_mailbox:uid(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_rollback_receive(Uid, Sys0) ->
     {Time, Sys1} =
@@ -1025,7 +1030,7 @@ task_rollback_receive(Uid, Sys0) ->
 
 -spec task_rollback_variable(Name, System) -> task_result(Name) when
     Name :: atom(),
-    System :: cauder_types:system().
+    System :: cauder_system:system().
 
 task_rollback_variable(Name, Sys0) ->
     {Time, Sys1} =
@@ -1045,11 +1050,11 @@ task_rollback_variable(Name, Sys0) ->
 -spec step(Semantics, Scheduler, System, Pid, Steps) -> {Completion, NewSystem, StepsDone} when
     Semantics :: cauder_types:semantics(),
     Scheduler :: cauder_types:message_scheduler(),
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
+    System :: cauder_system:system(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     Completion :: success | cancel,
-    NewSystem :: cauder_types:system(),
+    NewSystem :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 step(Sem, Scheduler, Sys, Pid, Steps) ->
@@ -1092,10 +1097,10 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
 
 -spec step_multiple(Semantics, Scheduler, System, Steps) -> {NewSystem, StepsDone} when
     Semantics :: cauder_types:semantics(),
-    Scheduler :: cauder_types:process_scheduler(),
-    System :: cauder_types:system(),
+    Scheduler :: cauder_process:process_scheduler(),
+    System :: cauder_system:system(),
     Steps :: pos_integer(),
-    NewSystem :: cauder_types:system(),
+    NewSystem :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
 step_multiple(Sem, Scheduler, Sys, Steps) ->
@@ -1149,11 +1154,11 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
     end.
 
 -spec replay_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
+    System :: cauder_system:system(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
-    NewSystem :: cauder_types:system(),
+    NewSystem :: cauder_system:system(),
     NewStepsDone :: non_neg_integer().
 
 replay_steps(Sys0, _, Steps, Steps) ->
@@ -1168,8 +1173,8 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
     end.
 
 -spec replay_full_log(System) -> NewSystem when
-    System :: cauder_types:system(),
-    NewSystem :: cauder_types:system().
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
 
 replay_full_log(Sys = #sys{traces = LMap}) ->
     case lists:filter(fun({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
@@ -1181,11 +1186,11 @@ replay_full_log(Sys = #sys{traces = LMap}) ->
     end.
 
 -spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
+    System :: cauder_system:system(),
+    Pid :: cauder_process:proc_id(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
-    NewSystem :: cauder_types:system(),
+    NewSystem :: cauder_system:system(),
     NewStepsDone :: non_neg_integer().
 
 rollback_steps(Sys0, _, Steps, Steps) ->

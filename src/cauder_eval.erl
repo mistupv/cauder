@@ -21,9 +21,9 @@
 %% @see is_reducible/2
 
 -spec eval_list(Bindings, Expressions, Stack) -> Result when
-    Bindings :: cauder_types:environment(),
-    Expressions :: [cauder_types:abstract_expr()],
-    Stack :: cauder_types:stack(),
+    Bindings :: cauder_process:environment(),
+    Expressions :: [cauder_syntax:abstract_expr()],
+    Stack :: cauder_process:stack(),
     Result :: cauder_types:result().
 
 eval_list(Bs, [E | Es], Stk) ->
@@ -50,9 +50,9 @@ eval_list(Bs, [E | Es], Stk) ->
 %% @see is_reducible/2
 
 -spec seq(Bindings, Expressions, Stack) -> Result when
-    Bindings :: cauder_types:environment(),
-    Expressions :: [cauder_types:abstract_expr()],
-    Stack :: cauder_types:stack(),
+    Bindings :: cauder_process:environment(),
+    Expressions :: [cauder_syntax:abstract_expr()],
+    Stack :: cauder_process:stack(),
     Result :: cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
@@ -91,9 +91,9 @@ seq(Bs, [E | Es], Stk) ->
 %% environment, the expression that resulted from the evaluation, and a label.
 
 -spec expr(Bindings, Expression, Stack) -> Result when
-    Bindings :: cauder_types:environment(),
-    Expression :: cauder_types:abstract_expr(),
-    Stack :: cauder_types:stack(),
+    Bindings :: cauder_process:environment(),
+    Expression :: cauder_syntax:abstract_expr(),
+    Stack :: cauder_process:stack(),
     Result :: cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
@@ -432,9 +432,9 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
 %%%=============================================================================
 
 -spec match_if(Bindings, Clauses) -> {match, Body} | nomatch when
-    Bindings :: cauder_types:environment(),
-    Clauses :: cauder_types:af_clause_seq(),
-    Body :: cauder_types:af_body().
+    Bindings :: cauder_process:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Body :: cauder_syntax:af_body().
 
 match_if(_, []) ->
     nomatch;
@@ -445,33 +445,33 @@ match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
     end.
 
 -spec match_case(Bindings, Clauses, Argument) -> {match, ScopeBindings, Body} | nomatch when
-    Bindings :: cauder_types:environment(),
-    Clauses :: cauder_types:af_clause_seq(),
-    Argument :: cauder_types:af_literal(),
-    ScopeBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body().
+    Bindings :: cauder_process:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Argument :: cauder_syntax:af_literal(),
+    ScopeBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body().
 
 match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 
 -spec match_fun(Clauses, Arguments) -> {match, ScopeBindings, Body} | nomatch when
-    Clauses :: cauder_types:af_clause_seq(),
-    Arguments :: [cauder_types:af_literal()],
-    ScopeBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body().
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Arguments :: [cauder_syntax:af_literal()],
+    ScopeBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body().
 
 match_fun(Cs, Vs) -> match_clause(#{}, Cs, Vs).
 
 -spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
 when
-    Clauses :: cauder_types:af_clause_seq(),
-    Bindings :: cauder_types:environment(),
-    RecipientPid :: cauder_types:proc_id(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Bindings :: cauder_process:environment(),
+    RecipientPid :: cauder_process:proc_id(),
     Mail :: cauder_mailbox:mailbox(),
     Sched :: cauder_types:message_scheduler(),
-    Sys :: cauder_types:system(),
-    NewBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body(),
+    Sys :: cauder_system:system(),
+    NewBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body(),
     Message :: cauder_types:message(),
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
@@ -532,23 +532,23 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
     end.
 
 -spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
-    Clauses :: cauder_types:af_clause_seq(),
-    Bindings :: cauder_types:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Bindings :: cauder_process:environment(),
     Message :: cauder_mailbox:message(),
-    NewBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body().
+    NewBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body().
 
 match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
 -spec match_rec_uid(Clauses, Bindings, Uid, Mail) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
 when
-    Clauses :: cauder_types:af_clause_seq(),
-    Bindings :: cauder_types:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Bindings :: cauder_process:environment(),
     Uid :: cauder_mailbox:uid(),
     Mail :: cauder_mailbox:mailbox(),
-    NewBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body(),
+    NewBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body(),
     Message :: cauder_types:message(),
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
@@ -565,11 +565,11 @@ match_rec_uid(Cs, Bs0, Uid, Mail0) ->
     end.
 
 -spec match_clause(Bindings, Clauses, Arguments) -> {match, ScopeBindings, Body} | nomatch when
-    Bindings :: cauder_types:environment(),
-    Clauses :: cauder_types:af_clause_seq(),
-    Arguments :: [cauder_types:af_literal()],
-    ScopeBindings :: cauder_types:environment(),
-    Body :: cauder_types:af_body().
+    Bindings :: cauder_process:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Arguments :: [cauder_syntax:af_literal()],
+    ScopeBindings :: cauder_process:environment(),
+    Body :: cauder_syntax:af_body().
 
 match_clause(_, [], _) ->
     nomatch;
@@ -585,9 +585,9 @@ match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
     end.
 
 -spec clause_line(Bindings, Clauses, Arguments) -> Line when
-    Bindings :: cauder_types:environment(),
-    Clauses :: cauder_types:af_clause_seq(),
-    Arguments :: [cauder_types:af_literal()],
+    Bindings :: cauder_process:environment(),
+    Clauses :: cauder_syntax:af_clause_seq(),
+    Arguments :: [cauder_syntax:af_literal()],
     Line :: non_neg_integer().
 
 clause_line(_, [], _) ->
@@ -607,10 +607,10 @@ clause_line(Bs0, [{'clause', Line, Ps, G, _} | Cs], Vs) ->
 %% The list of values should have no variables.
 
 -spec match(Bindings, Patterns, Arguments) -> {match, NewBindings} | nomatch when
-    Bindings :: cauder_types:environment(),
-    Patterns :: [cauder_types:af_pattern()],
-    Arguments :: [cauder_types:af_literal()],
-    NewBindings :: cauder_types:environment().
+    Bindings :: cauder_process:environment(),
+    Patterns :: [cauder_syntax:af_pattern()],
+    Arguments :: [cauder_syntax:af_literal()],
+    NewBindings :: cauder_process:environment().
 
 match(Bs, [], []) ->
     {match, Bs};
@@ -624,10 +624,10 @@ match(_Bs, _Ps, _Vs) ->
 
 % TODO Organize arguments to be consistent
 -spec match1(Pattern, Term, Bindings) -> {match, NewBindings} | no_return() when
-    Pattern :: cauder_types:af_pattern(),
+    Pattern :: cauder_syntax:af_pattern(),
     Term :: term(),
-    Bindings :: cauder_types:environment(),
-    NewBindings :: cauder_types:environment().
+    Bindings :: cauder_process:environment(),
+    NewBindings :: cauder_process:environment().
 
 match1({value, _, V}, V, Bs) ->
     {match, Bs};
@@ -652,11 +652,11 @@ match1(_, _, _) ->
     throw(nomatch).
 
 -spec match_tuple(Values, Tuple, Index, Bindings) -> {match, NewBindings} | no_return() when
-    Values :: [cauder_types:af_literal()],
+    Values :: [cauder_syntax:af_literal()],
     Tuple :: tuple(),
     Index :: pos_integer(),
-    Bindings :: cauder_types:environment(),
-    NewBindings :: cauder_types:environment().
+    Bindings :: cauder_process:environment(),
+    NewBindings :: cauder_process:environment().
 
 match_tuple([], _, _, Bs) ->
     {match, Bs};
@@ -665,9 +665,9 @@ match_tuple([E | Es], Tuple, I, Bs0) ->
     match_tuple(Es, Tuple, I + 1, Bs).
 
 -spec eval_guard_seq(Bindings, Guards) -> Boolean when
-    Bindings :: cauder_types:environment(),
-    Guards :: cauder_types:af_guard_seq(),
-    Boolean :: cauder_types:af_boolean().
+    Bindings :: cauder_process:environment(),
+    Guards :: cauder_syntax:af_guard_seq(),
+    Boolean :: cauder_syntax:af_boolean().
 
 eval_guard_seq(_, []) ->
     abstract(true);
@@ -677,17 +677,17 @@ eval_guard_seq(Bs, Gs) when is_list(Gs) ->
     abstract(lists:any(fun(G) -> concrete(eval_guard(Bs, G)) end, Gs)).
 
 -spec eval_guard(Bindings, Guard) -> Boolean when
-    Bindings :: cauder_types:environment(),
-    Guard :: cauder_types:af_guard(),
-    Boolean :: cauder_types:af_boolean().
+    Bindings :: cauder_process:environment(),
+    Guard :: cauder_syntax:af_guard(),
+    Boolean :: cauder_syntax:af_boolean().
 
 eval_guard(Bs, G) when is_list(G) ->
     abstract(lists:all(fun(Gt) -> concrete(eval_guard_test(Bs, Gt)) end, G)).
 
 -spec eval_guard_test(Bindings, GuardTest) -> GuardTest | Boolean when
-    Bindings :: cauder_types:environment(),
-    GuardTest :: cauder_types:af_guard_test(),
-    Boolean :: cauder_types:af_boolean().
+    Bindings :: cauder_process:environment(),
+    GuardTest :: cauder_syntax:af_guard_test(),
+    Boolean :: cauder_syntax:af_boolean().
 
 eval_guard_test(Bs, Gt) ->
     case is_reducible(Gt, Bs) of
@@ -705,7 +705,7 @@ eval_guard_test(Bs, Gt) ->
 
 -spec abstract(Term) -> Literal when
     Term :: term(),
-    Literal :: cauder_types:af_literal().
+    Literal :: cauder_syntax:af_literal().
 
 abstract(Value) -> {value, 0, Value}.
 
@@ -714,7 +714,7 @@ abstract(Value) -> {value, 0, Value}.
 %% represents.
 
 -spec concrete(Literal) -> Term when
-    Literal :: cauder_types:af_literal(),
+    Literal :: cauder_syntax:af_literal(),
     Term :: term().
 
 concrete({value, _, Value}) -> Value;
@@ -725,8 +725,8 @@ concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 %% reduced any further or not, given an environment.
 
 -spec is_reducible(Expression | [Expression], Bindings) -> IsReducible when
-    Expression :: cauder_types:abstract_expr(),
-    Bindings :: cauder_types:environment(),
+    Expression :: cauder_syntax:abstract_expr(),
+    Bindings :: cauder_process:environment(),
     IsReducible :: boolean().
 
 is_reducible([], _) -> false;
@@ -742,7 +742,7 @@ is_reducible(E, _) when is_tuple(E) -> true.
 %% @doc Checks if the given abstract expression is a literal value.
 
 -spec is_value(Expression | [Expression]) -> IsValue when
-    Expression :: cauder_types:abstract_expr(),
+    Expression :: cauder_syntax:abstract_expr(),
     IsValue :: boolean().
 
 is_value([]) -> true;
@@ -756,7 +756,7 @@ is_value(E) when is_tuple(E) -> false.
 %% @doc Returns the current module according to the stack.
 
 -spec current_module(Stack) -> {ok, Module} | error when
-    Stack :: cauder_types:stack(),
+    Stack :: cauder_process:stack(),
     Module :: module().
 
 current_module([{{M, _, _}, _, _, _} | _]) -> {ok, M};
@@ -764,9 +764,9 @@ current_module([_ | Stk]) -> current_module(Stk);
 current_module([]) -> error.
 
 -spec eval_and_update({Bindings, Expression | [Expression], Stack}, {Index, Tuple}) -> Result when
-    Bindings :: cauder_types:environment(),
-    Expression :: cauder_types:abstract_expr(),
-    Stack :: cauder_types:stack(),
+    Bindings :: cauder_process:environment(),
+    Expression :: cauder_syntax:abstract_expr(),
+    Stack :: cauder_process:stack(),
     Index :: pos_integer(),
     Tuple :: tuple(),
     Result :: cauder_types:result().

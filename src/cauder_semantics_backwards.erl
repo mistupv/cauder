@@ -19,9 +19,9 @@
 %% the given System.
 
 -spec step(System, Pid) -> NewSystem when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
-    NewSystem :: cauder_types:system().
+    System :: cauder_system:system(),
+    Pid :: cauder_process:proc_id(),
+    NewSystem :: cauder_system:system().
 
 step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid) ->
     {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
@@ -160,7 +160,7 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
 %% @doc Returns the backwards evaluation options for the given System.
 
 -spec options(System) -> Options when
-    System :: cauder_types:system(),
+    System :: cauder_system:system(),
     Options :: [cauder_types:option()].
 
 options(#sys{procs = PMap} = Sys) ->
@@ -184,8 +184,8 @@ options(#sys{procs = PMap} = Sys) ->
 %% System.
 
 -spec process_option(System, Process) -> Option when
-    System :: cauder_types:system(),
-    Process :: cauder_types:process(),
+    System :: cauder_system:system(),
+    Process :: cauder_process:process(),
     Option :: cauder_types:option() | ?NULL_OPT.
 
 process_option(_, #proc{hist = []}) ->

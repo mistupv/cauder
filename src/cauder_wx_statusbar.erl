@@ -228,12 +228,12 @@ replay_steps_finish({Done, Total}, Time) ->
 %%%=============================================================================
 
 -spec replay_spawn_start(Pid) -> ok when
-    Pid :: cauder_types:proc_id().
+    Pid :: cauder_process:proc_id().
 
 replay_spawn_start(Pid) -> set_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
 
 -spec replay_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Time :: non_neg_integer().
 
 replay_spawn_finish(Pid, Time) ->
@@ -332,12 +332,12 @@ rollback_steps_finish({Done, Total}, Time) ->
 %%%=============================================================================
 
 -spec rollback_spawn_start(Pid) -> ok when
-    Pid :: cauder_types:proc_id().
+    Pid :: cauder_process:proc_id().
 
 rollback_spawn_start(Pid) -> set_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
 
 -spec rollback_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_types:proc_id(),
+    Pid :: cauder_process:proc_id(),
     Time :: non_neg_integer().
 
 rollback_spawn_finish(Pid, Time) ->

@@ -9,10 +9,13 @@
 -include("cauder.hrl").
 
 -record(mailbox, {
-    index = maps:new() :: #{Uid :: uid() => {Src :: cauder_types:proc_id(), Dest :: cauder_types:proc_id()}},
+    index = maps:new() :: #{Uid :: uid() => {Src :: cauder_process:proc_id(), Dest :: cauder_process:proc_id()}},
     map = maps:new() :: #{
         Dest ::
-            cauder_types:proc_id() => orddict:orddict(Src :: cauder_types:proc_id(), MsgQueue :: queue:queue(message()))
+            cauder_process:proc_id() => orddict:orddict(
+                Src :: cauder_process:proc_id(),
+                MsgQueue :: queue:queue(message())
+            )
     }
 }).
 
@@ -123,7 +126,7 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
 %% is the given `Destination'.
 
 -spec pid_get(Destination, Mailbox) -> MessageQueues when
-    Destination :: cauder_types:proc_id(),
+    Destination :: cauder_process:proc_id(),
     Mailbox :: mailbox(),
     MessageQueues :: [queue:queue(message())].
 
