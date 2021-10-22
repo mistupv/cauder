@@ -81,7 +81,7 @@
     % History
     hist = [] :: cauder_process:history(),
     % Call stack
-    stack = [] :: cauder_process:stack(),
+    stack = cauder_stack:new() :: cauder_stack:stack(),
     % Environment
     env = maps:new() :: cauder_process:environment(),
     % List of expressions
@@ -127,7 +127,7 @@
 -record(result, {
     env :: cauder_process:environment(),
     exprs :: [cauder_syntax:abstract_expr()],
-    stack :: cauder_process:stack(),
+    stack :: cauder_stack:stack(),
     label = tau :: cauder_types:label()
 }).
 

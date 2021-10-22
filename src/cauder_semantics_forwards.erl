@@ -250,8 +250,8 @@ expression_option(E, P, Mode, Sys) when not is_list(E) ->
 expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Mode, Sys) ->
     case is_reducible(E0, Bs) of
         false ->
-            case {Es0, Stk} of
-                {[], []} -> ?NOT_EXP;
+            case {Es0, cauder_stack:is_empty(Stk)} of
+                {[], true} -> ?NOT_EXP;
                 _ -> ?RULE_SEQ
             end;
         true ->

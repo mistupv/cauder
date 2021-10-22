@@ -23,7 +23,7 @@
 -spec eval_list(Bindings, Expressions, Stack) -> Result when
     Bindings :: cauder_process:environment(),
     Expressions :: [cauder_syntax:abstract_expr()],
-    Stack :: cauder_process:stack(),
+    Stack :: cauder_stack:stack(),
     Result :: cauder_types:result().
 
 eval_list(Bs, [E | Es], Stk) ->
@@ -52,7 +52,7 @@ eval_list(Bs, [E | Es], Stk) ->
 -spec seq(Bindings, Expressions, Stack) -> Result when
     Bindings :: cauder_process:environment(),
     Expressions :: [cauder_syntax:abstract_expr()],
-    Stack :: cauder_process:stack(),
+    Stack :: cauder_stack:stack(),
     Result :: cauder_types:result().
 
 seq(Bs, [E | Es], Stk) ->
@@ -61,13 +61,17 @@ seq(Bs, [E | Es], Stk) ->
             case Es of
                 [] ->
                     Line = element(2, E),
-                    case Stk of
-                        % Call entry
-                        [{{_M, _F, _A}, Bs1, Es1, Var} | Stk1] ->
+                    {Entry, Stk1} = cauder_stack:pop(Stk),
+                    case cauder_stack:type(Entry) of
+                        'function' ->
+                            Bs1 = cauder_stack:function_env(Entry),
+                            Es1 = cauder_stack:function_expr(Entry),
+                            Var = cauder_stack:function_var(Entry),
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
                             #result{env = Bs1, exprs = Es2, stack = Stk1};
-                        % Block entry
-                        [{_Type, Es1, Var} | Stk1] ->
+                        'block' ->
+                            Es1 = cauder_stack:block_expr(Entry),
+                            Var = cauder_stack:block_var(Entry),
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
                             #result{env = Bs, exprs = Es2, stack = Stk1}
                     end;
@@ -75,14 +79,35 @@ seq(Bs, [E | Es], Stk) ->
                     #result{env = Bs, exprs = Es, stack = Stk}
             end;
         true ->
-            #result{env = Bs1, exprs = Es1, stack = Stk1, label = L} = expr(Bs, E, Stk),
-            case Stk1 of
-                [{{M, F, A}, Bs2, Es2, Var} | Stk] ->
-                    #result{env = Bs2, exprs = Es2, stack = [{{M, F, A}, Bs1, Es1 ++ Es, Var} | Stk], label = L};
-                [{Type, Es2, Var} | Stk] ->
-                    #result{env = Bs1, exprs = Es2, stack = [{Type, Es1 ++ Es, Var} | Stk], label = L};
+            #result{env = Bs1, exprs = Es1, stack = Stk1} = Result = expr(Bs, E, Stk),
+            case cauder_stack:pop(Stk1) of
+                {Entry, Stk} ->
+                    case cauder_stack:type(Entry) of
+                        'function' ->
+                            MFA = cauder_stack:function_mfa(Entry),
+                            Bs2 = cauder_stack:function_env(Entry),
+                            Es2 = cauder_stack:function_expr(Entry),
+                            Var = cauder_stack:function_var(Entry),
+                            Entry1 = cauder_stack:function(MFA, Bs1, Es1 ++ Es, Var),
+                            Result#result{
+                                env = Bs2,
+                                exprs = Es2,
+                                stack = cauder_stack:push(Entry1, Stk)
+                            };
+                        'block' ->
+                            Type = cauder_stack:block_type(Entry),
+                            Es2 = cauder_stack:block_expr(Entry),
+                            Var = cauder_stack:block_var(Entry),
+                            Entry1 = cauder_stack:block(Type, Es1 ++ Es, Var),
+                            Result#result{
+                                exprs = Es2,
+                                stack = cauder_stack:push(Entry1, Stk)
+                            }
+                    end;
                 _ ->
-                    #result{env = Bs1, exprs = Es1 ++ Es, stack = Stk1, label = L}
+                    Result#result{
+                        exprs = Es1 ++ Es
+                    }
             end
     end.
 
@@ -93,7 +118,7 @@ seq(Bs, [E | Es], Stk) ->
 -spec expr(Bindings, Expression, Stack) -> Result when
     Bindings :: cauder_process:environment(),
     Expression :: cauder_syntax:abstract_expr(),
-    Stack :: cauder_process:stack(),
+    Stack :: cauder_stack:stack(),
     Result :: cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
@@ -132,7 +157,8 @@ expr(Bs, {'if', Line, Cs}, Stk0) ->
     case match_if(Bs, Cs) of
         {match, Body} ->
             Var = cauder_utils:temp_variable(Line),
-            Stk = [{'if', Body, Var} | Stk0],
+            Entry = cauder_stack:block('if', Body, Var),
+            Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs, exprs = [Var], stack = Stk};
         nomatch ->
             error(if_clause)
@@ -145,7 +171,8 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
             case match_case(Bs0, Cs, A) of
                 {match, Bs, Body} ->
                     Var = cauder_utils:temp_variable(Line),
-                    Stk = [{'case', Body, Var} | Stk0],
+                    Entry = cauder_stack:block('case', Body, Var),
+                    Stk = cauder_stack:push(Entry, Stk0),
                     #result{env = Bs, exprs = [Var], stack = Stk};
                 nomatch ->
                     error({case_clause, concrete(A)})
@@ -156,12 +183,13 @@ expr(Bs, {'receive', Line, Cs}, Stk0) ->
     % TODO One of these variables is not necessary
     Var = cauder_utils:temp_variable(Line),
     VarBody = cauder_utils:temp_variable(Line),
-    Stk = [{'receive', [VarBody], Var} | Stk0],
+    Entry = cauder_stack:block('receive', [VarBody], Var),
+    Stk = cauder_stack:push(Entry, Stk0),
     #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
 % TODO Support fun() as entry point argument?
 % TODO Handle calls to interpreted fun() from uninterpreted module
 expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
-    {ok, M} = current_module(Stk0),
+    {ok, M} = cauder_stack:current_module(Stk0),
     Arity = length(element(3, hd(Cs))),
     Info = {{M, Name}, Bs, Cs},
     Fun =
@@ -300,12 +328,13 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
         true ->
             eval_and_update({Bs0, As, Stk0}, {4, E});
         false ->
-            {ok, M} = current_module(Stk0),
+            {ok, M} = cauder_stack:current_module(Stk0),
             A = length(As),
             {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
-            Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
+            Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+            Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs0, exprs = [Var], stack = Stk}
     end;
 expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
@@ -346,7 +375,9 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
                     {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
                     {match, Bs2, Body} = match_fun(Cs, As),
                     Var = cauder_utils:temp_variable(Line),
-                    Stk = [{{M, F, A}, cauder_utils:merge_bindings(Bs1, Bs2), Body, Var} | Stk0],
+                    Bs = cauder_utils:merge_bindings(Bs1, Bs2),
+                    Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+                    Stk = cauder_stack:push(Entry, Stk0),
                     #result{env = Bs0, exprs = [Var], stack = Stk}
             end
     end;
@@ -415,14 +446,15 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
     case cauder_utils:fundef_lookup({M, F, A}) of
         {Exported, Cs} ->
             % Check if function is accessible
-            case current_module(Stk0) of
+            case cauder_stack:current_module(Stk0) of
                 {ok, M} -> ok;
                 {ok, _} -> true = Exported;
                 error when Stk0 =:= [] -> ok
             end,
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
-            Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
+            Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+            Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs0, exprs = [Var], stack = Stk};
         error ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
@@ -692,7 +724,7 @@ eval_guard(Bs, G) when is_list(G) ->
 eval_guard_test(Bs, Gt) ->
     case is_reducible(Gt, Bs) of
         true ->
-            #result{exprs = [Gt1]} = expr(Bs, Gt, []),
+            #result{exprs = [Gt1]} = expr(Bs, Gt, cauder_stack:new()),
             eval_guard_test(Bs, Gt1);
         false ->
             Gt
@@ -752,21 +784,10 @@ is_value({cons, _, H, T}) -> is_value(H) andalso is_value(T);
 is_value({tuple, _, Es}) -> is_value(Es);
 is_value(E) when is_tuple(E) -> false.
 
-%%------------------------------------------------------------------------------
-%% @doc Returns the current module according to the stack.
-
--spec current_module(Stack) -> {ok, Module} | error when
-    Stack :: cauder_process:stack(),
-    Module :: module().
-
-current_module([{{M, _, _}, _, _, _} | _]) -> {ok, M};
-current_module([_ | Stk]) -> current_module(Stk);
-current_module([]) -> error.
-
 -spec eval_and_update({Bindings, Expression | [Expression], Stack}, {Index, Tuple}) -> Result when
     Bindings :: cauder_process:environment(),
     Expression :: cauder_syntax:abstract_expr(),
-    Stack :: cauder_process:stack(),
+    Stack :: cauder_stack:stack(),
     Index :: pos_integer(),
     Tuple :: tuple(),
     Result :: cauder_types:result().

@@ -227,7 +227,7 @@ update_stack(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
     wxListBox:freeze(StackControl),
     wxListBox:clear(StackControl),
     #proc{stack = Stk} = maps:get(Pid, PMap),
-    Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
+    Entries = lists:map(fun cauder_pp:stack_entry/1, cauder_stack:to_list(Stk)),
     lists:foreach(fun(Entry) -> wxListBox:append(StackControl, Entry) end, Entries),
     wxListBox:thaw(StackControl).
 

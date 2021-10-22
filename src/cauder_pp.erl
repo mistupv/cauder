@@ -63,12 +63,19 @@ history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
 
 %%%=============================================================================
 
--spec stack_entry(StackEntry) -> String when
-    StackEntry :: cauder_process:stack_entry(),
+-spec stack_entry(Entry) -> String when
+    Entry :: cauder_stack:stack_entry(),
     String :: string().
 
-stack_entry({{M, F, A}, _Bs, _Es, _Var}) -> io_lib:format("~s:~s/~b", [M, F, A]);
-stack_entry({Type, _Es, _Var}) -> atom_to_list(Type).
+stack_entry(Entry) ->
+    case cauder_stack:type(Entry) of
+        'function' ->
+            {M, F, A} = cauder_stack:function_mfa(Entry),
+            io_lib:format("~s:~s/~b", [M, F, A]);
+        'block' ->
+            Type = cauder_stack:block_type(Entry),
+            atom_to_list(Type)
+    end.
 
 %%%=============================================================================
 

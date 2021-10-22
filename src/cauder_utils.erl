@@ -645,7 +645,7 @@ find_last_message_uid(Terms) ->
     Process :: cauder_process:process(),
     IsDead :: boolean().
 
-is_dead(#proc{exprs = [{value, _, _}], stack = []}) -> true;
+is_dead(#proc{exprs = [{value, _, _}], stack = Stk}) -> cauder_stack:is_empty(Stk);
 is_dead(#proc{}) -> false.
 
 %%------------------------------------------------------------------------------
