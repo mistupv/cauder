@@ -14,7 +14,7 @@
 
 -record(entry_function, {
     mfa :: mfa(),
-    env :: cauder_process:environment(),
+    env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     var :: cauder_syntax:af_variable()
 }).
@@ -115,7 +115,7 @@ block_var(#entry_block{var = Var}) -> Var.
 
 -spec function(MFA, Bindings, Expressions, Variable) -> Entry when
     MFA :: mfa(),
-    Bindings :: cauder_process:environment(),
+    Bindings :: cauder_bindings:bindings(),
     Expressions :: [cauder_syntax:abstract_expr()],
     Variable :: cauder_syntax:af_variable(),
     Entry :: cauder_stack:entry_function().
@@ -136,7 +136,7 @@ function_mfa(#entry_function{mfa = MFA}) -> MFA.
 
 -spec function_env(Entry) -> Bindings when
     Entry :: cauder_stack:entry_function(),
-    Bindings :: cauder_process:environment().
+    Bindings :: cauder_bindings:bindings().
 
 function_env(#entry_function{env = Bs}) -> Bs.
 

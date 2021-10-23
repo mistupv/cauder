@@ -625,9 +625,10 @@ handle_call({user, _}, _From, #state{task = {_, _, _}} = State) ->
     {reply, busy, State};
 %%%=============================================================================
 
-handle_call({user, {set, {binding, Pid}, {Key, NewValue}}}, _From, #state{system = Sys0} = State) ->
-    #sys{procs = #{Pid := #proc{env = Bs} = P} = Ps} = Sys0,
-    Sys1 = Sys0#sys{procs = Ps#{Pid := P#proc{env = Bs#{Key => NewValue}}}},
+handle_call({user, {set, {binding, Pid}, {Name, Value}}}, _From, #state{system = Sys0} = State) ->
+    #sys{procs = #{Pid := #proc{env = Bs0} = P} = Ps} = Sys0,
+    Bs1 = cauder_bindings:add(Name, Value, Bs0),
+    Sys1 = Sys0#sys{procs = Ps#{Pid := P#proc{env = Bs1}}},
     {reply, ok, State#state{system = Sys1}};
 %%%=============================================================================
 

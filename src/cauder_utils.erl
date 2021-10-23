@@ -20,7 +20,6 @@
     find_process_with_variable/2,
     process_node/2
 ]).
--export([merge_bindings/2]).
 -export([check_node_name/1]).
 -export([string_to_expressions/1]).
 -export([filter_options/2]).
@@ -295,27 +294,7 @@ find_process_with_receive(PMap, Uid) ->
     Process :: cauder_process:process().
 
 find_process_with_variable(PMap, Name) ->
-    lists:search(fun(#proc{env = Bs}) -> maps:is_key(Name, Bs) end, maps:values(PMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Merges the given collections of bindings into a new one.
-%% If the same variable is defined in both collections but with different
-%% values, then an exception is thrown.
-
--spec merge_bindings(Bindings1, Bindings2) -> Bindings3 when
-    Bindings1 :: cauder_process:environment(),
-    Bindings2 :: cauder_process:environment(),
-    Bindings3 :: cauder_process:environment().
-
-merge_bindings(Bs1, Bs2) ->
-    maps:fold(
-        fun
-            (K, V, Bs) when not is_map_key(K, Bs) -> Bs#{K => V};
-            (K, V, Bs) when map_get(K, Bs) =:= V -> Bs
-        end,
-        Bs1,
-        Bs2
-    ).
+    lists:search(fun(#proc{env = Bs}) -> cauder_bindings:is_bound(Name, Bs) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Given an atom that represents a node checks that the format is correct.

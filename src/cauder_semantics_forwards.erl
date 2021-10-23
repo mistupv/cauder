@@ -318,7 +318,13 @@ check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{traces = LMap, nod
         {found, {nodes, {LogNodes}}, _} when LogNodes =:= SNodes -> ?RULE_NODES;
         _ -> ?NOT_EXP
     end;
-check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{traces = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
+check_reducibility(
+    [Cs | []],
+    #proc{pid = Pid, env = Bs},
+    _,
+    #sys{traces = LMap, mail = Mail} = Sys,
+    {'receive', Mode}
+) ->
     IsMatch =
         case Mode of
             normal ->
@@ -764,7 +770,7 @@ fwd_rec(
     P = P0#proc{
         hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist],
         stack = Stk,
-        env = cauder_utils:merge_bindings(Bs, Bs1),
+        env = cauder_bindings:merge(Bs, Bs1),
         exprs = Es1
     },
     T = #x_trace{

@@ -82,8 +82,7 @@
     hist = [] :: cauder_process:history(),
     % Call stack
     stack = cauder_stack:new() :: cauder_stack:stack(),
-    % Environment
-    env = maps:new() :: cauder_process:environment(),
+    env = cauder_bindings:new() :: cauder_bindings:bindings(),
     % List of expressions
     exprs :: [cauder_syntax:abstract_expr()],
     % The entry point function for this process
@@ -125,7 +124,7 @@
 
 % Evaluation result
 -record(result, {
-    env :: cauder_process:environment(),
+    env :: cauder_bindings:bindings(),
     exprs :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     label = tau :: cauder_types:label()

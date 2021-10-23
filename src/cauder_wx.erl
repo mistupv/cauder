@@ -460,10 +460,10 @@ handle_event(
 ) ->
     #proc{env = Bs} = maps:get(Pid, PMap),
     IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
-    Key = maps:get(Idx, IdxToKey),
-    Value = maps:get(Key, Bs),
-    case cauder_wx_dialog:edit_binding(Frame, {Key, Value}) of
-        {Key, NewValue} -> ok = cauder:set_binding(Pid, {Key, NewValue});
+    Name = maps:get(Idx, IdxToKey),
+    Value = cauder_bindings:get(Name, Bs),
+    case cauder_wx_dialog:edit_binding(Frame, {Name, Value}) of
+        {Name, NewValue} -> ok = cauder:set_binding(Pid, {Name, NewValue});
         cancel -> ok
     end,
     {noreply, refresh(State, State#wx_state{system = cauder:get_system()})};

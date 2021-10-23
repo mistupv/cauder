@@ -140,17 +140,17 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
     wxListCtrl:deleteAllItems(BindingsControl),
     #proc{env = Bs} = maps:get(Pid, PMap),
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
-    IdxToKey =
-        maps:fold(
-            fun(Key, Val, {Idx, IdxToKey}) ->
+    {_, IdxToKey} =
+        lists:foldl(
+            fun({Name, Value}, {Idx, IdxToKey}) ->
                 wxListCtrl:insertItem(BindingsControl, Idx, ""),
                 wxListCtrl:setItemFont(BindingsControl, Idx, Font),
-                wxListCtrl:setItem(BindingsControl, Idx, 0, atom_to_list(Key)),
-                wxListCtrl:setItem(BindingsControl, Idx, 1, io_lib:format("~p", [Val])),
-                {Idx + 1, IdxToKey#{Idx => Key}}
+                wxListCtrl:setItem(BindingsControl, Idx, 0, atom_to_list(Name)),
+                wxListCtrl:setItem(BindingsControl, Idx, 1, io_lib:format("~p", [Value])),
+                {Idx + 1, IdxToKey#{Idx => Name}}
             end,
             {0, #{}},
-            Bs
+            cauder_bindings:to_list(Bs)
         ),
     ets:insert(?GUI_DB, {?BINDINGS_IDX_TO_KEY, IdxToKey}),
     wxListCtrl:thaw(BindingsControl);
@@ -160,22 +160,22 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
     BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
     wxListCtrl:freeze(BindingsControl),
     wxListCtrl:deleteAllItems(BindingsControl),
-    #proc{env = Bs0, exprs = Es} = maps:get(Pid, PMap),
+    #proc{env = Bs, exprs = Es} = maps:get(Pid, PMap),
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     Es1 = cauder_syntax:to_abstract_expr(Es),
-    Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
-    Bs1 = maps:with(sets:to_list(Keys), Bs0),
-    IdxToKey =
-        maps:fold(
-            fun(Key, Val, {Idx, IdxToKey}) ->
+    Names = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
+    {_, IdxToKey} =
+        sets:fold(
+            fun(Name, {Idx, IdxToKey}) ->
+                Value = cauder_bindings:get(Name, Bs),
                 wxListCtrl:insertItem(BindingsControl, Idx, ""),
                 wxListCtrl:setItemFont(BindingsControl, Idx, Font),
-                wxListCtrl:setItem(BindingsControl, Idx, 0, atom_to_list(Key)),
-                wxListCtrl:setItem(BindingsControl, Idx, 1, io_lib:format("~p", [Val])),
-                {Idx + 1, IdxToKey#{Idx => Key}}
+                wxListCtrl:setItem(BindingsControl, Idx, 0, atom_to_list(Name)),
+                wxListCtrl:setItem(BindingsControl, Idx, 1, io_lib:format("~p", [Value])),
+                {Idx + 1, IdxToKey#{Idx => Name}}
             end,
             {0, #{}},
-            Bs1
+            Names
         ),
     ets:insert(?GUI_DB, {?BINDINGS_IDX_TO_KEY, IdxToKey}),
     wxListCtrl:thaw(BindingsControl).

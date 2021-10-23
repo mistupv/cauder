@@ -382,7 +382,7 @@ rollback_after_receive(Sys0, Pid, Uid) ->
 
 rollback_until_variable(#sys{procs = PMap} = Sys0, Pid, Name) ->
     #proc{env = Bs} = maps:get(Pid, PMap),
-    case maps:is_key(Name, Bs) of
+    case cauder_bindings:is_bound(Name, Bs) of
         true ->
             Sys0;
         false ->
