@@ -12,13 +12,13 @@
 
 -export_type([stack/0]).
 
--record(entry_function, {
+-record(function, {
     mfa :: mfa(),
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     var :: cauder_syntax:af_variable()
 }).
--record(entry_block, {
+-record(block, {
     type :: cauder_stack:block_type(),
     expr :: [cauder_syntax:abstract_expr()],
     var :: cauder_syntax:af_variable()
@@ -29,8 +29,8 @@
     cauder_stack:entry_function()
     | cauder_stack:entry_block().
 
--type entry_function() :: #entry_function{}.
--type entry_block() :: #entry_block{}.
+-type entry_function() :: #function{}.
+-type entry_block() :: #block{}.
 
 -type entry_type() :: 'function' | 'block'.
 -type block_type() :: 'if' | 'case' | 'receive'.
@@ -79,8 +79,8 @@ to_list(Stack) -> Stack.
     Entry :: cauder_stack:stack_entry(),
     Type :: cauder_stack:entry_type().
 
-type(#entry_function{}) -> 'function';
-type(#entry_block{}) -> 'block'.
+type(#function{}) -> 'function';
+type(#block{}) -> 'block'.
 
 %%%=============================================================================
 
@@ -91,25 +91,25 @@ type(#entry_block{}) -> 'block'.
     Entry :: cauder_stack:entry_block().
 
 block(Type, Expr, Var) ->
-    #entry_block{type = Type, expr = Expr, var = Var}.
+    #block{type = Type, expr = Expr, var = Var}.
 
 -spec block_type(Entry) -> Type when
     Entry :: cauder_stack:entry_block(),
     Type :: cauder_stack:block_type().
 
-block_type(#entry_block{type = Type}) -> Type.
+block_type(#block{type = Type}) -> Type.
 
 -spec block_expr(Entry) -> Expressions when
     Entry :: cauder_stack:entry_block(),
     Expressions :: [cauder_syntax:abstract_expr()].
 
-block_expr(#entry_block{expr = Expr}) -> Expr.
+block_expr(#block{expr = Expr}) -> Expr.
 
 -spec block_var(Entry) -> Variable when
     Entry :: cauder_stack:entry_block(),
     Variable :: cauder_syntax:af_variable().
 
-block_var(#entry_block{var = Var}) -> Var.
+block_var(#block{var = Var}) -> Var.
 
 %%%=============================================================================
 
@@ -121,7 +121,7 @@ block_var(#entry_block{var = Var}) -> Var.
     Entry :: cauder_stack:entry_function().
 
 function(MFA, Bs, Expr, Var) ->
-    #entry_function{
+    #function{
         mfa = MFA,
         env = Bs,
         expr = Expr,
@@ -132,25 +132,25 @@ function(MFA, Bs, Expr, Var) ->
     Entry :: cauder_stack:entry_function(),
     MFA :: mfa().
 
-function_mfa(#entry_function{mfa = MFA}) -> MFA.
+function_mfa(#function{mfa = MFA}) -> MFA.
 
 -spec function_env(Entry) -> Bindings when
     Entry :: cauder_stack:entry_function(),
     Bindings :: cauder_bindings:bindings().
 
-function_env(#entry_function{env = Bs}) -> Bs.
+function_env(#function{env = Bs}) -> Bs.
 
 -spec function_expr(Entry) -> Expressions when
     Entry :: cauder_stack:entry_function(),
     Expressions :: [cauder_syntax:abstract_expr()].
 
-function_expr(#entry_function{expr = Expr}) -> Expr.
+function_expr(#function{expr = Expr}) -> Expr.
 
 -spec function_var(Entry) -> Variable when
     Entry :: cauder_stack:entry_function(),
     Variable :: cauder_syntax:af_variable().
 
-function_var(#entry_function{var = Var}) -> Var.
+function_var(#function{var = Var}) -> Var.
 
 %%%=============================================================================
 
@@ -162,6 +162,6 @@ function_var(#entry_function{var = Var}) -> Var.
     Stack :: cauder_stack:stack(),
     Module :: module().
 
-current_module([#entry_function{mfa = {M, _, _}} | _]) -> {ok, M};
+current_module([#function{mfa = {M, _, _}} | _]) -> {ok, M};
 current_module([_ | Stk]) -> current_module(Stk);
 current_module([]) -> error.
