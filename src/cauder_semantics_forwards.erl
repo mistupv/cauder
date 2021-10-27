@@ -398,7 +398,7 @@ rule_send(
         env = Bs1,
         exprs = Es1
     },
-    Trace1 = add_to_trace(Pid, {send, Uid, Dest, Val}, Trace0),
+    Trace1 = add_to_trace(Pid, {send, Uid, Dest}, Trace0),
 
     Sys#sys{
         mail = cauder_mailbox:add(M, Mail0),
@@ -488,15 +488,6 @@ rule_receive(
 
     #proc{hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys1#sys.procs),
 
-    Constraints = lists:map(
-        fun(Clause) ->
-            Patterns = erl_syntax:clause_patterns(Clause),
-            Guard = erl_syntax:clause_guard(Clause),
-            {lists:map(fun erl_syntax:revert/1, Patterns), erl_syntax:revert(Guard)}
-        end,
-        Cs
-    ),
-
     P1 = P0#proc{
         hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0],
         stack = Stk1,
@@ -504,7 +495,7 @@ rule_receive(
         exprs = Es2,
         mail = LocalMail1
     },
-    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid, Constraints}, Trace0),
+    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid}, Trace0),
 
     Sys1#sys{
         procs = PMap#{Pid := P1},

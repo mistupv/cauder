@@ -148,12 +148,12 @@ handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, 
     {reply, ok, State1};
 %% ========== 'send' trace messages ========== %%
 %% Send message
-handle_call({trace, Pid, send, {send, Stamp, Dst, Msg}, _}, _From, State) ->
-    State1 = add_to_trace(Pid, {send, Stamp, Dst, Msg}, State),
+handle_call({trace, Pid, send, {send, Stamp, Dst, _Msg}, _}, _From, State) ->
+    State1 = add_to_trace(Pid, {send, Stamp, Dst}, State),
     {reply, ok, State1};
 %% Receive message
-handle_call({trace, Pid, send, {'receive', Stamp, Constraints}, {undefined, _}}, _From, State) ->
-    State1 = add_to_trace(Pid, {'receive', Stamp, Constraints}, State),
+handle_call({trace, Pid, send, {'receive', Stamp}, {undefined, _}}, _From, State) ->
+    State1 = add_to_trace(Pid, {'receive', Stamp}, State),
     {reply, ok, State1};
 %% Slave started
 handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
@@ -314,8 +314,8 @@ do_trace(Module, Function, Args, Opts) ->
     dbg:tpe(send, [
         % {send, Stamp, Dst, Msg}
         {['_', {'send', '_', '_', '_'}], [], []},
-        % {'receive', Stamp, ConstraintsFun}
-        {[{'undefined', '_'}, {'receive', '_', '_'}], [], []},
+        % {'receive', Stamp}
+        {[{'undefined', '_'}, {'receive', '_'}], [], []},
         % {result, {ok, Node}}
         {['_', {'result', {'ok', '_'}}], [], []},
         % {result, {error, _}}
@@ -422,15 +422,15 @@ add_to_trace(Pid, Entry0, #state{ets = Table, stamps = StampMap0, trace = Trace0
     Index = pid_index(Pid),
     {Entry1, StampMap1} =
         case Entry0 of
-            {send, Stamp, Dst, Msg} ->
+            {send, Stamp, Dst} ->
                 {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
-                {{send, Uid, Dst, Msg}, StampMap};
+                {{send, Uid, Dst}, StampMap};
             {deliver, Stamp} ->
                 {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
                 {{deliver, Uid}, StampMap};
-            {'receive', Stamp, Constraints} ->
+            {'receive', Stamp} ->
                 {Uid, StampMap} = get_uid(Stamp, StampMap0, Table),
-                {{'receive', Uid, Constraints}, StampMap};
+                {{'receive', Uid}, StampMap};
             _ ->
                 {Entry0, StampMap0}
         end,

@@ -12,7 +12,6 @@
     trace_action_nodes/0,
     trace_action_start/0
 ]).
--export_type([receive_constraint/0]).
 -export_type([log/0, log_action/0]).
 -export_type([
     log_action_spawn/0,
@@ -69,14 +68,12 @@
 -type system() :: #sys{}.
 
 -type trace_action_spawn() :: {spawn, {node(), proc_id()}, success | failure}.
--type trace_action_send() :: {send, cauder_mailbox:uid(), proc_id(), term()}.
+-type trace_action_send() :: {send, cauder_mailbox:uid(), proc_id()}.
 -type trace_action_deliver() :: {deliver, cauder_mailbox:uid()}.
--type trace_action_receive() :: {'receive', cauder_mailbox:uid(), [receive_constraint(), ...]}.
+-type trace_action_receive() :: {'receive', cauder_mailbox:uid()}.
 -type trace_action_exit() :: {exit}.
 -type trace_action_nodes() :: {nodes, [node()]}.
 -type trace_action_start() :: {start, node(), success | failure}.
-
--type receive_constraint() :: {Pattern :: [erl_syntax:syntaxTree()], Guard :: 'none' | erl_syntax:syntaxTree()}.
 
 -type trace() :: #{proc_id() => [trace_action()]}.
 -type trace_action() ::
@@ -109,7 +106,7 @@
     | {spawn, {'_', proc_id()}, '_'}
     | {spawn, {node(), '_'}, failure}.
 
--type race_set() :: ordsets:ordset(cauder_mailbox:uid()).
+-type race_set() :: ordsets:ordset([cauder_mailbox:uid()]).
 -type race_sets() :: #{proc_id() := #{cauder_mailbox:uid() := race_set()}}.
 
 % Not empty

@@ -19,9 +19,9 @@ parse_transform(Forms, Opts) ->
     IForms = [erl_syntax_lib:map(fun instrument/1, F) || F <- XForms],
     RForms = erl_syntax:revert_forms(IForms),
 
-    %[Module] = [M || {attribute, _, module, M} <- XForms],
-    %{ok, File} = file:open("./inst_" ++ atom_to_list(Module) ++ ".erl", [write]),
-    %[io:format(File, "~s", [erl_pp:form(F, [{linewidth, 120}])]) || F <- RForms],
+    [Module] = [M || {attribute, _, module, M} <- XForms],
+    {ok, File} = file:open("./inst_" ++ atom_to_list(Module) ++ ".erl", [write]),
+    [io:format(File, "~s", [erl_pp:form(F, [{linewidth, 120}])]) || F <- RForms],
 
     RForms.
 
@@ -92,34 +92,14 @@ instrument_receive(ReceiveExpr) ->
     Timeout = erl_syntax:receive_expr_timeout(ReceiveExpr),
     Action = erl_syntax:receive_expr_action(ReceiveExpr),
 
-    TmpVar = temp_variable(),
+    NewClauses = lists:map(fun(Clause) -> instrument_receive_clause(Clause) end, Clauses),
 
-    Constraints = erl_syntax:list(
-        lists:map(
-            fun(Clause) ->
-                Patterns = erl_syntax:clause_patterns(Clause),
-                Guard = erl_syntax:clause_guard(Clause),
-                erl_syntax:tuple([
-                    erl_syntax:abstract(lists:map(fun erl_syntax:revert/1, Patterns)),
-                    erl_syntax:abstract(erl_syntax:revert(Guard))
-                ])
-            end,
-            Clauses
-        )
-    ),
+    erl_syntax:receive_expr(NewClauses, Timeout, Action).
 
-    NewClauses = lists:map(fun(Clause) -> instrument_receive_clause(Clause, TmpVar) end, Clauses),
+-spec instrument_receive_clause(Clause) -> erl_syntax:syntaxTree() when
+    Clause :: erl_syntax:syntaxTree().
 
-    erl_syntax:block_expr([
-        erl_syntax:match_expr(TmpVar, Constraints),
-        erl_syntax:receive_expr(NewClauses, Timeout, Action)
-    ]).
-
--spec instrument_receive_clause(Clause, ConstraintsFun) -> erl_syntax:syntaxTree() when
-    Clause :: erl_syntax:syntaxTree(),
-    ConstraintsFun :: erl_syntax:syntaxTree().
-
-instrument_receive_clause(Clause, ConstraintsFun) ->
+instrument_receive_clause(Clause) ->
     StampVar = temp_variable(),
 
     [Pattern] = erl_syntax:clause_patterns(Clause),
@@ -135,8 +115,7 @@ instrument_receive_clause(Clause, ConstraintsFun) ->
             erl_syntax:operator("!"),
             erl_syntax:tuple([
                 erl_syntax:atom('receive'),
-                StampVar,
-                ConstraintsFun
+                StampVar
             ])
         ),
 

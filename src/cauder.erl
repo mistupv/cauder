@@ -823,7 +823,7 @@ task_start_replay(TracePath, undefined) ->
                 #sys{
                     procs = #{Pid => Proc},
                     log = cauder_utils:trace_to_log(Trace),
-                    race_sets = cauder_utils:race_sets(Trace),
+                    race_sets = cauder_race_sets:race_sets(Trace),
                     nodes = [Node]
                 }
             end

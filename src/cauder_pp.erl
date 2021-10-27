@@ -114,7 +114,7 @@ expression(Expr) ->
 
 trace_action({'send', Uid, Dest, _Value}) ->
     io_lib:format("{~p,~p,~p,...}", ['send', Uid, Dest]);
-trace_action({'receive', Uid, _Clauses}) ->
+trace_action({'receive', Uid}) ->
     io_lib:format("{~p,~p,...}", ['receive', Uid]);
 trace_action(Action) ->
     io_lib:format("~p", [Action]).
