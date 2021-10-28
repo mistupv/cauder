@@ -65,7 +65,7 @@ history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
 %%%=============================================================================
 
 -spec stack_entry(Entry) -> String when
-    Entry :: cauder_stack:stack_entry(),
+    Entry :: cauder_stack:entry(),
     String :: string().
 
 stack_entry(#s_function{mfa = {M, F, A}}) ->

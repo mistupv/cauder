@@ -11,8 +11,8 @@
 
 -export_type([stack/0]).
 
--opaque stack() :: [stack_entry()].
--type stack_entry() ::
+-opaque stack() :: [entry()].
+-type entry() ::
     entry_function()
     | entry_block().
 
@@ -27,20 +27,20 @@ new() -> [].
 
 -spec peek(Stack) -> {value, Entry} | empty when
     Stack :: cauder_stack:stack(),
-    Entry :: cauder_stack:stack_entry().
+    Entry :: cauder_stack:entry().
 
 peek([Entry | _]) -> Entry.
 
 -spec pop(Stack1) -> {{value, Entry}, Stack2} | {empty, Stack1} when
     Stack1 :: cauder_stack:stack(),
-    Entry :: cauder_stack:stack_entry(),
+    Entry :: cauder_stack:entry(),
     Stack2 :: cauder_stack:stack().
 
 pop([Entry | Stack]) -> {Entry, Stack}.
 
 -spec push(Entry, Stack1) -> Stack2 when
     Stack1 :: cauder_stack:stack(),
-    Entry :: cauder_stack:stack_entry(),
+    Entry :: cauder_stack:entry(),
     Stack2 :: cauder_stack:stack().
 
 push(Entry, Stack1) -> [Entry | Stack1].
@@ -53,7 +53,7 @@ is_empty(_) -> false.
 
 -spec to_list(Stack) -> [Entry] when
     Stack :: cauder_stack:stack(),
-    Entry :: cauder_stack:stack_entry().
+    Entry :: cauder_stack:entry().
 
 to_list(Stack) -> Stack.
 
