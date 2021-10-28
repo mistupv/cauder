@@ -10,6 +10,7 @@
 
 -include("cauder.hrl").
 -include("cauder_stack.hrl").
+-include("cauder_history.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -41,25 +42,25 @@ log_entry({start, NodeName, failure}) -> "start(" ++ red(to_string(NodeName)) ++
 
 %%%=============================================================================
 
--spec history_entry(HistoryEntry) -> String when
-    HistoryEntry :: cauder_process:history_entry(),
+-spec history_entry(Entry) -> String when
+    Entry :: cauder_history:entry(),
     String :: string().
 
-history_entry({tau, _Bs, _Es, _Stk}) ->
+history_entry(#h_tau{}) ->
     "seq";
-history_entry({self, _Bs, _Es, _Stk}) ->
+history_entry(#h_self{}) ->
     "self";
-history_entry({nodes, _Bs, _Es, _Stk, Nodes}) ->
+history_entry(#h_nodes{nodes = Nodes}) ->
     "nodes(" ++ pp_nodes(Nodes) ++ ")";
-history_entry({spawn, _Bs, _Es, _Stk, Node, Pid}) ->
+history_entry(#h_spawn{node = Node, pid = Pid}) ->
     "spawn(" ++ to_string(Node) ++ ", " ++ to_string(Pid) ++ ")";
-history_entry({start, success, _Bs, _Es, _Stk, Node}) ->
+history_entry(#h_start{node = Node, success = true}) ->
     "start(" ++ green(to_string(Node)) ++ ")";
-history_entry({start, failure, _Bs, _Es, _Stk, Node}) ->
+history_entry(#h_start{node = Node, success = false}) ->
     "start(" ++ red(to_string(Node)) ++ ")";
-history_entry({send, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}}) ->
+history_entry(#h_send{msg = #message{value = Val, uid = Uid}}) ->
     "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
-history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
+history_entry(#h_receive{msg = #message{value = Val, uid = Uid}}) ->
     "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")".
 
 %%%=============================================================================

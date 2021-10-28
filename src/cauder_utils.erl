@@ -33,6 +33,7 @@
 -elvis([{elvis_style, god_modules, disable}]).
 
 -include("cauder.hrl").
+-include("cauder_history.hrl").
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the function definition that matches the given <i>MFA</i>.
@@ -643,16 +644,14 @@ process_node(PMap, Pid) ->
             Node
     end.
 
--spec is_conc_item(HistoryEntry) -> IsConcurrent when
-    HistoryEntry :: cauder_process:history_entry(),
-    IsConcurrent :: boolean().
+-spec is_conc_item(Entry) -> boolean() when
+    Entry :: cauder_history:entry().
 
-is_conc_item({tau, _Bs, _Es, _Stk}) -> false;
-is_conc_item({self, _Bs, _Es, _Stk}) -> false;
-is_conc_item({node, _Bs, _Es, _Stk}) -> false;
-is_conc_item({nodes, _Bs, _Es, _Stk, _Nodes}) -> true;
-is_conc_item({start, success, _BS, _Es, _Stk, _Node}) -> true;
-is_conc_item({start, failure, _BS, _Es, _Stk, _Node}) -> true;
-is_conc_item({spawn, _Bs, _Es, _Stk, _Node, _Pid}) -> true;
-is_conc_item({send, _Bs, _Es, _Stk, _Msg}) -> true;
-is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
+is_conc_item(#h_tau{}) -> false;
+is_conc_item(#h_self{}) -> false;
+is_conc_item(#h_node{}) -> false;
+is_conc_item(#h_nodes{}) -> true;
+is_conc_item(#h_start{}) -> true;
+is_conc_item(#h_spawn{}) -> true;
+is_conc_item(#h_send{}) -> true;
+is_conc_item(#h_receive{}) -> true.
