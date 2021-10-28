@@ -9,6 +9,7 @@
 -export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
+-include("cauder_stack.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -67,15 +68,10 @@ history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
     Entry :: cauder_stack:stack_entry(),
     String :: string().
 
-stack_entry(Entry) ->
-    case cauder_stack:type(Entry) of
-        'function' ->
-            {M, F, A} = cauder_stack:function_mfa(Entry),
-            io_lib:format("~s:~s/~b", [M, F, A]);
-        'block' ->
-            Type = cauder_stack:block_type(Entry),
-            atom_to_list(Type)
-    end.
+stack_entry(#s_function{mfa = {M, F, A}}) ->
+    io_lib:format("~s:~s/~b", [M, F, A]);
+stack_entry(#s_block{type = Type}) ->
+    atom_to_list(Type).
 
 %%%=============================================================================
 

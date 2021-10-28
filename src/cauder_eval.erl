@@ -6,6 +6,7 @@
 -export([clause_line/3]).
 
 -include("cauder.hrl").
+-include("cauder_stack.hrl").
 
 %%%=============================================================================
 %%% API
@@ -62,16 +63,11 @@ seq(Bs, [E | Es], Stk) ->
                 [] ->
                     Line = element(2, E),
                     {Entry, Stk1} = cauder_stack:pop(Stk),
-                    case cauder_stack:type(Entry) of
-                        'function' ->
-                            Bs1 = cauder_stack:function_env(Entry),
-                            Es1 = cauder_stack:function_expr(Entry),
-                            Var = cauder_stack:function_var(Entry),
+                    case Entry of
+                        {value, #s_function{env = Bs1, expr = Es1, var = Var}} ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
                             #result{env = Bs1, exprs = Es2, stack = Stk1};
-                        'block' ->
-                            Es1 = cauder_stack:block_expr(Entry),
-                            Var = cauder_stack:block_var(Entry),
+                        {value, #s_block{expr = Es1, var = Var}} ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
                             #result{env = Bs, exprs = Es2, stack = Stk1}
                     end;
@@ -81,30 +77,20 @@ seq(Bs, [E | Es], Stk) ->
         true ->
             #result{env = Bs1, exprs = Es1, stack = Stk1} = Result = expr(Bs, E, Stk),
             case cauder_stack:pop(Stk1) of
-                {Entry, Stk} ->
-                    case cauder_stack:type(Entry) of
-                        'function' ->
-                            MFA = cauder_stack:function_mfa(Entry),
-                            Bs2 = cauder_stack:function_env(Entry),
-                            Es2 = cauder_stack:function_expr(Entry),
-                            Var = cauder_stack:function_var(Entry),
-                            Entry1 = cauder_stack:function(MFA, Bs1, Es1 ++ Es, Var),
-                            Result#result{
-                                env = Bs2,
-                                exprs = Es2,
-                                stack = cauder_stack:push(Entry1, Stk)
-                            };
-                        'block' ->
-                            Type = cauder_stack:block_type(Entry),
-                            Es2 = cauder_stack:block_expr(Entry),
-                            Var = cauder_stack:block_var(Entry),
-                            Entry1 = cauder_stack:block(Type, Es1 ++ Es, Var),
-                            Result#result{
-                                exprs = Es2,
-                                stack = cauder_stack:push(Entry1, Stk)
-                            }
-                    end;
-                _ ->
+                {{value, #s_function{env = Bs2, expr = Es2} = Entry}, Stk} ->
+                    Entry1 = Entry#s_function{env = Bs1, expr = Es1 ++ Es},
+                    Result#result{
+                        env = Bs2,
+                        exprs = Es2,
+                        stack = cauder_stack:push(Entry1, Stk)
+                    };
+                {{value, #s_block{expr = Es2} = Entry}, Stk} ->
+                    Entry1 = Entry#s_block{expr = Es1 ++ Es},
+                    Result#result{
+                        exprs = Es2,
+                        stack = cauder_stack:push(Entry1, Stk)
+                    };
+                {{value, _}, _} ->
                     Result#result{
                         exprs = Es1 ++ Es
                     }
@@ -157,7 +143,7 @@ expr(Bs, {'if', Line, Cs}, Stk0) ->
     case match_if(Bs, Cs) of
         {match, Body} ->
             Var = cauder_utils:temp_variable(Line),
-            Entry = cauder_stack:block('if', Body, Var),
+            Entry = #s_block{type = 'if', expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs, exprs = [Var], stack = Stk};
         nomatch ->
@@ -171,7 +157,7 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
             case match_case(Bs0, Cs, A) of
                 {match, Bs, Body} ->
                     Var = cauder_utils:temp_variable(Line),
-                    Entry = cauder_stack:block('case', Body, Var),
+                    Entry = #s_block{type = 'case', expr = Body, var = Var},
                     Stk = cauder_stack:push(Entry, Stk0),
                     #result{env = Bs, exprs = [Var], stack = Stk};
                 nomatch ->
@@ -183,7 +169,7 @@ expr(Bs, {'receive', Line, Cs}, Stk0) ->
     % TODO One of these variables is not necessary
     Var = cauder_utils:temp_variable(Line),
     VarBody = cauder_utils:temp_variable(Line),
-    Entry = cauder_stack:block('receive', [VarBody], Var),
+    Entry = #s_block{type = 'receive', expr = [VarBody], var = Var},
     Stk = cauder_stack:push(Entry, Stk0),
     #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
 % TODO Support fun() as entry point argument?
@@ -333,7 +319,7 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
             {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
-            Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+            Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs0, exprs = [Var], stack = Stk}
     end;
@@ -376,7 +362,7 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
                     {match, Bs2, Body} = match_fun(Cs, As),
                     Var = cauder_utils:temp_variable(Line),
                     Bs = cauder_bindings:merge(Bs1, Bs2),
-                    Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+                    Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
                     Stk = cauder_stack:push(Entry, Stk0),
                     #result{env = Bs0, exprs = [Var], stack = Stk}
             end
@@ -453,7 +439,7 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
             end,
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
-            Entry = cauder_stack:function({M, F, A}, Bs, Body, Var),
+            Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs0, exprs = [Var], stack = Stk};
         error ->
