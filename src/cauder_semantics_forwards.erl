@@ -18,6 +18,7 @@
 -import(cauder_eval, [is_reducible/2]).
 
 -include("cauder.hrl").
+-include("cauder_history.hrl").
 
 %%%=============================================================================
 %%% API
@@ -412,8 +413,10 @@ fwd_tau(
     #result{env = Bs, exprs = Es, stack = Stk},
     #sys{procs = PMap} = Sys
 ) ->
+    Entry = #h_tau{env = Bs0, expr = Es0, stack = Stk0},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{tau, Bs0, Es0, Stk0} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = Es
@@ -433,8 +436,10 @@ fwd_self(
     #result{env = Bs, exprs = Es, stack = Stk, label = {self, VarPid}},
     #sys{procs = PMap} = Sys
 ) ->
+    Entry = #h_self{env = Bs0, expr = Es0, stack = Stk0},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{self, Bs0, Es0, Stk0} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarPid, Pid)
@@ -454,8 +459,10 @@ fwd_node(
     #result{env = Bs, exprs = Es, stack = Stk, label = {node, VarNode}},
     #sys{procs = PMap} = Sys
 ) ->
+    Entry = #h_node{env = Bs0, expr = Es0, stack = Stk0},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{node, Bs0, Es0, Stk0} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarNode, Node)
@@ -482,11 +489,14 @@ fwd_nodes(
             not_found -> [];
             NLog -> NLog
         end,
+    NodeList = Nodes -- [Node],
+    Entry = #h_nodes{env = Bs0, expr = Es0, stack = Stk0, nodes = NodeList},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{nodes, Bs0, Es0, Stk0, Nodes -- [Node]} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
-        exprs = cauder_syntax:replace_variable(Es, VarNodes, Nodes -- [Node])
+        exprs = cauder_syntax:replace_variable(Es, VarNodes, NodeList)
     },
     Sys#sys{
         procs = PMap#{Pid => P},
@@ -517,8 +527,10 @@ fwd_spawn_s(
             not_found -> cauder_utils:fresh_pid();
             LogPid -> LogPid
         end,
+    Entry = #h_spawn{env = Bs0, expr = Es0, stack = Stk0, node = N, pid = SpawnPid},
+    Hist2 = cauder_history:push(Entry, Hist),
     P1 = P0#proc{
-        hist = [{spawn, Bs0, Es0, Stk0, N, SpawnPid} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
@@ -576,8 +588,10 @@ fwd_spawn_f(
             not_found -> cauder_utils:fresh_pid();
             LogPid -> LogPid
         end,
+    Entry = #h_spawn{env = Bs0, expr = Es0, stack = Stk0, node = N, pid = SpawnPid},
+    Hist2 = cauder_history:push(Entry, Hist),
     P1 = P0#proc{
-        hist = [{spawn, Bs0, Es0, Stk0, N, SpawnPid} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarPid, SpawnPid)
@@ -616,8 +630,10 @@ fwd_start_s(
             not_found -> [];
             NLog -> NLog
         end,
+    Entry = #h_start{env = Bs0, expr = Es0, stack = Stk0, node = NewNode, success = true},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{start, success, Bs0, Es0, Stk0, NewNode} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarNode, {ok, NewNode})
@@ -659,8 +675,10 @@ fwd_start_f(
             NewLog0 -> NewLog0
         end,
     Err = {error, {already_running, NewNode}},
+    Entry = #h_start{env = Bs0, expr = Es0, stack = Stk0, node = NewNode, success = false},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{start, failure, Bs0, Es0, Stk0, NewNode} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = cauder_syntax:replace_variable(Es, VarNode, Err)
@@ -707,8 +725,10 @@ fwd_send(
                     value = Val
                 }
         end,
+    Entry = #h_send{env = Bs0, expr = Es0, stack = Stk0, msg = M},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{send, Bs0, Es0, Stk0, M} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = Bs,
         exprs = Es
@@ -767,8 +787,10 @@ fwd_rec(
                 LMap = LMap0#{Pid => RestLog},
                 {Match, LMap}
         end,
+    Entry = #h_receive{env = Bs0, expr = Es0, stack = Stk0, msg = Msg, q_pos = QPos},
+    Hist2 = cauder_history:push(Entry, Hist),
     P = P0#proc{
-        hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist],
+        hist = Hist2,
         stack = Stk,
         env = cauder_bindings:merge(Bs, Bs1),
         exprs = Es1

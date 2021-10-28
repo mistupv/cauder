@@ -23,6 +23,7 @@
 ]).
 
 -include("cauder.hrl").
+-include("cauder_history.hrl").
 
 %%%=============================================================================
 %%% API
@@ -39,7 +40,7 @@
 
 can_rollback_step(#sys{procs = PMap}, Pid) when is_map_key(Pid, PMap) ->
     #proc{hist = Hist} = maps:get(Pid, PMap),
-    Hist =/= [];
+    not cauder_history:is_empty(Hist);
 can_rollback_step(_, _) ->
     false.
 
@@ -112,28 +113,25 @@ can_rollback_variable(#sys{procs = PMap}, Name) -> cauder_utils:find_process_wit
     NewSystem :: cauder_system:system().
 
 rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) ->
-    #proc{hist = [Entry | _], node = Node} = maps:get(Pid, PMap),
+    #proc{hist = Hist, node = Node} = maps:get(Pid, PMap),
     ProcViewOfNodes = SysNodes -- [Node],
-    case Entry of
-        {spawn, _Bs, _E, _Stk, _Node, SpawnPid} ->
+    case cauder_history:peek(Hist) of
+        {value, #h_spawn{pid = SpawnPid}} ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
-            ?LOG("ROLLing back SPAWN of " ++ ?TO_STRING(SpawnPid)),
             rollback_spawn(Sys, Pid, SpawnPid);
-        {start, success, _Bs, _E, _Stk, SpawnNode} ->
-            Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_start(SpawnNode)},
-            ?LOG("ROLLing back START of " ++ ?TO_STRING(SpawnNode)),
-            rollback_start(Sys, Pid, SpawnNode);
-        {nodes, _Bs, _E, _Stk, Nodes} when ProcViewOfNodes =/= Nodes ->
+        {value, #h_start{node = StartNode, success = true}} ->
+            Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_start(StartNode)},
+            rollback_start(Sys, Pid, StartNode);
+        {value, #h_nodes{nodes = Nodes}} when ProcViewOfNodes =/= Nodes ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_nodes(Pid)},
-            ?LOG("ROLLing back NODES" ++ ?TO_STRING(Nodes)),
             rollback_nodes(Sys, Pid, Nodes);
-        {send, _Bs, _E, _Stk, #message{dest = Dest, uid = Uid} = Msg} ->
+        {value, #h_send{msg = #message{dest = Dest, uid = Uid} = Msg}} ->
             Sys = Sys0#sys{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
-            ?LOG("ROLLing back SEND from " ++ ?TO_STRING(Pid) ++ " to " ++ ?TO_STRING(Dest)),
             rollback_send(Sys, Pid, Dest, Uid);
-        _ ->
+        {value, _} ->
             [#opt{pid = Pid, sem = Sem} | _] = options(Sys0, Pid),
             case Sem of
+                % FIXME Why does it go forwards??
                 ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
                 ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
             end
@@ -288,11 +286,11 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
     NewSystem :: cauder_system:system().
 
 rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
-    #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
-    case Entry of
-        {spawn, _Bs, _Es, _Stk, _Node, SpawnPid} ->
+    #proc{hist = Hist} = maps:get(Pid, PMap),
+    case cauder_history:peek(Hist) of
+        {value, #h_spawn{pid = SpawnPid}} ->
             rollback_step(Sys0, Pid);
-        _ ->
+        {value, _} ->
             Sys1 = rollback_step(Sys0, Pid),
             rollback_until_spawn(Sys1, Pid, SpawnPid)
     end.
@@ -304,9 +302,9 @@ rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
     NewSystem :: cauder_system:system().
 
 rollback_until_start(#sys{procs = PMap} = Sys0, Pid, SpawnNode) ->
-    #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
-    case Entry of
-        {start, success, _Bs, _Es, _Stk, SpawnNode} ->
+    #proc{hist = Hist} = maps:get(Pid, PMap),
+    case cauder_history:peek(Hist) of
+        {value, #h_start{node = SpawnNode, success = true}} ->
             ProcsOnNode = cauder_utils:find_process_on_node(PMap, SpawnNode),
             ProcsWithRead = cauder_utils:find_process_with_read(PMap, SpawnNode),
             ProcsWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, SpawnNode),
@@ -321,7 +319,7 @@ rollback_until_start(#sys{procs = PMap} = Sys0, Pid, SpawnNode) ->
                 {_, _, {value, #proc{pid = FirstProcPid}}} ->
                     rollback_step(Sys0, FirstProcPid)
             end;
-        _ ->
+        {value, _} ->
             Sys1 = rollback_step(Sys0, Pid),
             rollback_until_start(Sys1, Pid, SpawnNode)
     end.
@@ -333,11 +331,11 @@ rollback_until_start(#sys{procs = PMap} = Sys0, Pid, SpawnNode) ->
     NewSystem :: cauder_system:system().
 
 rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
-    #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
-    case Entry of
-        {send, _Bs, _Es, _Stk, #message{uid = Uid}} ->
+    #proc{hist = Hist} = maps:get(Pid, PMap),
+    case cauder_history:peek(Hist) of
+        {value, #h_send{msg = #message{uid = Uid}}} ->
             rollback_step(Sys0, Pid);
-        _ ->
+        {value, _} ->
             Sys1 = rollback_step(Sys0, Pid),
             rollback_until_send(Sys1, Pid, Uid)
     end.
@@ -349,11 +347,11 @@ rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
     NewSystem :: cauder_system:system().
 
 rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
-    #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
-    case Entry of
-        {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} ->
+    #proc{hist = Hist} = maps:get(Pid, PMap),
+    case cauder_history:peek(Hist) of
+        {value, #h_receive{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Sys0, Pid, Uid);
-        _ ->
+        {value, _} ->
             Sys1 = rollback_step(Sys0, Pid),
             rollback_until_receive(Sys1, Pid, Uid)
     end.
@@ -366,11 +364,11 @@ rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 
 rollback_after_receive(Sys0, Pid, Uid) ->
     #sys{procs = PMap} = Sys1 = rollback_step(Sys0, Pid),
-    #proc{hist = [Entry | _]} = maps:get(Pid, PMap),
-    case Entry of
-        {rec, _Bs, _E, _Stk, #message{uid = Uid}, _QPos} ->
+    #proc{hist = Hist} = maps:get(Pid, PMap),
+    case cauder_history:peek(Hist) of
+        {value, #h_send{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Sys1, Pid, Uid);
-        _ ->
+        {value, _} ->
             Sys1
     end.
 

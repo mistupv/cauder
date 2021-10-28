@@ -335,8 +335,9 @@ update_history(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #co
     wxTextCtrl:freeze(HistoryControl),
     wxTextCtrl:clear(HistoryControl),
     #proc{hist = Hist} = maps:get(Pid, PMap),
-    Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist))),
-    pp_marked_text(HistoryControl, Entries),
+    Entries = lists:map(fun cauder_pp:history_entry/1, cauder_history:to_list(Hist)),
+    Text = lists:flatten(lists:join("\n", Entries)),
+    pp_marked_text(HistoryControl, Text),
     wxTextCtrl:thaw(HistoryControl);
 update_history(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{history_mode = concurrent}}) ->
     show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
@@ -345,9 +346,10 @@ update_history(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #co
     wxTextCtrl:freeze(HistoryControl),
     wxTextCtrl:clear(HistoryControl),
     #proc{hist = Hist} = maps:get(Pid, PMap),
-    Hist1 = lists:filter(fun cauder_utils:is_conc_item/1, Hist),
-    Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
-    pp_marked_text(HistoryControl, Entries),
+    Hist1 = lists:filter(fun cauder_utils:is_conc_item/1, cauder_history:to_list(Hist)),
+    Entries = lists:map(fun cauder_pp:history_entry/1, Hist1),
+    Text = lists:flatten(lists:join("\n", Entries)),
+    pp_marked_text(HistoryControl, Text),
     wxTextCtrl:thaw(HistoryControl).
 
 %%%=============================================================================

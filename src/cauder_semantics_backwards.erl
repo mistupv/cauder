@@ -9,6 +9,7 @@
 -export([step/2, options/1]).
 
 -include("cauder.hrl").
+-include("cauder_history.hrl").
 
 %%%=============================================================================
 %%% API
@@ -24,32 +25,78 @@
     NewSystem :: cauder_system:system().
 
 step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid) ->
-    {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+    {#proc{pid = Pid, hist = Hist} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+    {Entry, RestHist} = cauder_history:pop(Hist),
     case Entry of
-        {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self orelse Label =:= node ->
+        {value, #h_tau{
+            env = Bs,
+            expr = Es,
+            stack = Stk
+        }} ->
             P = P0#proc{
                 hist = RestHist,
-                stack = Stk,
                 env = Bs,
-                exprs = Es
+                exprs = Es,
+                stack = Stk
             },
             Sys#sys{
                 mail = Mail,
                 procs = PMap#{Pid => P}
             };
-        {nodes, Bs, Es, Stk, HistNodes} ->
+        {value, #h_self{
+            env = Bs,
+            expr = Es,
+            stack = Stk
+        }} ->
             P = P0#proc{
                 hist = RestHist,
-                stack = Stk,
                 env = Bs,
-                exprs = Es
+                exprs = Es,
+                stack = Stk
+            },
+            Sys#sys{
+                mail = Mail,
+                procs = PMap#{Pid => P}
+            };
+        {value, #h_node{
+            env = Bs,
+            expr = Es,
+            stack = Stk
+        }} ->
+            P = P0#proc{
+                hist = RestHist,
+                env = Bs,
+                exprs = Es,
+                stack = Stk
+            },
+            Sys#sys{
+                mail = Mail,
+                procs = PMap#{Pid => P}
+            };
+        {value, #h_nodes{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            nodes = HistNodes
+        }} ->
+            P = P0#proc{
+                hist = RestHist,
+                env = Bs,
+                exprs = Es,
+                stack = Stk
             },
             Sys#sys{
                 mail = Mail,
                 procs = PMap#{Pid => P},
                 traces = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
             };
-        {spawn, Bs, Es, Stk, Node, Gid} ->
+        {value, #h_spawn{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            node = Node,
+            pid = Gid
+        }} ->
             P = P0#proc{
                 hist = RestHist,
                 stack = Stk,
@@ -73,7 +120,13 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 traces = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
                 x_trace = lists:delete(T, Trace)
             };
-        {start, success, Bs, Es, Stk, Node} ->
+        {value, #h_start{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            node = Node,
+            success = true
+        }} ->
             P = P0#proc{
                 hist = RestHist,
                 stack = Stk,
@@ -93,7 +146,13 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 x_trace = lists:delete(T, Trace),
                 traces = maps:update_with(Pid, fun(Log) -> [{start, Node, success} | Log] end, [], LMap)
             };
-        {start, failure, Bs, Es, Stk, Node} ->
+        {value, #h_start{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            node = Node,
+            success = false
+        }} ->
             P = P0#proc{
                 hist = RestHist,
                 stack = Stk,
@@ -112,7 +171,12 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 x_trace = lists:delete(T, Trace),
                 traces = maps:update_with(Pid, fun(Log) -> [{start, Node, failure} | Log] end, [], LMap)
             };
-        {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
+        {value, #h_send{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            msg = #message{dest = Dest, value = Val, uid = Uid} = Msg
+        }} ->
             {_Msg, OldMsgs} = cauder_mailbox:delete(Msg, Mail),
             P = P0#proc{
                 hist = RestHist,
@@ -134,7 +198,13 @@ step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid
                 traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
                 x_trace = lists:delete(T, Trace)
             };
-        {rec, Bs, Es, Stk, M = #message{uid = Uid, value = Value, dest = Pid}, QPos} ->
+        {value, #h_receive{
+            env = Bs,
+            expr = Es,
+            stack = Stk,
+            msg = M = #message{uid = Uid, value = Value, dest = Pid},
+            q_pos = QPos
+        }} ->
             P = P0#proc{
                 hist = RestHist,
                 stack = Stk,
@@ -188,46 +258,48 @@ options(#sys{procs = PMap} = Sys) ->
     Process :: cauder_process:process(),
     Option :: cauder_types:option() | ?NULL_OPT.
 
-process_option(_, #proc{hist = []}) ->
-    ?NULL_OPT;
-process_option(_, #proc{pid = Pid, hist = [{tau, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
-process_option(_, #proc{pid = Pid, hist = [{self, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
-process_option(_, #proc{pid = Pid, hist = [{node, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
-process_option(#sys{nodes = SysNodes}, #proc{node = Node, pid = Pid, hist = [{nodes, _Bs, _Es, _Stk, Nodes} | _]}) ->
-    ProcViewOfNodes = SysNodes -- [Node],
-    case ProcViewOfNodes =:= Nodes of
-        true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
-        false -> ?NULL_OPT
-    end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, _Node, SpawnPid} | _]}) ->
-    try maps:get(SpawnPid, PMap) of
-        Proc ->
-            #proc{hist = Hist} = Proc,
-            case Hist of
-                [] -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
+process_option(#sys{procs = PMap} = Sys, #proc{pid = Pid} = P0) ->
+    case cauder_history:peek(P0#proc.hist) of
+        empty ->
+            ?NULL_OPT;
+        {value, #h_tau{}} ->
+            #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
+        {value, #h_self{}} ->
+            #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
+        {value, #h_node{}} ->
+            #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
+        {value, #h_nodes{nodes = Nodes}} ->
+            ProcViewOfNodes = Sys#sys.nodes -- [P0#proc.node],
+            case ProcViewOfNodes =:= Nodes of
+                true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
+                false -> ?NULL_OPT
+            end;
+        {value, #h_spawn{pid = SpawnPid}} ->
+            try maps:get(SpawnPid, PMap) of
+                P1 ->
+                    case cauder_history:is_empty(P1#proc.hist) of
+                        true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
+                        false -> ?NULL_OPT
+                    end
+            catch
+                % this case covers the scenario of a failed spawn
+                error:{badkey, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN}
+            end;
+        {value, #h_start{node = StartNode, success = true}} ->
+            ProcWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, StartNode),
+            ProcOnNode = cauder_utils:find_process_on_node(PMap, StartNode),
+            ProcWithRead = cauder_utils:find_process_with_read(PMap, StartNode),
+            case {ProcWithFailedStart, ProcOnNode, ProcWithRead} of
+                {false, false, false} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
                 _ -> ?NULL_OPT
-            end
-    catch
-        % this case covers the scenario of a failed spawn
-        error:{badkey, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN}
-    end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{start, success, _Bs, _Es, _Stk, Node} | _]}) ->
-    ProcWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, Node),
-    ProcOnNode = cauder_utils:find_process_on_node(PMap, Node),
-    ProcWithRead = cauder_utils:find_process_with_read(PMap, Node),
-    case {ProcWithFailedStart, ProcOnNode, ProcWithRead} of
-        {false, false, false} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-        _ -> ?NULL_OPT
-    end;
-process_option(_, #proc{pid = Pid, hist = [{start, failure, _Bs, _Es, _Stk, _Node} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _]}) ->
-    case cauder_mailbox:uid_member(Uid, Mail) of
-        true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
-        false -> ?NULL_OPT
-    end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.
+            end;
+        {value, #h_start{success = false}} ->
+            #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
+        {value, #h_send{msg = #message{uid = Uid}}} ->
+            case cauder_mailbox:uid_member(Uid, Sys#sys.mail) of
+                true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
+                false -> ?NULL_OPT
+            end;
+        {value, #h_receive{}} ->
+            #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}
+    end.

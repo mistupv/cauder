@@ -517,7 +517,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
             #proc{hist = Hist} = maps:get(Pid, PMap),
-            CanRollbackSteps = Hist =/= [],
+            CanRollbackSteps = not cauder_history:is_empty(Hist),
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
             wxButton:enable(cauder_wx:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}]),

@@ -6,14 +6,6 @@
 -define(APP_URL, "https://github.com/mistupv/cauder").
 -define(APP_DB, 'cauder/database').
 
--ifdef(debug).
--define(LOG(X), io:format("{~p,~p}: ~p~n", [?MODULE, ?LINE, X])).
--define(TO_STRING(X), lists:flatten(io_lib:format("~p", [X]))).
--else.
--define(LOG(X), ok).
--define(TO_STRING(X), "").
--endif.
-
 %%%=============================================================================
 %%% Semantics
 %%%=============================================================================
@@ -78,8 +70,7 @@
     node :: node(),
     % Process identifier
     pid :: cauder_process:proc_id(),
-    % History
-    hist = [] :: cauder_process:history(),
+    hist = cauder_history:new() :: cauder_history:history(),
     % Call stack
     stack = cauder_stack:new() :: cauder_stack:stack(),
     env = cauder_bindings:new() :: cauder_bindings:bindings(),
