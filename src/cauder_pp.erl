@@ -5,24 +5,51 @@
 
 -module(cauder_pp).
 
--export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
+-export([process/2, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_action/1]).
 -export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
--spec process(Process) -> String when
+-spec process(Process, Options) -> String when
     Process :: cauder_types:process(),
+    Options :: [Option],
+    Option :: {icon, boolean()} | {node, boolean() | auto} | {pid, boolean()} | {mfa, boolean()},
     String :: string().
 
-process(#proc{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc) ->
-    Icon =
-        case cauder_utils:is_dead(Proc) of
-            true -> ?ICON_DEAD;
-            false -> ?ICON_ALIVE
+process(#proc{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc, Options) ->
+    IconStr =
+        case proplists:get_value('icon', Options) of
+            false ->
+                "";
+            true ->
+                case cauder_utils:is_dead(Proc) of
+                    true -> ?ICON_DEAD;
+                    false -> ?ICON_ALIVE
+                end
         end,
-    lists:flatten(Icon ++ io_lib:format("Node: ~p  PID: ~p - ~s:~s/~p", [Node, Pid, M, F, A])).
+    NodeStr =
+        case proplists:get_value('node', Options) of
+            false -> "";
+            auto when Node =:= 'nonode@nohost' -> "";
+            auto -> io_lib:format("~p", [Node]);
+            true -> io_lib:format("~p", [Node])
+        end,
+    PidStr =
+        case proplists:get_value('pid', Options) of
+            false -> "";
+            true -> io_lib:format("~p", [Pid])
+        end,
+    MFAStr =
+        case proplists:get_value('mfa', Options) of
+            false -> "";
+            true -> io_lib:format("~s:~s/~B", [M, F, A])
+        end,
+
+    NotEmpty = fun(Str) -> Str =/= [] end,
+    ProcInfo = lists:join(", ", lists:filter(NotEmpty, [NodeStr, PidStr, MFAStr])),
+    lists:flatten(lists:join(" - ", lists:filter(NotEmpty, [IconStr, ProcInfo]))).
 
 %%%=============================================================================
 
@@ -81,20 +108,16 @@ expression(Expr) ->
 
 %%%=============================================================================
 
--spec trace_entry(Trace) -> String when
-    Trace :: cauder_types:x_trace(),
+-spec trace_action(Trace) -> String when
+    Trace :: cauder_types:trace_action(),
     String :: string().
 
-trace_entry(#x_trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Uid}) ->
-    io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
-trace_entry(#x_trace{type = ?RULE_SPAWN, from = From, to = To}) ->
-    io_lib:format("~s spawns ~s", [pid(From), pid(To)]);
-trace_entry(#x_trace{type = ?RULE_START, from = From, res = success, node = Node}) ->
-    io_lib:format("~s starts ~s", [pid(From), Node]);
-trace_entry(#x_trace{type = ?RULE_START, from = From, res = failure, node = Node}) ->
-    io_lib:format("Warning: ~s tried to start ~s and failed", [pid(From), Node]);
-trace_entry(#x_trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) ->
-    io_lib:format("~s receives ~p (~p)", [pid(From), Val, Uid]).
+trace_action({'send', Uid, Dest, _Value}) ->
+    io_lib:format("{~p,~p,~p,...}", ['send', Uid, Dest]);
+trace_action({'receive', Uid}) ->
+    io_lib:format("{~p,~p,...}", ['receive', Uid]);
+trace_action(Action) ->
+    io_lib:format("~p", [Action]).
 
 %%%=============================================================================
 

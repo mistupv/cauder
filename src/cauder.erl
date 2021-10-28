@@ -561,9 +561,13 @@ handle_call({unsubscribe, Sub}, _From, #state{subs = Subs} = State) ->
     {reply, ok, State#state{subs = lists:delete(Sub, Subs)}};
 %%%=============================================================================
 
-handle_call({task, {suspend, Receiver, Messages, NewSystem}}, {Pid, _}, #state{task = {Task, Pid, running}} = State) ->
-    notify_subscribers({suspend, Task, {Receiver, Messages}, NewSystem}, State#state.subs),
-    {reply, ok, State#state{task = {Task, Pid, suspended}, system = NewSystem}};
+handle_call(
+    {task, {suspend, Receiver, InitialUid, AlternativeUids}},
+    {Pid, _},
+    #state{task = {Task, Pid, running}} = State
+) ->
+    notify_subscribers({suspend, Task, {Receiver, InitialUid, AlternativeUids}}, State#state.subs),
+    {reply, ok, State#state{task = {Task, Pid, suspended}}};
 handle_call({task, resume}, {Pid, _}, #state{task = {Task, Pid, suspended}} = State) ->
     notify_subscribers({resume, Task}, State#state.subs),
     {reply, ok, State#state{task = {Task, Pid, running}}};
@@ -736,15 +740,15 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
         end
     ).
 
--spec suspend_task(Receiver, Messages, CurrentSystem) -> {SuspendTime, ({resume, MessageId} | cancel)} when
+-spec suspend_task(Receiver, InitialUid, AlternativeUids) -> {SuspendTime, ({resume, Uid} | cancel)} when
     Receiver :: cauder_types:proc_id(),
-    Messages :: [cauder_mailbox:uid()],
-    CurrentSystem :: cauder_types:system(),
+    InitialUid :: cauder_mailbox:uid(),
+    AlternativeUids :: [cauder_mailbox:uid()],
     SuspendTime :: integer(),
-    MessageId :: cauder_mailbox:uid().
+    Uid :: cauder_mailbox:uid().
 
-suspend_task(Receiver, Messages, System) ->
-    ok = gen_server:call(?SERVER, {task, {suspend, Receiver, Messages, System}}),
+suspend_task(Receiver, InitialUid, AlternativeUids) ->
+    ok = gen_server:call(?SERVER, {task, {suspend, Receiver, InitialUid, AlternativeUids}}),
     timer:tc(
         fun() ->
             receive
@@ -819,6 +823,7 @@ task_start_replay(TracePath, undefined) ->
                 #sys{
                     procs = #{Pid => Proc},
                     log = cauder_utils:trace_to_log(Trace),
+                    race_sets = cauder_race_sets:race_sets(Trace),
                     nodes = [Node]
                 }
             end
@@ -1136,7 +1141,7 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
                     {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
                     Sys1 =
                         case Sem of
-                            ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
+                            ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
                             ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
                         end,
                     {Sys1, PidSet1, PidQueue1}

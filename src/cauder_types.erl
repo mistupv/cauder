@@ -2,16 +2,27 @@
 
 -include("cauder.hrl").
 
--export_type([
-    action_send/0,
-    action_deliver/0,
-    action_receive/0,
-    action_nodes/0,
-    action_start/0,
-    action_spawn/0
-]).
 -export_type([trace/0, trace_action/0]).
--export_type([log/0, log_action/0, log_action_search/0]).
+-export_type([
+    trace_action_spawn/0,
+    trace_action_send/0,
+    trace_action_deliver/0,
+    trace_action_receive/0,
+    trace_action_exit/0,
+    trace_action_nodes/0,
+    trace_action_start/0
+]).
+-export_type([log/0, log_action/0]).
+-export_type([
+    log_action_spawn/0,
+    log_action_send/0,
+    log_action_receive/0,
+    log_action_nodes/0,
+    log_action_start/0
+]).
+
+-export_type([log_action_search/0]).
+-export_type([race_set/0, race_sets/0]).
 -export_type([
     system/0,
     fwd_opts/0,
@@ -29,7 +40,6 @@
     process_scheduler/0,
     message_scheduler/0,
     rule/0,
-    x_trace/0,
     result/0,
     label/0,
     trace_info/0
@@ -57,29 +67,37 @@
 
 -type system() :: #sys{}.
 
--type action_send() :: {send, cauder_mailbox:uid()}.
--type action_deliver() :: {deliver, cauder_mailbox:uid()}.
--type action_receive() :: {'receive', cauder_mailbox:uid()}.
--type action_nodes() :: {nodes, [node()]}.
--type action_start() :: {start, node(), success | failure}.
--type action_spawn() :: {spawn, {node(), proc_id()}, success | failure}.
+-type trace_action_spawn() :: {spawn, {node(), proc_id()}, success | failure}.
+-type trace_action_send() :: {send, cauder_mailbox:uid(), proc_id()}.
+-type trace_action_deliver() :: {deliver, cauder_mailbox:uid()}.
+-type trace_action_receive() :: {'receive', cauder_mailbox:uid()}.
+-type trace_action_exit() :: {exit}.
+-type trace_action_nodes() :: {nodes, [node()]}.
+-type trace_action_start() :: {start, node(), success | failure}.
 
 -type trace() :: #{proc_id() => [trace_action()]}.
 -type trace_action() ::
-    action_send()
-    | action_deliver()
-    | action_receive()
-    | action_nodes()
-    | action_start()
-    | action_spawn().
+    trace_action_spawn()
+    | trace_action_send()
+    | trace_action_deliver()
+    | trace_action_receive()
+    | trace_action_exit()
+    | trace_action_nodes()
+    | trace_action_start().
+
+-type log_action_spawn() :: {spawn, {node(), proc_id()}, success | failure}.
+-type log_action_send() :: {send, cauder_mailbox:uid()}.
+-type log_action_receive() :: {'receive', cauder_mailbox:uid()}.
+-type log_action_nodes() :: {nodes, [node()]}.
+-type log_action_start() :: {start, node(), success | failure}.
 
 -type log() :: #{proc_id() => [log_action()]}.
 -type log_action() ::
-    action_send()
-    | action_receive()
-    | action_nodes()
-    | action_start()
-    | action_spawn().
+    log_action_spawn()
+    | log_action_send()
+    | log_action_receive()
+    | log_action_nodes()
+    | log_action_start().
 
 -type log_action_search() ::
     {send, cauder_mailbox:uid()}
@@ -87,6 +105,9 @@
     | {start, node(), success}
     | {spawn, {'_', proc_id()}, '_'}
     | {spawn, {node(), '_'}, failure}.
+
+-type race_set() :: ordsets:ordset([cauder_mailbox:uid()]).
+-type race_sets() :: #{proc_id() := #{cauder_mailbox:uid() := race_set()}}.
 
 % Not empty
 -type process_map() :: #{proc_id() := process()}.
@@ -123,9 +144,6 @@
 
 -type rule() ::
     ?RULE_SEQ | ?RULE_SELF | ?RULE_NODE | ?RULE_NODES | ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE.
-
-% TODO What is the purpose of this?
--type x_trace() :: #x_trace{}.
 
 -type result() :: #result{}.
 -type label() ::

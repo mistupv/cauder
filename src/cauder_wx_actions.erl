@@ -56,6 +56,11 @@ create(Frame) ->
     wxNotebook:addPage(Notebook, create_replay(Notebook), "Replay"),
     wxNotebook:addPage(Notebook, create_rollback(Notebook), "Rollback"),
 
+    wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
+    wxPanel:disable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
+    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+
     Win.
 
 %%------------------------------------------------------------------------------
@@ -94,7 +99,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
     {_, NewIdx} =
         lists:foldl(
             fun(Proc, {Idx, Match}) ->
-                Label = cauder_pp:process(Proc),
+                Label = cauder_pp:process(Proc, [{icon, true}, {node, true}, {pid, true}, {mfa, true}]),
                 Pid = Proc#proc.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of

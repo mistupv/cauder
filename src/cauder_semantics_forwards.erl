@@ -9,10 +9,9 @@
 -module(cauder_semantics_forwards).
 
 %% API
--export([step/4, options/2]).
--export([rule_deliver/2]).
+-export([step/2, step/4, options/2]).
 
--ignore_xref([rule_deliver/2]).
+%%-ignore_xref([rule_deliver/2]).
 
 %%-ifdef(EUNIT).
 %%-export([rdep/2]).
@@ -25,6 +24,17 @@
 %%%=============================================================================
 %%% API
 %%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Performs a single forwards step in the process with the given Pid in the
+%% given System.
+
+-spec step(System, Pid) -> NewSystem when
+    System :: cauder_types:system(),
+    Pid :: cauder_types:proc_id(),
+    NewSystem :: cauder_types:system().
+
+step(Sys, Pid) -> step(Sys, Pid, ?SCHEDULER_Random, normal).
 
 %%------------------------------------------------------------------------------
 %% @doc Performs a single forwards step in the process with the given Pid in the
@@ -43,10 +53,12 @@ step(Sys0, Pid, Sched, Mode) ->
     case Result#result.label of
         tau ->
             rule_local(Sys0, P0, Result);
-        {send, _Dest, _Val} ->
-            rule_send(Sys0, P0, Result);
+        {send, Dest, _Val} ->
+            Sys1 = rule_send(Sys0, P0, Result),
+            % Instant-deliver
+            rule_deliver(Sys1, maps:get(Dest, Sys1#sys.procs));
         {rec, VarBody, _Cs} when Result#result.exprs =:= [VarBody] ->
-            rule_receive(Sys0, P0, Result);
+            rule_receive(Sys0, P0, Result, Sched, Mode);
         {self, _TmpVar} ->
             rule_self(Sys0, P0, Result);
         {node, _TmpVar} ->
@@ -107,57 +119,6 @@ options(#sys{procs = PMap} = Sys, Mode) ->
 %%%=============================================================================
 %%% Internal functions
 %%%=============================================================================
-
-%%rdep(Pid, LMap0) ->
-%%    LMap = remove_dependents_spawn(Pid, LMap0),
-%%    DropEmpty =
-%%        fun
-%%            (_, []) -> false;
-%%            (_, _) -> true
-%%        end,
-%%    maps:filter(DropEmpty, LMap).
-%%
-%%remove_dependents_spawn(Pid0, LMap0) when is_map_key(Pid0, LMap0) ->
-%%    lists:foldl(
-%%        fun entry_dependents/2,
-%%        maps:remove(Pid0, LMap0),
-%%        maps:get(Pid0, LMap0)
-%%    );
-%%remove_dependents_spawn(_Pid, LMap) ->
-%%    LMap.
-%%
-%%remove_dependents_receive(Uid0, LMap0) ->
-%%    RemoveAfterReceive =
-%%        fun(Pid0, LMap1) ->
-%%            {Independent, Dependent} = lists:splitwith(
-%%                fun(Entry) -> Entry =/= {'receive', Uid0} end,
-%%                maps:get(Pid0, LMap1)
-%%            ),
-%%            case Dependent of
-%%                [] ->
-%%                    LMap1;
-%%                _ ->
-%%                    LMap = lists:foldl(
-%%                        fun entry_dependents/2,
-%%                        maps:put(Pid0, Independent, LMap1),
-%%                        Dependent
-%%                    ),
-%%                    throw(LMap)
-%%            end
-%%        end,
-%%    try
-%%        lists:foldl(
-%%            RemoveAfterReceive,
-%%            LMap0,
-%%            maps:keys(LMap0)
-%%        )
-%%    catch
-%%        throw:LMap -> LMap
-%%    end.
-%%
-%%entry_dependents({spawn, Pid}, LMap) -> remove_dependents_spawn(Pid, LMap);
-%%entry_dependents({send, Uid}, LMap) -> remove_dependents_receive(Uid, LMap);
-%%entry_dependents({'receive', _Uid}, LMap) -> LMap.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation option for the given Expression, in the given
@@ -243,15 +204,26 @@ check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{log = Log, nodes =
         {SNodes, _} -> ?RULE_NODES;
         _ -> ?NOT_EXP
     end;
-check_reducibility([Cs | []], #proc{pid = Pid, env = Bs}, _, #sys{log = LMap, mail = Mail} = Sys, {'receive', Mode}) ->
+check_reducibility([Cs], #proc{pid = Pid, env = Bs, mail = LocalMail}, _, #sys{log = Log}, {'receive', Mode}) ->
     IsMatch =
         case Mode of
             normal ->
-                cauder_eval:match_rec_pid(Cs, Bs, Pid, Mail, ?SCHEDULER_Random, Sys) =/= nomatch;
+                case log_consume_receive(Pid, Log) of
+                    {'_', Log} ->
+                        cauder_eval:matchrec(Cs, Bs, LocalMail) =/= nomatch;
+                    {Uid, _} ->
+                        cauder_eval:matchrec_uid(Cs, Bs, Uid, LocalMail) =/= nomatch
+                end;
             replay ->
-                Log = maps:get(Pid, LMap, []),
-                [{'receive', Uid} | _] = Log,
-                cauder_eval:match_rec_uid(Cs, Bs, Uid, Mail) =/= nomatch
+                case log_consume_receive(Pid, Log) of
+                    {'_', Log} ->
+                        false;
+                    {Uid, _} ->
+                        case cauder_eval:matchrec(Cs, Bs, LocalMail) of
+                            nomatch -> false;
+                            {_, _, #message{uid = Uid}, _, _} -> true
+                        end
+                end
         end,
     case IsMatch of
         true -> ?RULE_RECEIVE;
@@ -288,6 +260,8 @@ check_reducibility([H | T], #proc{env = Bs} = P, Mode, Sys, ExprType) ->
         true -> expression_option(H, P, Mode, Sys);
         false -> check_reducibility(T, P, Mode, Sys, ExprType)
     end.
+
+% TODO Rename to log_take_xxx and return 'error' instead on {'_', Log}
 
 -spec log_consume_send(Pid, Log) -> {Uid, NewLog} when
     Pid :: cauder_types:proc_id(),
@@ -362,23 +336,20 @@ log_consume_spawn(Pid, Log) ->
             {{{'_', cauder_utils:fresh_pid()}, success}, Log}
     end.
 
--spec admissible(Pid, Log, LocalMail) -> Uid when
-    Pid :: cauder_types:proc_id(),
-    Log :: cauder_types:log(),
+-spec admissible(LogActions, LocalMail) -> Uid | false when
+    LogActions :: [cauder_types:log_action()],
     LocalMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     Uid :: cauder_mailbox:uid().
 
-admissible(Pid, Log, LocalMail) ->
-    Actions = maps:get(Pid, Log),
-    {deliver, NextDeliverUid} = lists:keyfind(deliver, 1, Actions),
+admissible(Actions, LocalMail) ->
     DeliveredUids = lists:foldl(
         fun(#message{uid = Uid}, Set) -> sets:add_element(Uid, Set) end,
         sets:new(),
         queue:to_list(LocalMail)
     ),
     case lists:search(fun({'receive', Uid}) -> not sets:is_element(Uid, DeliveredUids) end, Actions) of
-        {value, {'receive', NextDeliverUid}} -> NextDeliverUid;
-        _ -> error(inadmissible)
+        {value, {'receive', NextReceiveUid}} -> NextReceiveUid;
+        _ -> false
     end.
 
 -spec rule_local(System, Process, Result) -> NewSystem when
@@ -409,7 +380,7 @@ rule_local(
     NewSystem :: cauder_types:system().
 
 rule_send(
-    #sys{mail = Mail0, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{mail = Mail0, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {send, Dest, Val}}
 ) ->
@@ -427,18 +398,13 @@ rule_send(
         env = Bs1,
         exprs = Es1
     },
-    T = #x_trace{
-        type = ?RULE_SEND,
-        from = Pid,
-        to = Dest,
-        val = Val,
-        time = M#message.uid
-    },
+    Trace1 = add_to_trace(Pid, {send, Uid, Dest}, Trace0),
+
     Sys#sys{
         mail = cauder_mailbox:add(M, Mail0),
         procs = PMap#{Pid := P1},
         log = Log1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_deliver(System, Process) -> NewSystem when
@@ -447,58 +413,93 @@ rule_send(
     NewSystem :: cauder_types:system().
 
 rule_deliver(
-    #sys{mail = Mail0, log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, mail = LocalMail0} = P0
+    #sys{mail = Mail0, log = Log, trace = Trace0, procs = PMap} = Sys,
+    #proc{pid = Pid, mail = LocalMail} = P0
 ) ->
-    % TODO What happens when there is no log?
-    Uid = admissible(Pid, Log0, LocalMail0),
-    {{#message{uid = Uid, dest = Pid} = M, _QPos}, Mail1} = cauder_mailbox:uid_take(Uid, Mail0),
+    Delivered =
+        case maps:get(Pid, Log, []) of
+            [] ->
+                cauder_mailbox:pid_take(Pid, Mail0);
+            Actions ->
+                case admissible(Actions, LocalMail) of
+                    false -> false;
+                    Uid -> cauder_mailbox:uid_take(Uid, Mail0)
+                end
+        end,
+    case Delivered of
+        false ->
+            Sys;
+        {Message, Mail1} ->
+            P1 = P0#proc{
+                mail = queue:in(Message, LocalMail)
+            },
+            Trace1 = add_to_trace(Pid, {deliver, Message#message.uid}, Trace0),
 
-    P1 = P0#proc{
-        mail = queue:in(M, LocalMail0)
-    },
-    Sys#sys{
-        mail = Mail1,
-        procs = PMap#{Pid := P1}
-    }.
+            Sys#sys{
+                mail = Mail1,
+                procs = PMap#{Pid := P1},
+                trace = Trace1
+            }
+    end.
 
--spec rule_receive(System, Process, Result) -> NewSystem when
+-spec rule_receive(System, Process, Result, Scheduler, Mode) -> NewSystem when
     System :: cauder_types:system(),
     Process :: cauder_types:proc(),
     Result :: cauder_types:result(),
+    Scheduler :: cauder_types:message_scheduler(),
+    Mode :: normal | replay,
     NewSystem :: cauder_types:system().
 
 rule_receive(
-    #sys{log = Log0, procs = PMap, x_trace = XTrace} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0, mail = Mail0} = P0,
-    #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}}
+    #sys{log = Log0, trace = Trace0} = Sys0,
+    #proc{pid = Pid, mail = LocalMail0},
+    #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}},
+    Sched,
+    Mode
 ) ->
-    % TODO Manual mode
-    {Bs2, Es2, Mail1, #message{uid = Uid, value = Value} = M, QPos} = cauder_eval:matchrec(Bs1, Cs, Mail0),
-
-    {Uid, Log1} =
-        case log_consume_receive(Pid, Log0) of
-            {'_', Log0} -> {Uid, Log0};
-            {Uid, NewLog} -> {Uid, NewLog}
+    {{Es2, Bs2, Msg, LocalMail1, QPos}, #sys{procs = PMap} = Sys1} =
+        case Mode of
+            normal ->
+                case log_consume_receive(Pid, Log0) of
+                    {'_', Log0} ->
+                        case cauder_eval:matchrec(Cs, Bs1, LocalMail0) of
+                            nomatch -> throw(nomatch);
+                            Match -> {Match, Sys0}
+                        end;
+                    {Uid, NewLog} ->
+                        case cauder_eval:matchrec_race(Cs, Bs1, Uid, Pid, Sys0#sys{log = NewLog}) of
+                            nomatch -> throw(nomatch);
+                            {Match, NewSys} -> {Match, NewSys}
+                        end
+                end;
+            replay ->
+                case log_consume_receive(Pid, Log0) of
+                    % Should not happen
+                    {'_', Log0} ->
+                        error(badlog);
+                    % Deliver until message in log is available to be received
+                    {Uid, NewLog} ->
+                        case cauder_eval:matchrec(Cs, Bs1, LocalMail0) of
+                            nomatch -> throw(nomatch);
+                            {_, _, #message{uid = Uid}, _, _} = Match -> {Match, Sys0#sys{log = NewLog}}
+                        end
+                end
         end,
 
+    #proc{hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys1#sys.procs),
+
     P1 = P0#proc{
-        hist = [{rec, Bs0, Es0, Stk0, M, QPos} | Hist0],
+        hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0],
         stack = Stk1,
         env = cauder_utils:merge_bindings(Bs1, Bs2),
         exprs = Es2,
-        mail = Mail1
+        mail = LocalMail1
     },
-    T = #x_trace{
-        type = ?RULE_RECEIVE,
-        from = Pid,
-        val = Value,
-        time = Uid
-    },
-    Sys#sys{
+    Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid}, Trace0),
+
+    Sys1#sys{
         procs = PMap#{Pid := P1},
-        log = Log1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_self(System, Process, Result) -> NewSystem when
@@ -550,7 +551,7 @@ rule_node(
     NewSystem :: cauder_types:system().
 
 rule_nodes(
-    #sys{nodes = Nodes, log = Log0, procs = PMap} = Sys,
+    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {nodes, VarNodes}}
 ) ->
@@ -568,9 +569,12 @@ rule_nodes(
         env = Bs1,
         exprs = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
     },
+    Trace1 = add_to_trace(Pid, {nodes, OtherNodes}, Trace0),
+
     Sys#sys{
         procs = PMap#{Pid := P1},
-        log = Log1
+        log = Log1,
+        trace = Trace1
     }.
 
 -spec rule_spawn(System, Process, Result) -> NewSystem when
@@ -580,7 +584,7 @@ rule_nodes(
     NewSystem :: cauder_types:system().
 
 rule_spawn(
-    #sys{procs = PMap0, log = Log0, nodes = Nodes, x_trace = XTrace} = Sys,
+    #sys{procs = PMap0, log = Log0, trace = Trace0, nodes = Nodes} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = Label}
 ) ->
@@ -633,15 +637,12 @@ rule_spawn(
             success -> PMap0#{Pid := P1, SpawnPid => P2};
             failure -> PMap0#{Pid := P1}
         end,
-    T = #x_trace{
-        type = ?RULE_SPAWN,
-        from = Pid,
-        to = SpawnPid
-    },
+    Trace1 = add_to_trace(Pid, {spawn, {SpawnNode, SpawnPid}, SpawnResult}, Trace0),
+
     Sys#sys{
         procs = PMap1,
         log = Log1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
 
 -spec rule_start(System, Process, Result) -> NewSystem when
@@ -651,7 +652,7 @@ rule_spawn(
     NewSystem :: cauder_types:system().
 
 rule_start(
-    #sys{nodes = Nodes, log = Log0, procs = PMap, x_trace = XTrace} = Sys,
+    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
     #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
     #result{env = Bs1, exprs = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
 ) ->
@@ -671,6 +672,7 @@ rule_start(
                 false = lists:member(Node, Nodes),
                 {{Node, Result}, NewLog}
         end,
+
     Return =
         case StartResult of
             success -> {ok, StartNode};
@@ -682,15 +684,20 @@ rule_start(
         env = Bs1,
         exprs = cauder_syntax:replace_variable(Es1, VarNode, Return)
     },
-    T = #x_trace{
-        type = ?RULE_START,
-        from = Pid,
-        res = StartResult,
-        node = StartNode
-    },
+    Trace1 = add_to_trace(Pid, {start, StartNode, StartResult}, Trace0),
+
     Sys#sys{
         procs = PMap#{Pid := P1},
         nodes = [StartNode | Nodes],
         log = Log1,
-        x_trace = [T | XTrace]
+        trace = Trace1
     }.
+
+-spec add_to_trace(Pid, Entry, Trace) -> NewTrace when
+    Pid :: cauder_types:proc_id(),
+    Entry :: cauder_types:trace_action(),
+    Trace :: cauder_types:trace(),
+    NewTrace :: cauder_types:trace().
+
+add_to_trace(Pid, Entry, Trace) ->
+    maps:update_with(Pid, fun(Actions) -> [Entry | Actions] end, [Entry], Trace).

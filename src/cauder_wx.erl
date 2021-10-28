@@ -20,7 +20,7 @@
 -define(DBG_SUCCESS(Task, Time, System), {dbg, {success, Task, {}, Time, System}}).
 -define(DBG_SUCCESS(Task, Value, Time, System), {dbg, {success, Task, Value, Time, System}}).
 -define(DBG_CANCEL(Task, Value, Time, System), {dbg, {cancel, Task, Value, Time, System}}).
--define(DBG_SUSPEND(Task, Value, System), {dbg, {suspend, Task, Value, System}}).
+-define(DBG_SUSPEND(Task, Value), {dbg, {suspend, Task, Value}}).
 -define(DBG_FAILURE(Task, Reason, Stacktrace), {dbg, {failure, Task, Reason, Stacktrace}}).
 
 -include("cauder.hrl").
@@ -187,10 +187,6 @@ init([]) ->
     % Disable action
 
     wxChoice:disable(cauder_wx:find(?ACTION_Process, wxChoice)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Manual, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
     % Show window
 
@@ -340,6 +336,8 @@ handle_event(
 
 handle_event(#wx{id = ?ACTION_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
     {noreply, refresh(State, State)};
+handle_event(#wx{id = ?SYSTEM_Trace_Process, event = #wxCommand{type = command_choice_selected}}, State) ->
+    {noreply, refresh(State, State)};
 %%%=============================================================================
 
 handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when
@@ -380,7 +378,6 @@ handle_event(?BUTTON_EVENT(?ACTION_Replay_Spawn_Button), State) ->
     cauder_wx_statusbar:replay_spawn_start(Pid),
     {noreply, refresh(State, State#wx_state{system = System, task = replay_spawn})};
 handle_event(?BUTTON_EVENT(?ACTION_Replay_Start_Button), State) ->
-    io:format("Ciao~n"),
     Choice = cauder_wx:find(?ACTION_Replay_Start, wxChoice),
     Idx = wxChoice:getSelection(Choice),
     Node = wxChoice:getClientData(Choice, Idx),
@@ -577,12 +574,12 @@ handle_info(?DBG_SUCCESS(step, {Sem, Steps}, Time, System), #wx_state{task = ste
 handle_info(?DBG_CANCEL(step, {Sem, Steps}, Time, System), #wx_state{task = step} = State) ->
     cauder_wx_statusbar:step_finish(Sem, Steps, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-handle_info(?DBG_SUSPEND(step, {Receiver, Messages}, System), #wx_state{frame = Frame, task = step} = State) ->
-    case cauder_wx_dialog:choose_message(Frame, {Receiver, Messages}) of
-        {ok, MessageId} -> cauder:resume(MessageId);
+handle_info(?DBG_SUSPEND(step, {Receiver, InitialUid, AlternativeUids}), #wx_state{frame = Frame, task = step} = State) ->
+    case cauder_wx_dialog:choose_message(Frame, {Receiver, InitialUid, AlternativeUids}) of
+        {ok, Uid} -> cauder:resume(Uid);
         cancel -> cauder:cancel()
     end,
-    {noreply, refresh(State, State#wx_state{system = System})};
+    {noreply, State};
 handle_info(?DBG_SUCCESS(step_multiple, {Sem, Steps}, Time, System), #wx_state{task = step_multiple} = State) ->
     cauder_wx_statusbar:step_multiple_finish(Sem, Steps, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
@@ -752,20 +749,22 @@ stop_session(_State) ->
     NewState :: state(),
     State :: state().
 
-refresh(OldState, NewState) ->
-    cauder_wx_actions:update_process(OldState, NewState),
+refresh(State0, State1) ->
+    cauder_wx_actions:update_process(State0, State1),
+    State2 = State1#wx_state{pid = cauder_wx_actions:selected_pid()},
 
-    State = NewState#wx_state{pid = cauder_wx_actions:selected_pid()},
+    cauder_wx_system:update_trace_process(State0, State2),
+    State3 = State2#wx_state{trace_pid = cauder_wx_system:selected_trace_pid()},
 
-    cauder_wx_menu:update(OldState, State),
-    cauder_wx_statusbar:update(OldState, State),
+    cauder_wx_menu:update(State0, State3),
+    cauder_wx_statusbar:update(State0, State3),
 
-    cauder_wx_code:update(OldState, State),
-    cauder_wx_actions:update(OldState, State),
-    cauder_wx_process:update(OldState, State),
-    cauder_wx_system:update(OldState, State),
+    cauder_wx_code:update(State0, State3),
+    cauder_wx_actions:update(State0, State3),
+    cauder_wx_process:update(State0, State3),
+    cauder_wx_system:update(State0, State3),
 
-    State.
+    State3.
 
 %%%=============================================================================
 

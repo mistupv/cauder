@@ -66,9 +66,13 @@
     procs :: cauder_types:process_map(),
     % System log
     log = maps:new() :: cauder_types:log(),
+    % Trace generated as the program is executed
+    trace = maps:new() :: cauder_types:trace(),
+    % Race sets for each process and message
+    race_sets :: undefined | cauder_types:race_sets(),
     % System nodes
     nodes = [] :: [node()],
-    x_trace = [] :: [cauder_types:x_trace()],
+    % TODO Remove?
     roll = []
 }).
 
@@ -112,17 +116,6 @@
     sem :: cauder_types:semantics(),
     % seq, spawn, ...
     rule :: cauder_types:rule()
-}).
-
-% TODO What is the purpose of this?
--record(x_trace, {
-    type :: ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE,
-    from :: cauder_types:proc_id(),
-    to :: undefined | cauder_types:proc_id(),
-    node :: undefined | node(),
-    val :: undefined | term(),
-    res :: success | failure | undefined,
-    time :: undefined | cauder_mailbox:uid()
 }).
 
 % Evaluation result

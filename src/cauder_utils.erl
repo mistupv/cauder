@@ -30,11 +30,9 @@
 -export([load_trace/1, trace_to_log/1]).
 -export([is_dead/1]).
 -export([is_conc_item/1]).
--export([race_set/2]).
+-export([queue_take/2]).
 
 -elvis([{elvis_style, god_modules, disable}]).
-
--ignore_xref([race_set/2]).
 
 -include("cauder.hrl").
 
@@ -123,7 +121,7 @@ find_spawn_parent(Log, Pid) ->
 -spec find_spawn_action(Log, Pid) -> Action when
     Log :: cauder_types:log(),
     Pid :: cauder_types:proc_id(),
-    Action :: cauder_types:action_spawn().
+    Action :: cauder_types:log_action_spawn().
 
 find_spawn_action(Log, Pid) ->
     {value, Action} = lists:search(
@@ -629,11 +627,16 @@ load_trace(Dir) ->
 
 trace_to_log(Trace) ->
     maps:map(
-        fun(_Pid, Actions) ->
-            lists:filter(
+        fun(_, Actions) ->
+            lists:filtermap(
                 fun
+                    ({spawn, {Node, Pid}, Result}) -> {true, {spawn, {Node, Pid}, Result}};
+                    ({send, Uid, _Pid}) -> {true, {send, Uid}};
                     ({deliver, _Uid}) -> false;
-                    (_) -> true
+                    ({'receive', Uid}) -> {true, {'receive', Uid}};
+                    ({exit}) -> false;
+                    ({nodes, Nodes}) -> {true, {nodes, Nodes}};
+                    ({start, Node, Result}) -> {true, {start, Node, Result}}
                 end,
                 Actions
             )
@@ -708,170 +711,32 @@ is_conc_item({rec, _Bs, _Es, _Stk, _Msg, _QPos}) -> true.
 
 %%%=============================================================================
 
--spec race_set({Pid, ReceiveEvent}, Trace) -> [RaceSet] when
-    Pid :: cauder_types:proc_id(),
-    ReceiveEvent :: {'receive', cauder_mailbox:uid()},
-    Trace :: tracer:trace(),
-    RaceSet :: ordsets:ordset(cauder_mailbox:uid()).
-
-race_set({P, {'receive', L} = Ar} = _Er, Trace) ->
-    % Assert that p:receive(l) ∈ T
-    true = lists:member(Ar, maps:get(P, Trace)),
-
-    Graph = trace_graph(Trace),
-
-    % Type: [{Pid, {send, Uid}}, ...]
-    SendEvents = maps:fold(
-        fun(P1, Actions, Acc) ->
-            lists:foldl(
-                fun
-                    ({send, L1} = Es, List) when L1 =/= L -> [{P1, Es} | List];
-                    (_, List) -> List
-                end,
-                Acc,
-                Actions
-            )
-        end,
-        [],
-        Trace
-    ),
-
-    Ed = {P, {deliver, L}},
-
-    RaceSet =
-        lists:foldl(
-            fun({_P1, {send, L1}} = Es, Set) ->
-                case
-                    race_set_cond1(Ed, Es, Graph) andalso
-                        race_set_cond2(Ed, L1, Trace, Graph) andalso
-                        race_set_cond3(Ed, Es, SendEvents, Trace, Graph)
-                of
-                    true -> ordsets:add_element(L1, Set);
-                    false -> Set
-                end
-            end,
-            ordsets:new(),
-            SendEvents
-        ),
-    digraph:delete(Graph),
-    RaceSet.
-
--spec race_set_cond1(DeliverEvent, SendEvent, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
-    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
-    Graph :: digraph:graph().
-
-race_set_cond1(Ed, Es, G) ->
-    not happened_before(Ed, Es, G).
-
--spec race_set_cond2(DeliverEvent, Uid, Trace, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
+-spec queue_take(Uid, Queue) -> {{Message, QPos}, NewQueue} | error when
     Uid :: cauder_mailbox:uid(),
-    Trace :: tracer:trace(),
-    Graph :: digraph:graph().
+    Queue :: queue:queue(cauder_mailbox:message()),
+    Message :: cauder_mailbox:message(),
+    QPos :: pos_integer(),
+    NewQueue :: queue:queue(cauder_mailbox:message()).
 
-race_set_cond2({P, {deliver, _L}} = Ed, L1, Trace, G) ->
-    Ed1 = {P, Ad1 = {deliver, L1}},
-    lists:member(Ad1, maps:get(P, Trace)) andalso happened_before(Ed, Ed1, G).
-
--spec race_set_cond3(DeliverEvent, SendEvent, SendPairs, Trace, Graph) -> boolean() when
-    DeliverEvent :: {cauder_types:proc_id(), cauder_types:action_deliver()},
-    SendEvent :: {cauder_types:proc_id(), cauder_types:action_send()},
-    SendPairs :: [{cauder_types:proc_id(), cauder_types:action_send()}],
-    Trace :: tracer:trace(),
-    Graph :: digraph:graph().
-
-race_set_cond3({P, {deliver, _L}} = Ed, {P1, {send, L1}} = Es, SendEvents, Trace, G) ->
-    SendEvents1 = lists:filter(
-        fun
-            ({Pid, {send, L2}} = Es1) when Pid =:= P1, L2 =/= L1 ->
-                happened_before(Es1, Es, G);
-            (_) ->
-                false
-        end,
-        SendEvents
-    ),
-
-    lists:all(
-        fun({_, {send, L2}} = _SendEvent1) ->
-            DeliverEvent2 = {P, DeliverAction = {deliver, L2}},
-            lists:member(DeliverAction, maps:get(P, Trace)) andalso happened_before(DeliverEvent2, Ed, G)
-        end,
-        SendEvents1
-    ).
-
--spec happened_before(Event1, Event2, Graph) -> boolean() when
-    Event1 :: {cauder_types:proc_id(), cauder_types:trace_action()},
-    Event2 :: {cauder_types:proc_id(), cauder_types:trace_action()},
-    Graph :: digraph:graph().
-
-happened_before({_P1, A1}, {_P2, A2}, G) ->
-    case digraph:get_path(G, A1, A2) of
-        false -> false;
-        _Path -> true
+queue_take(Uid, Queue) ->
+    List0 = queue:to_list(Queue),
+    case list_take(Uid, List0, [], 1) of
+        {{Msg, QPos}, List1} -> {{Msg, QPos}, queue:from_list(List1)};
+        error -> error
     end.
 
--spec trace_graph(Trace) -> Graph when
-    Trace :: tracer:trace(),
-    Graph :: digraph:graph().
+-spec list_take(Uid, List, Rest, Index) -> {{Message, MessageIndex}, NewList} | error when
+    Uid :: cauder_mailbox:uid(),
+    List :: [cauder_mailbox:message()],
+    Rest :: [cauder_mailbox:message()],
+    Index :: pos_integer(),
+    Message :: cauder_mailbox:message(),
+    MessageIndex :: pos_integer(),
+    NewList :: [cauder_mailbox:message()].
 
-trace_graph(Trace) ->
-    G = digraph:new([acyclic]),
-
-    AuxFun =
-        fun(A, Map) ->
-            digraph:add_vertex(G, A),
-            case A of
-                {spawn, _, success} ->
-                    maps:update_with(spawn, fun(List) -> [A | List] end, [A], Map);
-                {Kind, Uid} when
-                    Kind =:= send;
-                    Kind =:= deliver;
-                    Kind =:= 'receive'
-                ->
-                    maps:update_with(Kind, fun(Set) -> sets:add_element(Uid, Set) end, sets:from_list([Uid]), Map);
-                _ ->
-                    Map
-            end
-        end,
-
-    ActionTypes = lists:foldl(fun(As, Map) -> lists:foldl(AuxFun, Map, As) end, #{}, maps:values(Trace)),
-
-    % Condition 1: p1 = p2, a1 != deliver(_), a2 != deliver(_), and a1 comes before a2 in the sequence T(p1)
-    % Condition 2: p1 = p2, a1 = deliver(l), a2 != deliver(l'), l != l', and a1 comes before a2 in the sequence T(p1)
-    lists:foreach(
-        fun(Actions) ->
-            [
-                case {A1, A2} of
-                    {{deliver, L1}, {deliver, L2}} when L1 =/= L2 -> digraph:add_edge(G, A1, A2);
-                    {{deliver, _}, _} -> skip;
-                    {_, {deliver, _}} -> skip;
-                    {_, _} -> digraph:add_edge(G, A1, A2)
-                end
-             || A1 <- Actions, A2 <- tl(lists:dropwhile(fun(A) -> A =/= A1 end, Actions))
-            ]
-        end,
-        maps:values(Trace)
-    ),
-
-    % Condition 3: a1 = spawn(p2), and p1 != p2
-    lists:foreach(
-        fun({spawn, {_, Pid}, success} = A1) ->
-            lists:foreach(fun(A2) -> digraph:add_edge(G, A1, A2) end, maps:get(Pid, Trace))
-        end,
-        maps:get(spawn, ActionTypes, [])
-    ),
-
-    SendUids = maps:get(send, ActionTypes, sets:new()),
-    DeliverUids = maps:get(deliver, ActionTypes, sets:new()),
-    ReceiveUids = maps:get('receive', ActionTypes, sets:new()),
-
-    % Condition 4: a1 = send(l), and a2 = deliver(l)
-    true = sets:is_subset(DeliverUids, SendUids),
-    lists:foreach(fun(Uid) -> digraph:add_edge(G, {send, Uid}, {deliver, Uid}) end, sets:to_list(DeliverUids)),
-
-    % Condition 5: a1 = deliver(l), and a2 = receive(l)
-    true = sets:is_subset(ReceiveUids, DeliverUids),
-    lists:foreach(fun(Uid) -> digraph:add_edge(G, {deliver, Uid}, {'receive', Uid}) end, sets:to_list(ReceiveUids)),
-
-    G.
+list_take(Uid, [#message{uid = Uid} = Msg | List], Rest, Index) ->
+    {{Msg, Index}, lists:reverse(Rest, List)};
+list_take(Uid, [Msg | List], Rest, Index) ->
+    list_take(Uid, List, [Msg | Rest], Index + 1);
+list_take(_, [], _, _) ->
+    error.
