@@ -47,8 +47,8 @@ purchase(Config) ->
             {spawn, {'nonode@nohost', 4}, success}
         ],
         [
-            {deliver, Pid2},
-            {'receive', Pid2}
+            {deliver, Uid2},
+            {'receive', Uid2}
         ]
     } = lists:partition(
         fun
@@ -58,7 +58,7 @@ purchase(Config) ->
         Actions0
     ),
 
-    [{deliver, Pid0}, {deliver, Pid1}, {deliver, Pid3}] = lists:filter(
+    [{deliver, Uid0}, {deliver, Uid1}, {deliver, Uid3}] = lists:filter(
         fun
             ({deliver, _}) -> true;
             (_) -> false
@@ -66,9 +66,9 @@ purchase(Config) ->
         Actions1
     ),
     % Receive comes after deliver
-    true = lists:member({'receive', Pid0}, lists:dropwhile(fun(Action) -> Action =/= {deliver, Pid0} end, Actions1)),
-    true = lists:member({send, Pid2}, Actions1),
+    true = lists:member({'receive', Uid0}, lists:dropwhile(fun(Action) -> Action =/= {deliver, Uid0} end, Actions1)),
+    true = lists:member({send, Uid2, 0}, Actions1),
 
-    [{send, Pid0}] = Actions2,
-    [{send, Pid1}] = Actions3,
-    [{send, Pid3}] = Actions4.
+    [{send, Uid0, 1}] = Actions2,
+    [{send, Uid1, 1}] = Actions3,
+    [{send, Uid3, 1}] = Actions4.

@@ -16,7 +16,7 @@
 
 -record(state, {
     % The pid of the tracer process, used to notify when the execution of the traced process has finished
-    tracer_pid :: pid(),
+    main_pid :: pid(),
     initial_pid :: cauder_types:proc_id(),
     pid_map :: #{pid() => cauder_types:proc_id()},
     alive_pids :: sets:set(pid()),
@@ -24,6 +24,7 @@
     % The actions of this trace are stored in reverse order
     trace = maps:new() :: cauder_types:trace(),
     mail :: cauder_mailbox:mailbox(pid()),
+    % The value returned by the initial function application
     return = none :: none | {value, term()}
 }).
 
@@ -125,7 +126,7 @@ init({TracerPid, TracedPid, TraceDir}) ->
     true = ets:insert_new(?SERVER, {taken_pids, sets:from_list(maps:keys(Log))}),
 
     {ok, #state{
-        tracer_pid = TracerPid,
+        main_pid = TracerPid,
         initial_pid = InitialPid,
         pid_map = #{TracedPid => InitialPid},
         alive_pids = sets:from_list([TracedPid]),
@@ -144,10 +145,10 @@ init({TracerPid, TracedPid, TraceDir}) ->
     NewState :: state().
 
 handle_call(get_trace, _From, #state{trace = Trace} = State) ->
-    ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
-    {reply, ReversedTrace, State};
+    ReversedTrace = maps:map(fun(_, V) -> lists:reverse(map_pids(V)) end, Trace),
+    {reply, {ok, ReversedTrace}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
-    {reply, ReturnValue, State};
+    {reply, map_pids(ReturnValue), State};
 handle_call(get_initial_pid, _From, #state{initial_pid = Pid} = State) ->
     {reply, Pid, State};
 handle_call(Request, _From, State) ->
@@ -196,15 +197,16 @@ handle_info({P, spawn, P1}, #state{pid_map = PidMap0, alive_pids = AlivePids0, l
     {noreply, State2};
 handle_info({P, send, P1, V}, #state{pid_map = PidMap0, log = Log0, trace = Trace0} = State0) ->
     R = maps:get(P, PidMap0),
+    R1 = maps:get(P1, PidMap0),
     State1 =
         case maps:get(R, Log0, []) of
             [] ->
                 L = new_uid(),
-                Trace1 = update_trace(R, {send, L}, Trace0),
+                Trace1 = update_trace(R, {send, L, R1}, Trace0),
                 process_new_msg({P, P1, L, V}, State0#state{trace = Trace1});
             [{send, L} | Actions] ->
                 Log1 = Log0#{R := Actions},
-                Trace1 = update_trace(R, {send, L}, Trace0),
+                Trace1 = update_trace(R, {send, L, R1}, Trace0),
                 process_msg({P, P1, L, V}, State0#state{log = Log1, trace = Trace1})
         end,
     State2 = try_deliver(P, State1),
@@ -225,7 +227,7 @@ handle_info({P, 'receive', L}, #state{pid_map = PidMap0, log = Log0, trace = Tra
     {noreply, State2};
 handle_info({return, ReturnValue}, #state{return = none} = State) ->
     {noreply, State#state{return = {value, ReturnValue}}};
-handle_info({P, exit}, #state{tracer_pid = TracerPid, alive_pids = AlivePids0} = State0) ->
+handle_info({P, exit}, #state{main_pid = TracerPid, alive_pids = AlivePids0} = State0) ->
     AlivePids1 = sets:del_element(P, AlivePids0),
     State1 = State0#state{alive_pids = AlivePids1},
     case sets:is_empty(AlivePids1) of
@@ -305,7 +307,7 @@ do_trace(Module, Function, Args, Opts) ->
         end
     ),
 
-    Trace = gen_server:call(?SERVER, get_trace),
+    {ok, Trace} = gen_server:call(?SERVER, get_trace),
     ReturnValue = gen_server:call(?SERVER, get_return_value),
     InitialPid = gen_server:call(?SERVER, get_initial_pid),
     gen_server:stop(?SERVER),
@@ -362,35 +364,6 @@ load(Module, Binary, Filename) ->
     code:purge(Module),
     {module, Module} = code:load_binary(Module, Filename, Binary),
     ok.
-
--spec write_trace(Dir, TraceInfo) -> ok when
-    Dir :: file:filename(),
-    TraceInfo :: cauder_types:trace_info().
-
-write_trace(Dir, TraceInfo) ->
-    % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_info | Values] = tuple_to_list(TraceInfo),
-    Fields = record_info(fields, trace_info),
-    {Traces, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
-
-    ok = filelib:ensure_dir(Dir),
-    case filelib:is_dir(Dir) of
-        true -> ok;
-        false -> ok = file:make_dir(Dir)
-    end,
-
-    ResultFile = filename:join(Dir, "trace_result.log"),
-    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(ResultInfo))),
-    ok = file:write_file(ResultFile, ResultContent),
-
-    lists:foreach(
-        fun({Index, List}) ->
-            File = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, List)),
-            ok = file:write_file(File, Content)
-        end,
-        maps:to_list(Traces)
-    ).
 
 -spec new_pid() -> cauder_types:proc_id().
 
@@ -501,3 +474,69 @@ process_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace = Tra
                 end,
             State0#state{log = Log1, mail = Mail1}
     end.
+
+-spec write_trace(Dir, TraceInfo) -> ok when
+    Dir :: file:filename(),
+    TraceInfo :: cauder_types:trace_info().
+
+write_trace(Dir, TraceInfo) ->
+    % This not compile time safe but there is no other way to keep it human-friendly and simple
+    [trace_info | Values] = tuple_to_list(TraceInfo),
+    Fields = record_info(fields, trace_info),
+    {Trace, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
+
+    ok = filelib:ensure_dir(Dir),
+    case filelib:is_dir(Dir) of
+        true -> ok;
+        false -> ok = file:make_dir(Dir)
+    end,
+
+    ResultFilename = filename:join(Dir, "trace_result.log"),
+    write_terms(ResultFilename, maps:to_list(ResultInfo)),
+
+    lists:foreach(
+        fun({Index, Terms}) ->
+            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
+            write_terms(Filename, Terms)
+        end,
+        maps:to_list(Trace)
+    ).
+
+-spec write_terms(Filename, Terms) -> ok when
+    Filename :: file:name_all(),
+    Terms :: [term()].
+
+write_terms(Filename, Terms) ->
+    Format = fun(Term) -> io_lib:format("~tp.~n", [Term]) end,
+    Text = unicode:characters_to_binary(lists:map(Format, Terms)),
+    file:write_file(Filename, Text).
+
+-spec map_pids(term()) -> term().
+
+map_pids(List) when is_list(List) ->
+    lists:map(fun map_pids/1, List);
+map_pids(Tuple) when is_tuple(Tuple) ->
+    list_to_tuple(lists:map(fun map_pids/1, tuple_to_list(Tuple)));
+map_pids(Map) when is_map(Map) ->
+    maps:fold(
+        fun(K, V, Acc) ->
+            K1 = map_pids(K),
+            V1 = map_pids(V),
+            false = maps:is_key(K1, Acc),
+            Acc#{K1 => V1}
+        end,
+        #{},
+        Map
+    );
+map_pids(Pid) when is_pid(Pid) ->
+    pid_index(Pid);
+map_pids(Term) ->
+    Term.
+
+-spec pid_index(Pid) -> Index when
+    Pid :: pid(),
+    Index :: non_neg_integer().
+
+pid_index(Pid) when is_pid(Pid) ->
+    [_Node, Index, _Serial] = string:lexemes(pid_to_list(Pid), "<.>"),
+    list_to_integer(Index).

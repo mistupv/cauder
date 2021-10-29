@@ -24,7 +24,7 @@
 }).
 
 -type mailbox_index(Pid) :: #{uid() => {Pid, Pid}}.
--type mailbox_map(Pid) :: #{Pid => #{Pid=> queue:queue(message(Pid))}}.
+-type mailbox_map(Pid) :: #{Pid => #{Pid => queue:queue(message(Pid))}}.
 
 -type mailbox() :: mailbox(_).
 -opaque mailbox(Pid) :: #mailbox{index :: mailbox_index(Pid), map :: mailbox_map(Pid)}.
@@ -163,9 +163,9 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 
 -spec uid_take(Uid, Mailbox) -> {Message, NewMailbox} | error when
     Uid :: uid(),
-    Mailbox :: cauder_mailbox:mailbox(),
-    Message :: cauder_mailbox:message(),
-    NewMailbox :: cauder_mailbox:mailbox().
+    Mailbox :: cauder_mailbox:mailbox(Pid),
+    Message :: cauder_mailbox:message(Pid),
+    NewMailbox :: cauder_mailbox:mailbox(Pid).
 
 uid_take(Uid, #mailbox{index = Index0, map = DestMap0} = Mailbox0) ->
     case maps:find(Uid, Index0) of
@@ -212,10 +212,10 @@ uid_take_oldest(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
             false;
         {ok, {Src, Dest}} ->
             SrcMap = maps:get(Dest, DestMap),
-            Queue0 = orddict:fetch(Src, SrcMap),
+            Queue0 = maps:get(Src, SrcMap),
             case queue:peek(Queue0) of
                 {value, #message{uid = Uid} = Message} ->
-                    {_, Mailbox} = delete(Message, Mailbox0),
+                    Mailbox = delete(Message, Mailbox0),
                     {Message, Mailbox};
                 _ ->
                     false
@@ -227,8 +227,8 @@ uid_take_oldest(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
 %% `Mailbox'.
 
 -spec to_list(Mailbox) -> [Message] when
-    Mailbox :: cauder_mailbox:mailbox(),
-    Message :: cauder_mailbox:message().
+    Mailbox :: cauder_mailbox:mailbox(Pid),
+    Message :: cauder_mailbox:message(Pid).
 
 to_list(#mailbox{map = DestMap}) ->
     maps:fold(
