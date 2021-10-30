@@ -590,9 +590,7 @@ load_trace(Dir) ->
         pid := InitialPid,
         call := {Mod, Fun, Args},
         tracing := Tracing,
-        return := ReturnValue,
-        comp := CompTime,
-        exec := ExecTime
+        return := ReturnValue
     } = maps:from_list(ResultTerms),
 
     Trace =
@@ -616,8 +614,6 @@ load_trace(Dir) ->
         call = {Mod, Fun, Args},
         tracing = Tracing,
         return = ReturnValue,
-        comp = CompTime,
-        exec = ExecTime,
         trace = Trace
     }.
 

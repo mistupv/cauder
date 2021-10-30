@@ -12,7 +12,7 @@ init_per_testcase(Module, Config) ->
     DataDir = ?config(data_dir, Config),
     RootDir = filename:join(lists:takewhile(fun(Dir) -> Dir =/= "_build" end, filename:split(DataDir))),
     SrcDir = filename:join([RootDir, "case-studies", Module]),
-    [{src_dir, SrcDir} | Config].
+    [{examples_dir, SrcDir} | Config].
 
 end_per_testcase(_, _Config) ->
     ok.
@@ -20,7 +20,10 @@ end_per_testcase(_, _Config) ->
 %%%=============================================================================
 
 purchase(Config) ->
-    SrcDir = ?config(src_dir, Config),
+    ExamplesDir = ?config(examples_dir, Config),
+    SrcFile = filename:join(ExamplesDir, ?FUNCTION_NAME),
+
+    {ok, ?FUNCTION_NAME} = prefix_tracer:instrument(SrcFile),
 
     #trace_info{
         node = 'nonode@nohost',
@@ -28,8 +31,6 @@ purchase(Config) ->
         call = {?FUNCTION_NAME, main, []},
         tracing = success,
         return = {value, false},
-        comp = _,
-        exec = _,
         trace = #{
             0 := Actions0,
             1 := Actions1,
@@ -37,7 +38,7 @@ purchase(Config) ->
             3 := Actions3,
             4 := Actions4
         }
-    } = prefix_tracer:trace(?FUNCTION_NAME, main, [], #{dir => SrcDir}),
+    } = prefix_tracer:trace(?FUNCTION_NAME, main, [], #{}),
 
     {
         [

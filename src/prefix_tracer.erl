@@ -3,12 +3,12 @@
 -behaviour(gen_server).
 
 %% API
--export([trace/3, trace/4]).
+-export([instrument/1, trace/4, trace/5, write_trace/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--ignore_xref([trace/3, trace/4]).
+-ignore_xref([instrument/1, trace/4, trace/5, write_trace/2]).
 
 -include("cauder.hrl").
 
@@ -30,73 +30,100 @@
 
 -type state() :: #state{}.
 
--type some_options() :: #{
-    dir => file:filename(),
-    log_dir => file:filename(),
-    modules => [atom()],
-    timeout => timeout(),
-    output => file:filename()
-}.
-
--type some_options_proplist() :: [
-    {dir, file:filename()}
-    | {log_dir, file:filename()}
-    | {modules, [atom()]}
-    | {timeout, timeout()}
-    | {output, file:filename()}
+-type options() :: [
+    {timeout, timeout()}
 ].
 
--type all_options() :: #{
-    dir := file:filename(),
-    log_dir := file:filename(),
-    modules := [atom()],
-    timeout := timeout(),
-    output := file:filename()
-}.
+-define(DEFAULT_OPTIONS, [{timeout, 5000}]).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
 %%------------------------------------------------------------------------------
-%% @doc Equivalent to `trace(Mod, Fun, Args, #{})'.
-%%
-%% @see trace/4
+%% @doc Instrument the code in the file `File', which is an Erlang source code
+%% file.
 
--spec trace(Module, Function, Arguments) -> TraceInfo when
+-spec instrument(File) -> {ok, ModuleName} when
+    File :: file:filename(),
+    ModuleName :: module().
+
+instrument(File) ->
+    {ok, _ModuleName} = compile:file(File, [
+        verbose,
+        report_errors,
+        report_warnings,
+        {parse_transform, prefix_tracer_transform}
+    ]).
+
+%%------------------------------------------------------------------------------
+%% @doc Equivalent to `trace(Mod, Fun, Args, Log, [{timeout, 5000}])'.
+%%
+%% @see trace/5
+
+-spec trace(Module, Function, Arguments, Log) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
+    Log :: cauder_types:log(),
     TraceInfo :: cauder_types:trace_info().
 
-trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
+trace(Mod, Fun, Args, Log) -> trace(Mod, Fun, Args, Log, ?DEFAULT_OPTIONS).
 
 %%------------------------------------------------------------------------------
 %% @doc Traces the evaluation of the expression `apply(Mod, Fun, Args)'.
+%%
+%% Note: The module to be evaluated must have been previously instrumented,
+%% otherwise this function will fail.
 
--spec trace(Module, Function, Arguments, Options) -> TraceInfo when
+-spec trace(Module, Function, Arguments, Log, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: some_options() | some_options_proplist(),
+    Log :: cauder_types:log(),
+    Options :: options(),
     TraceInfo :: cauder_types:trace_info().
 
-trace(Mod, Fun, Args, Opts) when is_list(Opts) -> trace(Mod, Fun, Args, maps:from_list(Opts));
-trace(Mod, Fun, Args, Opts) when is_map(Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
+trace(Mod, Fun, Args, Log, Opts) -> do_trace(Mod, Fun, Args, Log, Opts).
 
 %%------------------------------------------------------------------------------
-%% @doc Returns a map with the default value for each of the available options.
+%% @doc Saves the given trace info to disk in the specified folder.
 
--spec default_options() -> all_options().
+-spec write_trace(Dir, TraceInfo) -> ok when
+    Dir :: file:filename(),
+    TraceInfo :: cauder_types:trace_info().
 
-default_options() ->
-    #{
-        dir => ".",
-        log_dir => [],
-        modules => [],
-        timeout => 10000,
-        output => []
-    }.
+write_trace(Dir, TraceInfo) ->
+    % This not compile time safe but there is no other way to keep it human-friendly and simple
+    [trace_info | Values] = tuple_to_list(TraceInfo),
+    Fields = record_info(fields, trace_info),
+    {Trace, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
+
+    ok = filelib:ensure_dir(Dir),
+    case filelib:is_dir(Dir) of
+        true -> ok;
+        false -> ok = file:make_dir(Dir)
+    end,
+
+    ResultFilename = filename:join(Dir, "trace_result.log"),
+    write_terms(ResultFilename, maps:to_list(ResultInfo)),
+
+    lists:foreach(
+        fun({Index, Terms}) ->
+            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
+            write_terms(Filename, Terms)
+        end,
+        maps:to_list(Trace)
+    ).
+
+-spec write_terms(Filename, Terms) -> ok when
+    Filename :: file:name_all(),
+    Terms :: [term()].
+
+write_terms(Filename, Terms) ->
+    Format = fun(Term) -> io_lib:format("~tp.~n", [Term]) end,
+    Text = unicode:characters_to_binary(lists:map(Format, Terms)),
+    file:write_file(Filename, Text).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -105,22 +132,19 @@ default_options() ->
 %%------------------------------------------------------------------------------
 %% @private
 
--spec init({MainPid, TracedPid, TraceDir}) -> {ok, State} when
+-spec init({MainPid, TracedPid, Log}) -> {ok, State} when
     MainPid :: pid(),
     TracedPid :: pid(),
-    TraceDir :: file:filename(),
+    Log :: cauder_types:log(),
     State :: state().
 
-init({TracerPid, TracedPid, TraceDir}) ->
+init({TracerPid, TracedPid, Log}) ->
     ?SERVER = ets:new(?SERVER, [set, private, named_table]),
 
-    {InitialPid, Log} =
-        case TraceDir of
-            [] ->
-                {new_pid(), maps:new()};
-            TraceDir ->
-                #trace_info{pid = Pid, trace = Trace} = cauder_utils:load_trace(TraceDir),
-                {Pid, cauder_utils:trace_to_log(Trace)}
+    InitialPid =
+        case maps:keys(Log) of
+            [Pid | _] -> Pid;
+            [] -> new_pid()
         end,
 
     true = ets:insert_new(?SERVER, {taken_pids, sets:from_list(maps:keys(Log))}),
@@ -266,87 +290,43 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% Internal functions
 %%%=============================================================================
 
--spec do_trace(Module, Function, Arguments, Options) -> TraceInfo when
+-spec do_trace(Module, Function, Arguments, Log, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    Options :: all_options(),
+    Log :: cauder_types:log(),
+    Options :: options(),
     TraceInfo :: cauder_types:trace_info().
 
-do_trace(Module, Function, Args, Opts) ->
-    Dir = maps:get(dir, Opts),
-    LogDir = maps:get(log_dir, Opts),
-    Modules = maps:get(modules, Opts),
-    Timeout = maps:get(timeout, Opts),
-    Output = maps:get(output, Opts),
-
-    CompTime = lists:foldl(
-        fun(Mod, AccTime) ->
-            {Time, {Mod, Bin}} = instrument(Mod, Dir),
-            File = filename:absname(filename:join(Dir, [Mod, ".beam"])),
-            ok = load(Mod, Bin, File),
-            Time + AccTime
-        end,
-        0,
-        lists:usort([Module | Modules])
-    ),
+do_trace(Module, Function, Args, Log, Opts) ->
+    {timeout, Timeout} = proplists:lookup(timeout, Opts),
 
     load(prefix_tracer_erlang),
 
     TracerPid = self(),
     TracedPid = spawn(prefix_tracer_erlang, start, [Module, Function, Args]),
-    {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {TracerPid, TracedPid, LogDir}, []),
+    {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {TracerPid, TracedPid, Log}, []),
 
-    {ExecTime, Tracing} = timer:tc(
-        fun() ->
-            TracedPid ! start,
-            receive
-                finished -> success
-            after Timeout -> timeout
-            end
-        end
-    ),
+    TracedPid ! start,
+    Tracing =
+        receive
+            finished -> success
+        after Timeout -> timeout
+        end,
 
     {ok, Trace} = gen_server:call(?SERVER, get_trace),
     ReturnValue = gen_server:call(?SERVER, get_return_value),
     InitialPid = gen_server:call(?SERVER, get_initial_pid),
     gen_server:stop(?SERVER),
 
-    Result = #trace_info{
+    #trace_info{
         node = node(),
         pid = InitialPid,
         call = {Module, Function, Args},
         tracing = Tracing,
         return = ReturnValue,
-        comp = CompTime,
-        exec = ExecTime,
         trace = Trace
-    },
-
-    case Output of
-        [] -> ok;
-        _ -> write_trace(Output, Result)
-    end,
-
-    Result.
-
--spec instrument(Module, Dir) -> {Time, {Module, Binary}} when
-    Module :: module(),
-    Dir :: file:filename(),
-    Time :: non_neg_integer(),
-    Binary :: binary().
-
-instrument(Mod, Dir) ->
-    CompileOpts = [
-        % Standard compile options
-        binary,
-        return,
-        {i, Dir},
-        {parse_transform, prefix_tracer_transform}
-    ],
-    File = filename:join(Dir, Mod),
-    {Time, {ok, Mod, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
-    {Time, {Mod, Binary}}.
+    }.
 
 -spec load(Module) -> ok when
     Module :: module().
@@ -474,42 +454,6 @@ process_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace = Tra
                 end,
             State0#state{log = Log1, mail = Mail1}
     end.
-
--spec write_trace(Dir, TraceInfo) -> ok when
-    Dir :: file:filename(),
-    TraceInfo :: cauder_types:trace_info().
-
-write_trace(Dir, TraceInfo) ->
-    % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_info | Values] = tuple_to_list(TraceInfo),
-    Fields = record_info(fields, trace_info),
-    {Trace, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
-
-    ok = filelib:ensure_dir(Dir),
-    case filelib:is_dir(Dir) of
-        true -> ok;
-        false -> ok = file:make_dir(Dir)
-    end,
-
-    ResultFilename = filename:join(Dir, "trace_result.log"),
-    write_terms(ResultFilename, maps:to_list(ResultInfo)),
-
-    lists:foreach(
-        fun({Index, Terms}) ->
-            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            write_terms(Filename, Terms)
-        end,
-        maps:to_list(Trace)
-    ).
-
--spec write_terms(Filename, Terms) -> ok when
-    Filename :: file:name_all(),
-    Terms :: [term()].
-
-write_terms(Filename, Terms) ->
-    Format = fun(Term) -> io_lib:format("~tp.~n", [Term]) end,
-    Text = unicode:characters_to_binary(lists:map(Format, Terms)),
-    file:write_file(Filename, Text).
 
 -spec map_pids(term()) -> term().
 

@@ -292,14 +292,12 @@ do_trace(Module, Function, Args, Opts) ->
     StampMode = maps:get(stamp_mode, Opts),
     Output = maps:get(output, Opts),
 
-    CompTime = lists:foldl(
-        fun(Mod, AccTime) ->
-            {Time, {Mod, Bin}} = instrument(Mod, Dir, StampMode),
+    lists:foreach(
+        fun(Mod) ->
+            {Mod, Bin} = instrument(Mod, Dir, StampMode),
             File = filename:absname(filename:join(Dir, [Mod, ".beam"])),
-            ok = load(Mod, Bin, File),
-            Time + AccTime
+            ok = load(Mod, Bin, File)
         end,
-        0,
         lists:usort([Module | Modules])
     ),
 
@@ -333,15 +331,12 @@ do_trace(Module, Function, Args, Opts) ->
         setup_complete -> ok
     end,
 
-    {ExecTime, Tracing} = timer:tc(
-        fun() ->
-            TracedPid ! start,
-            receive
-                finished -> success
-            after Timeout -> timeout
-            end
-        end
-    ),
+    TracedPid ! start,
+    Tracing =
+        receive
+            finished -> success
+        after Timeout -> timeout
+        end,
 
     dbg:stop(),
 
@@ -355,8 +350,6 @@ do_trace(Module, Function, Args, Opts) ->
         call = {Module, Function, Args},
         tracing = Tracing,
         return = ReturnValue,
-        comp = CompTime,
-        exec = ExecTime,
         trace = Traces
     },
 
@@ -367,12 +360,11 @@ do_trace(Module, Function, Args, Opts) ->
 
     Result.
 
--spec instrument(Module, Dir, StampMode) -> {Time, {Module, Binary}} when
+-spec instrument(Module, Dir, StampMode) -> {Module, Binary} when
     Module :: module(),
     Dir :: file:filename(),
     % TODO Specify values
     StampMode :: atom(),
-    Time :: non_neg_integer(),
     Binary :: binary().
 
 instrument(Mod, Dir, StampMode) ->
@@ -386,8 +378,8 @@ instrument(Mod, Dir, StampMode) ->
         {stamp_mode, StampMode}
     ],
     File = filename:join(Dir, Mod),
-    {Time, {ok, Mod, Binary, _}} = timer:tc(compile, file, [File, CompileOpts]),
-    {Time, {Mod, Binary}}.
+    {ok, Mod, Binary, _} = compile:file(File, CompileOpts),
+    {Mod, Binary}.
 
 -spec load(Module) -> ok when
     Module :: module().
