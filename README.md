@@ -127,7 +127,7 @@ be created in the root of the project.
 
 ℹ️ This script will start CauDEr in detached mode.
 
-## Creating a log
+## Creating a log (`tracer`)
 
 To trace the execution of a function call you should use either the `tracer:trace/3` or `tracer:trace/4` function. Both
 functions accept as their first three argument the components of a function application, i.e. to
@@ -167,6 +167,23 @@ If you prefer using a `proplist` for options, type:
 Or if you prefer using a `map` for options, type:
 
     tracer:trace(barber, main, [], #{dir => "case-studies/barber", output => "case-studies/barber/trace"}).
+
+## Creating a log (`prefix_tracer`)
+
+Before tracing the execution of a program you first need to instrument the program, this can be done using the
+`prefix_tracer:instrument/1` function:
+
+    prefix_tracer:instrument("case-studies/barber/barber.erl").
+
+To trace the execution of an instrumented program you can use the `prefix_tracer:trace/{4,5}` functions:
+
+    prefix_tracer:trace(barber, main, [], #{}).
+    prefix_tracer:trace(barber, main, [], #{}, [{stamp_mode, distributed}]).
+
+The available options are:
+
+* `{timeout, Timeout}`: the number of milliseconds the tracer can run, or the atom `infinity` to run forever (this is
+  however not recommended as there is currently no way to stop the tracer without losing the trace). Default is `5000`.
 
 ## Screenshot
 
