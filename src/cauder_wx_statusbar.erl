@@ -56,8 +56,8 @@ create(Frame) ->
     NewState :: cauder_wx:state().
 
 update(
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}},
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}}
+    #wx_state{system = #sys{pool = Pool}, config = #config{status_bar = Show}},
+    #wx_state{system = #sys{pool = Pool}, config = #config{status_bar = Show}}
 ) ->
     ok;
 update(_, #wx_state{config = #config{status_bar = false}}) ->
@@ -67,7 +67,7 @@ update(_, #wx_state{system = undefined}) ->
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
     wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
-update(_, #wx_state{system = #sys{procs = PMap}}) ->
+update(_, #wx_state{system = #sys{pool = Pool}}) ->
     set_visibility(true),
 
     {Alive, Dead} =
@@ -79,7 +79,7 @@ update(_, #wx_state{system = #sys{procs = PMap}}) ->
                 end
             end,
             {0, 0},
-            maps:values(PMap)
+            cauder_pool:to_list(Pool)
         ),
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
@@ -228,12 +228,12 @@ replay_steps_finish({Done, Total}, Time) ->
 %%%=============================================================================
 
 -spec replay_spawn_start(Pid) -> ok when
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 replay_spawn_start(Pid) -> set_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
 
 -spec replay_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Time :: non_neg_integer().
 
 replay_spawn_finish(Pid, Time) ->
@@ -332,12 +332,12 @@ rollback_steps_finish({Done, Total}, Time) ->
 %%%=============================================================================
 
 -spec rollback_spawn_start(Pid) -> ok when
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 rollback_spawn_start(Pid) -> set_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
 
 -spec rollback_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Time :: non_neg_integer().
 
 rollback_spawn_finish(Pid, Time) ->

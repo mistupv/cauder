@@ -28,7 +28,7 @@
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     node :: node(),
-    pid :: cauder_process:proc_id()
+    pid :: cauder_process:id()
 }).
 
 -record(h_start, {

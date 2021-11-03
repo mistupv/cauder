@@ -484,7 +484,7 @@ match_fun(Cs, Vs) -> match_clause(cauder_bindings:new(), Cs, Vs).
 when
     Clauses :: cauder_syntax:af_clause_seq(),
     Bindings :: cauder_bindings:bindings(),
-    RecipientPid :: cauder_process:proc_id(),
+    RecipientPid :: cauder_process:id(),
     Mail :: cauder_mailbox:mailbox(),
     Sched :: cauder_types:message_scheduler(),
     Sys :: cauder_system:system(),

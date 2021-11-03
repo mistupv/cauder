@@ -24,6 +24,7 @@
 -define(DBG_FAILURE(Task, Reason, Stacktrace), {dbg, {failure, Task, Reason, Stacktrace}}).
 
 -include("cauder.hrl").
+-include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -456,9 +457,9 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
 
 handle_event(
     #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Idx}},
-    #wx_state{frame = Frame, system = #sys{procs = PMap}, pid = Pid} = State
+    #wx_state{frame = Frame, system = #sys{pool = Pool}, pid = Pid} = State
 ) ->
-    #proc{env = Bs} = maps:get(Pid, PMap),
+    #process{env = Bs} = cauder_pool:get(Pid, Pool),
     IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
     Name = maps:get(Idx, IdxToKey),
     Value = cauder_bindings:get(Name, Bs),

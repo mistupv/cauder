@@ -7,23 +7,10 @@
 
 -export([fundef_lookup/1]).
 -export([find_spawn_log/2, find_spawn_parent/2, find_node_parent/2, find_msg_sender/2, find_msg_receiver/2]).
--export([
-    find_process_with_future_reads/2,
-    find_process_with_spawn/2,
-    find_process_with_failed_spawn/2,
-    find_process_with_start/2,
-    find_process_on_node/2,
-    find_process_with_failed_start/2,
-    find_process_with_read/2,
-    find_process_with_send/2,
-    find_process_with_receive/2,
-    find_process_with_variable/2,
-    process_node/2
-]).
+-export([find_process_with_future_reads/2, find_process_with_failed_spawn/2, process_node/2]).
 -export([check_node_name/1]).
 -export([string_to_expressions/1]).
 -export([filter_options/2]).
--export([fresh_pid/0]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1]).
 -export([load_trace/1]).
@@ -34,6 +21,7 @@
 
 -include("cauder.hrl").
 -include("cauder_history.hrl").
+-include("cauder_process.hrl").
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the function definition that matches the given <i>MFA</i>.
@@ -74,7 +62,7 @@ fundef_lookup({M, F, A}) ->
 -spec find_item(LMap, Entry) -> {value, Pid} | false when
     LMap :: cauder_trace:trace(),
     Entry :: cauder_trace:trace_entry_search(),
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 find_item(LMap, Entry) ->
     Pair = lists:search(fun({_Pid, Log}) -> compare(Log, Entry) end, maps:to_list(LMap)),
@@ -107,8 +95,8 @@ compare([_ | T], Entry) -> compare(T, Entry).
 
 -spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
     LMap :: cauder_trace:trace(),
-    Pid :: cauder_process:proc_id(),
-    Parent :: cauder_process:proc_id().
+    Pid :: cauder_process:id(),
+    Parent :: cauder_process:id().
 
 find_spawn_parent(LMap, Pid) ->
     find_item(LMap, {spawn, {'_', Pid}, '_'}).
@@ -118,7 +106,7 @@ find_spawn_parent(LMap, Pid) ->
 
 -spec find_spawn_log(LMap, Pid) -> Log when
     LMap :: cauder_trace:trace(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Log :: cauder_trace:trace_action().
 
 find_spawn_log(LMap, Pid) ->
@@ -140,7 +128,7 @@ find_spawn_log(LMap, Pid) ->
 -spec find_node_parent(LMap, Node) -> {value, Parent} | false when
     LMap :: cauder_trace:trace(),
     Node :: node(),
-    Parent :: cauder_process:proc_id().
+    Parent :: cauder_process:id().
 
 find_node_parent(LMap, Node) ->
     find_item(LMap, {start, Node, success}).
@@ -154,7 +142,7 @@ find_node_parent(LMap, Node) ->
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
     LMap :: cauder_trace:trace(),
     Uid :: cauder_mailbox:uid(),
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 find_msg_sender(LMap, Uid) ->
     find_item(LMap, {send, Uid}).
@@ -168,46 +156,10 @@ find_msg_sender(LMap, Uid) ->
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
     LMap :: cauder_trace:trace(),
     Uid :: cauder_mailbox:uid(),
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 find_msg_receiver(LMap, Uid) ->
     find_item(LMap, {'receive', Uid}).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process that spawned the process with the given pid, by
-%% looking at its history.
-
--spec find_process_with_spawn(ProcessMap, Pid) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Pid :: cauder_process:proc_id(),
-    Process :: cauder_process:process().
-
-find_process_with_spawn(PMap, Pid) ->
-    lists:search(fun(#proc{hist = H}) -> has_spawn(H, Pid) end, maps:values(PMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process that started the node with the given name, by
-%% looking at its history.
-
--spec find_process_with_start(ProcessMap, Node) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Node :: node(),
-    Process :: cauder_process:process().
-
-find_process_with_start(PMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_start(H, Node) end, maps:values(PMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process(es) that tried to start `Node' and failed because
-%% this was already part of the network, by looking at its history.
-
--spec find_process_with_failed_start(ProcessMap, Node) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Node :: node(),
-    Process :: cauder_process:process().
-
-find_process_with_failed_start(ProcessMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_failed_start(H, Node) end, maps:values(ProcessMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that will fail to spawn `Node' and failed because
@@ -216,7 +168,7 @@ find_process_with_failed_start(ProcessMap, Node) ->
 -spec find_process_with_failed_spawn(LMap, Node) -> {value, Process} | false when
     LMap :: cauder_trace:trace(),
     Node :: node(),
-    Process :: cauder_process:proc_id().
+    Process :: cauder_process:id().
 
 find_process_with_failed_spawn(LMap, Node) ->
     find_item(LMap, {spawn, {Node, '_'}, failure}).
@@ -227,75 +179,16 @@ find_process_with_failed_spawn(LMap, Node) ->
 -spec find_process_with_future_reads(LMap, Node) -> {value, Process} | false when
     LMap :: cauder_trace:trace(),
     Node :: node(),
-    Process :: cauder_process:proc_id().
+    Process :: cauder_process:id().
 
 find_process_with_future_reads(LMap, Node) ->
     lists:search(
         fun(Key) ->
             L = maps:get(Key, LMap),
-            not will_always_read(L, Node) /= false
+            will_always_read(L, Node)
         end,
         maps:keys(LMap)
     ).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for process(es) running on `Node'
-
--spec find_process_on_node(ProcessMap, Node) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Node :: node(),
-    Process :: cauder_process:process().
-
-find_process_on_node(ProcessMap, Node) ->
-    lists:search(fun(#proc{node = ProcNode}) -> ProcNode =:= Node end, maps:values(ProcessMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for process(es) that have performed a read of `Node' by means
-%% of the function 'nodes()'
-
--spec find_process_with_read(ProcessMap, Node) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Node :: node(),
-    Process :: cauder_process:process().
-
-find_process_with_read(ProcessMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_read(H, Node) end, maps:values(ProcessMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process that sent the message with the given uid, by
-%% looking at its history.
-
--spec find_process_with_send(ProcessMap, Uid) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Uid :: cauder_mailbox:uid(),
-    Process :: cauder_process:process().
-
-find_process_with_send(PMap, Uid) ->
-    lists:search(fun(#proc{hist = H}) -> has_send(H, Uid) end, maps:values(PMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process that received the message with the given uid,
-%% by looking at its history.
-
--spec find_process_with_receive(ProcessMap, Uid) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Uid :: cauder_mailbox:uid(),
-    Process :: cauder_process:process().
-
-find_process_with_receive(PMap, Uid) ->
-    lists:search(fun(#proc{hist = H}) -> has_rec(H, Uid) end, maps:values(PMap)).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process that defined the variable with the given name,
-%% by looking at its history.
-
--spec find_process_with_variable(ProcessMap, Name) -> {value, Process} | false when
-    ProcessMap :: cauder_process:process_map(),
-    Name :: atom(),
-    Process :: cauder_process:process().
-
-find_process_with_variable(PMap, Name) ->
-    lists:search(fun(#proc{env = Bs}) -> cauder_bindings:is_bound(Name, Bs) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Given an atom that represents a node checks that the format is correct.
@@ -341,115 +234,23 @@ string_to_expressions(String) ->
 
 -spec filter_options(Options1, Pid) -> Options2 when
     Options1 :: [cauder_types:option()],
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Options2 :: [cauder_types:option()].
 
 filter_options(Options, Pid) ->
     lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options).
 
 %%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a `spawn' entry for the
-%% process with the given pid or not.
-
--spec has_spawn(History, Pid) -> Result when
-    History :: cauder_process:history(),
-    Pid :: cauder_process:proc_id(),
-    Result :: boolean().
-
-has_spawn([], _) -> false;
-has_spawn([{spawn, _Bs, _Es, _Stk, _Node, Pid} | _], Pid) -> true;
-has_spawn([_ | RestHist], Pid) -> has_spawn(RestHist, Pid).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a `start' entry for the
-%% process with the given node or not.
-
--spec has_start(History, Node) -> Result when
-    History :: cauder_process:history(),
-    Node :: node(),
-    Result :: boolean().
-
-has_start([], _) -> false;
-has_start([{start, success, _Bs, _Es, _Stk, Node} | _], Node) -> true;
-has_start([_ | RestHist], Node) -> has_start(RestHist, Node).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a failed `start' entry for
-%% the given node or not.
-
--spec has_failed_start(History, Node) -> Result when
-    History :: cauder_process:history(),
-    Node :: node(),
-    Result :: boolean().
-
-has_failed_start([], _) -> false;
-has_failed_start([{start, failure, _Bs, _Es, _Stk, Node} | _], Node) -> true;
-has_failed_start([_ | RestHist], Node) -> has_failed_start(RestHist, Node).
-
-%%------------------------------------------------------------------------------
 %% @doc Checks whether the process will ever perform a read without `Node'
 
 -spec will_always_read(Log, Node) -> Result when
-    Log :: cauder_process:history(),
+    Log :: [cauder_trace:trace_action()],
     Node :: node(),
     Result :: boolean().
 
 will_always_read([], _) -> true;
-will_always_read([{nodes, {Nodes}} | _], Node) -> lists:member(Node, Nodes);
+will_always_read([{nodes, Nodes} | _], Node) -> lists:member(Node, Nodes);
 will_always_read([_ | RestLog], Node) -> will_always_read(RestLog, Node).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a read of `Node' by checking
-%% the history item of the function 'nodes'
-
--spec has_read(History, Node) -> Result when
-    History :: cauder_process:history(),
-    Node :: node(),
-    Result :: boolean().
-
-has_read([], _) ->
-    false;
-has_read([{nodes, _Bs, _Es, _Stk, Nodes} | RestHist], Node) ->
-    case lists:member(Node, Nodes) of
-        true -> true;
-        false -> has_read(RestHist, Node)
-    end;
-has_read([_ | RestHist], Node) ->
-    has_read(RestHist, Node).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a `send' entry for the message
-%% with the given uid or not.
-
--spec has_send(History, Uid) -> Result when
-    History :: cauder_process:history(),
-    Uid :: cauder_mailbox:uid(),
-    Result :: boolean().
-
-has_send([], _) -> false;
-has_send([{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _], Uid) -> true;
-has_send([_ | RestHist], Uid) -> has_send(RestHist, Uid).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether the given history contains a `rec' entry for the message
-%% with the given uid or not.
-
--spec has_rec(History, Uid) -> Result when
-    History :: cauder_process:history(),
-    Uid :: cauder_mailbox:uid(),
-    Result :: boolean().
-
-has_rec([], _) -> false;
-has_rec([{rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} | _], Uid) -> true;
-has_rec([_ | RestHist], Uid) -> has_rec(RestHist, Uid).
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a new and unique process identifier.
-
--spec fresh_pid() -> Pid when
-    Pid :: cauder_process:proc_id().
-
-fresh_pid() -> ets:update_counter(?APP_DB, last_pid, 1, {last_pid, -1}).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns a new and unique number to use as a variable suffix.
@@ -501,7 +302,7 @@ is_temp_variable_name(Name) ->
 %% with the given pid
 
 -spec gen_log_nodes(Pid) -> [Log] when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Log :: [string()].
 
 gen_log_nodes(Pid) ->
@@ -511,7 +312,7 @@ gen_log_nodes(Pid) ->
 %% @doc Returns a roll log message about spawning a process with the given pid.
 
 -spec gen_log_spawn(Pid) -> [Log] when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Log :: [string()].
 
 gen_log_spawn(OtherPid) ->
@@ -532,7 +333,7 @@ gen_log_start(Node) ->
 %% information.
 
 -spec gen_log_send(Pid, Message) -> [Log] when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Message :: cauder_mailbox:message(),
     Log :: [string()].
 
@@ -625,23 +426,20 @@ find_last_message_uid(Terms) ->
     Process :: cauder_process:process(),
     IsDead :: boolean().
 
-is_dead(#proc{exprs = [{value, _, _}], stack = Stk}) -> cauder_stack:is_empty(Stk);
-is_dead(#proc{}) -> false.
+is_dead(#process{expr = [{value, _, _}], stack = Stk}) -> cauder_stack:is_empty(Stk);
+is_dead(#process{}) -> false.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the process node
--spec process_node(PMap, Pid) -> Result when
-    PMap :: cauder_process:process_map(),
-    Pid :: cauder_process:proc_id(),
+-spec process_node(Pool, Pid) -> Result when
+    Pool :: cauder_pool:pool(),
+    Pid :: cauder_process:id(),
     Result :: node() | false.
 
-process_node(PMap, Pid) ->
-    case maps:get(Pid, PMap, false) of
-        false ->
-            false;
-        Proc ->
-            #proc{node = Node} = Proc,
-            Node
+process_node(Pool, Pid) ->
+    case cauder_pool:find(Pid, Pool) of
+        {value, #process{node = Node}} -> Node;
+        false -> false
     end.
 
 -spec is_conc_item(Entry) -> boolean() when

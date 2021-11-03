@@ -54,30 +54,13 @@
 -record(sys, {
     % Global mailbox
     mail = cauder_mailbox:new() :: cauder_mailbox:mailbox(),
-    % Pool of processes
-    procs :: cauder_process:process_map(),
+    pool :: cauder_pool:pool(),
     % System log
     traces = maps:new() :: cauder_trace:trace(),
     % System nodes
     nodes = [] :: [node()],
     x_trace = [] :: [cauder_types:x_trace()],
     roll = []
-}).
-
-%% Process
--record(proc, {
-    % Process node
-    node :: node(),
-    % Process identifier
-    pid :: cauder_process:proc_id(),
-    hist = cauder_history:new() :: cauder_history:history(),
-    % Call stack
-    stack = cauder_stack:new() :: cauder_stack:stack(),
-    env = cauder_bindings:new() :: cauder_bindings:bindings(),
-    % List of expressions
-    exprs :: [cauder_syntax:abstract_expr()],
-    % The entry point function for this process
-    spf :: mfa()
 }).
 
 %% Message
@@ -87,15 +70,15 @@
     % Message
     value :: term(),
     % Sender PID
-    src :: cauder_process:proc_id(),
+    src :: cauder_process:id(),
     % Receiver PID
-    dest :: cauder_process:proc_id()
+    dest :: cauder_process:id()
 }).
 
 % Option
 -record(opt, {
     % integer
-    pid :: cauder_process:proc_id(),
+    pid :: cauder_process:id(),
     % forward or backward
     sem :: cauder_types:semantics(),
     % seq, spawn, ...
@@ -105,8 +88,8 @@
 % TODO What is the purpose of this?
 -record(x_trace, {
     type :: ?RULE_SPAWN | ?RULE_START | ?RULE_SEND | ?RULE_RECEIVE,
-    from :: cauder_process:proc_id(),
-    to :: undefined | cauder_process:proc_id(),
+    from :: cauder_process:id(),
+    to :: undefined | cauder_process:id(),
     node :: undefined | node(),
     val :: undefined | term(),
     res :: success | failure | undefined,
@@ -126,7 +109,7 @@
     % Initial node
     node :: node(),
     % Initial pid
-    pid :: cauder_process:proc_id(),
+    pid :: cauder_process:id(),
     % Initial function call
     call :: {module(), atom(), [term()]},
     % Whether the execution completed or the timeout was reached

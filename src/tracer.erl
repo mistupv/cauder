@@ -172,13 +172,13 @@ handle_call({trace, Pid, spawn, SlavePid, {slave, wait_for_slave, [Pid, _, _, No
     {reply, ok, State#state{slave_starters = SlaveStarters1}};
 %% Spawn failed
 handle_call({trace, Pid, spawn, ChildPid, {erts_internal, crasher, [ChildNode, _, _, _, _, _]}}, _From, State) ->
-    ChildIdx = pid_index(ChildPid),
+    ChildIdx = cauder_process:from_pid(ChildPid),
     State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, failure}, State),
     {reply, ok, State1};
 %% Spawn succeeded
 handle_call({trace, Pid, spawn, ChildPid, {_, _, _}}, _From, State) ->
     ChildNode = node(ChildPid),
-    ChildIdx = pid_index(ChildPid),
+    ChildIdx = cauder_process:from_pid(ChildPid),
     State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, success}, State),
     State2 = State1#state{processes = sets:add_element(ChildPid, State1#state.processes)},
     {reply, ok, State2};
@@ -340,7 +340,7 @@ do_trace(Module, Function, Args, Opts) ->
 
     Result = #trace_result{
         node = node(),
-        pid = pid_index(TracedPid),
+        pid = cauder_process:from_pid(TracedPid),
         call = {Module, Function, Args},
         tracing = Tracing,
         return = ReturnValue,
@@ -408,7 +408,7 @@ trace_handler(Trace, []) ->
     NewState :: state().
 
 add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
-    Index = pid_index(Pid),
+    Index = cauder_process:from_pid(Pid),
     Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
     State#state{traces = Trace1}.
 
@@ -419,20 +419,12 @@ add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampMap0, traces = Trace0} = State) when is_atom(Tag) ->
-    PidIndex = pid_index(Pid),
-    {Uid, StampMap1} = get_uid(Stamp, StampMap0, Table),
+add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StamPool0, traces = Trace0} = State) when is_atom(Tag) ->
+    PidIndex = cauder_process:from_pid(Pid),
+    {Uid, StamPool1} = get_uid(Stamp, StamPool0, Table),
     Entry = {Tag, Uid},
     Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
-    State#state{stamps = StampMap1, traces = Trace1}.
-
--spec pid_index(Pid) -> Index when
-    Pid :: pid(),
-    Index :: non_neg_integer().
-
-pid_index(Pid) when is_pid(Pid) ->
-    [_Node, Index, _Serial] = string:lexemes(pid_to_list(Pid), "<.>"),
-    list_to_integer(Index).
+    State#state{stamps = StamPool1, traces = Trace1}.
 
 -spec get_uid(Stamp, Map, Table) -> {Uid, NewMap} when
     Stamp :: integer(),

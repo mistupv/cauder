@@ -2,7 +2,9 @@
 
 %% API
 -export([new/0, peek/1, pop/1, push/2, is_empty/1, to_list/1]).
+-export([has_nodes/2, has_spawn/2, has_start/2, has_failed_start/2, has_send/2, has_receive/2]).
 
+-include("cauder.hrl").
 -include("cauder_history.hrl").
 
 -export_type([history/0]).
@@ -66,3 +68,55 @@ is_empty(_) -> false.
     Entry :: cauder_history:entry().
 
 to_list(History) -> History.
+
+%%%=============================================================================
+%%% Utils
+%%%=============================================================================
+
+-spec has_nodes(Node, History) -> boolean() when
+    Node :: node(),
+    History :: cauder_history:history().
+
+has_nodes(_, []) -> false;
+has_nodes(Node, [#h_nodes{nodes = Nodes} | H]) -> lists:member(Node, Nodes) orelse has_nodes(Node, H);
+has_nodes(Node, [_ | H]) -> has_nodes(Node, H).
+
+-spec has_spawn(Pid, History) -> boolean() when
+    Pid :: cauder_process:id(),
+    History :: cauder_history:history().
+
+has_spawn(_, []) -> false;
+has_spawn(Pid, [#h_spawn{pid = Pid} | _]) -> true;
+has_spawn(Pid, [_ | H]) -> has_spawn(Pid, H).
+
+-spec has_start(Node, History) -> boolean() when
+    Node :: node(),
+    History :: cauder_history:history().
+
+has_start(_, []) -> false;
+has_start(Node, [#h_start{node = Node, success = true} | _]) -> true;
+has_start(Node, [_ | H]) -> has_start(Node, H).
+
+-spec has_failed_start(Node, History) -> boolean() when
+    Node :: node(),
+    History :: cauder_history:history().
+
+has_failed_start(_, []) -> false;
+has_failed_start(Node, [#h_start{node = Node, success = false} | _]) -> true;
+has_failed_start(Node, [_ | H]) -> has_failed_start(Node, H).
+
+-spec has_send(Uid, History) -> boolean() when
+    Uid :: cauder_mailbox:uid(),
+    History :: cauder_history:history().
+
+has_send(_, []) -> false;
+has_send(Uid, [#h_send{msg = #message{uid = Uid}} | _]) -> true;
+has_send(Uid, [_ | H]) -> has_send(Uid, H).
+
+-spec has_receive(Uid, History) -> boolean() when
+    Uid :: cauder_mailbox:uid(),
+    History :: cauder_history:history().
+
+has_receive(_, []) -> false;
+has_receive(Uid, [#h_receive{msg = #message{uid = Uid}} | _]) -> true;
+has_receive(Uid, [_ | H]) -> has_receive(Uid, H).

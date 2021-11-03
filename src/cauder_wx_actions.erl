@@ -4,9 +4,10 @@
 -export([create/1, update/2, update_process/2]).
 -export([selected_pid/0]).
 
--include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
+-include("cauder_process.hrl").
 -include("cauder_wx.hrl").
+-include_lib("wx/include/wx.hrl").
 
 -define(INPUT_SIZE, {size, {100, -1}}).
 -define(BUTTON_SIZE, {size, {100, -1}}).
@@ -86,16 +87,16 @@ update_process(_, #wx_state{system = undefined}) ->
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) ->
+update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{pool = Pool}}) ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
     wxChoice:freeze(Choice),
     wxChoice:enable(Choice),
     wxChoice:clear(Choice),
     {_, NewIdx} =
         lists:foldl(
-            fun(Proc, {Idx, Match}) ->
-                Label = cauder_pp:process(Proc),
-                Pid = Proc#proc.pid,
+            fun(P, {Idx, Match}) ->
+                Label = cauder_pp:process(P),
+                Pid = P#process.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of
                     OldPid -> {Idx + 1, Idx};
@@ -103,7 +104,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
                 end
             end,
             {0, 0},
-            maps:values(PMap)
+            cauder_pool:to_list(Pool)
         ),
     wxChoice:setSelection(Choice, NewIdx),
     wxChoice:thaw(Choice),
@@ -116,7 +117,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
 %% dropdown.
 
 -spec selected_pid() -> Pid | undefined when
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 selected_pid() ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
@@ -502,11 +503,11 @@ update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_rollback(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
     ok;
-update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
+update_rollback(_, #wx_state{system = #sys{pool = Pool}, pid = Pid}) ->
     CanRollBack =
         lists:any(
-            fun(#proc{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
-            maps:values(PMap)
+            fun(#process{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
+            cauder_pool:to_list(Pool)
         ),
 
     case CanRollBack of
@@ -516,7 +517,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
         true ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
-            #proc{hist = Hist} = maps:get(Pid, PMap),
+            #process{hist = Hist} = cauder_pool:get(Pid, Pool),
             CanRollbackSteps = not cauder_history:is_empty(Hist),
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
@@ -524,7 +525,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
 
             % TODO Improve to avoid unnecessary updates
 
-            HistEntries = lists:flatmap(fun(Proc) -> Proc#proc.hist end, maps:values(PMap)),
+            HistEntries = lists:flatmap(fun(P) -> P#process.hist end, cauder_pool:to_list(Pool)),
             RuleMap = lists:foldl(
                 fun(Entry, Map) ->
                     try

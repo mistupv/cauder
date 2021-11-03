@@ -11,6 +11,7 @@
 -include("cauder.hrl").
 -include("cauder_stack.hrl").
 -include("cauder_history.hrl").
+-include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -18,7 +19,7 @@
     Process :: cauder_process:process(),
     String :: string().
 
-process(#proc{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
+process(#process{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
     Icon =
         case cauder_utils:is_dead(Proc) of
             true -> ?ICON_DEAD;
@@ -103,7 +104,7 @@ trace_entry(#x_trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) 
 %%%=============================================================================
 
 -spec pid(Pid) -> String when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     String :: string().
 
 pid(Pid) -> "Proc. " ++ to_string(Pid).

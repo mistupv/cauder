@@ -24,6 +24,7 @@
 
 -include("cauder.hrl").
 -include("cauder_history.hrl").
+-include("cauder_process.hrl").
 
 %%%=============================================================================
 %%% API
@@ -35,14 +36,16 @@
 
 -spec can_rollback_step(System, Pid) -> CanRollback when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     CanRollback :: boolean().
 
-can_rollback_step(#sys{procs = PMap}, Pid) when is_map_key(Pid, PMap) ->
-    #proc{hist = Hist} = maps:get(Pid, PMap),
-    not cauder_history:is_empty(Hist);
-can_rollback_step(_, _) ->
-    false.
+can_rollback_step(#sys{pool = Pool}, Pid) ->
+    case cauder_pool:find(Pid, Pool) of
+        {value, #process{hist = Hist}} ->
+            not cauder_history:is_empty(Hist);
+        false ->
+            false
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the spawning of the process with the given pid can be
@@ -50,10 +53,11 @@ can_rollback_step(_, _) ->
 
 -spec can_rollback_spawn(System, Pid) -> CanRollback when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     CanRollback :: boolean().
 
-can_rollback_spawn(#sys{procs = PMap}, Pid) -> cauder_utils:find_process_with_spawn(PMap, Pid) =/= false.
+can_rollback_spawn(#sys{pool = Pool}, Pid) ->
+    cauder_pool:find_history_spawn(Pid, Pool) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the start of the node with the given name can be
@@ -64,8 +68,8 @@ can_rollback_spawn(#sys{procs = PMap}, Pid) -> cauder_utils:find_process_with_sp
     Node :: node(),
     CanRollback :: boolean().
 
-can_rollback_start(#sys{nodes = Nodes, procs = PMap}, Node) ->
-    #proc{node = FirstNode} = maps:get(lists:min(maps:keys(PMap)), PMap),
+can_rollback_start(#sys{nodes = Nodes, pool = Pool}, Node) ->
+    #process{node = FirstNode} = cauder_pool:first(Pool),
     lists:member(Node, Nodes -- [FirstNode]).
 
 %%------------------------------------------------------------------------------
@@ -77,7 +81,8 @@ can_rollback_start(#sys{nodes = Nodes, procs = PMap}, Node) ->
     Uid :: cauder_mailbox:uid(),
     CanRollback :: boolean().
 
-can_rollback_send(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_send(PMap, Uid) =/= false.
+can_rollback_send(#sys{pool = Pool}, Uid) ->
+    cauder_pool:find_history_send(Uid, Pool) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the reception of the message with the given uid can be
@@ -88,7 +93,8 @@ can_rollback_send(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_sen
     Uid :: cauder_mailbox:uid(),
     CanRollback :: boolean().
 
-can_rollback_receive(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_receive(PMap, Uid) =/= false.
+can_rollback_receive(#sys{pool = Pool}, Uid) ->
+    cauder_pool:find_history_receive(Uid, Pool) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the binding of the variable with the given name can be
@@ -99,7 +105,8 @@ can_rollback_receive(#sys{procs = PMap}, Uid) -> cauder_utils:find_process_with_
     Name :: atom(),
     CanRollback :: boolean().
 
-can_rollback_variable(#sys{procs = PMap}, Name) -> cauder_utils:find_process_with_variable(PMap, Name) =/= false.
+can_rollback_variable(#sys{pool = Pool}, Name) ->
+    cauder_pool:find_variable(Name, Pool) =/= false.
 
 %%%=============================================================================
 
@@ -109,11 +116,11 @@ can_rollback_variable(#sys{procs = PMap}, Name) -> cauder_utils:find_process_wit
 
 -spec rollback_step(System, Pid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
-rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) ->
-    #proc{hist = Hist, node = Node} = maps:get(Pid, PMap),
+rollback_step(#sys{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0, Pid) ->
+    #process{hist = Hist, node = Node} = cauder_pool:get(Pid, Pool),
     ProcViewOfNodes = SysNodes -- [Node],
     case cauder_history:peek(Hist) of
         {value, #h_spawn{pid = SpawnPid}} ->
@@ -143,11 +150,11 @@ rollback_step(#sys{procs = PMap, nodes = SysNodes, roll = RollLog} = Sys0, Pid) 
 
 -spec rollback_spawn(System, Pid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
-rollback_spawn(#sys{procs = PMap} = Sys, Pid) ->
-    {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_spawn(PMap, Pid),
+rollback_spawn(#sys{pool = Pool} = Sys, Pid) ->
+    {value, #process{pid = ParentPid}} = cauder_pool:find_history_spawn(Pid, Pool),
     rollback_until_spawn(Sys#sys{roll = []}, ParentPid, Pid).
 
 %%------------------------------------------------------------------------------
@@ -159,8 +166,8 @@ rollback_spawn(#sys{procs = PMap} = Sys, Pid) ->
     Node :: node(),
     NewSystem :: cauder_system:system().
 
-rollback_start(#sys{procs = PMap} = Sys, Node) ->
-    {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_start(PMap, Node),
+rollback_start(#sys{pool = Pool} = Sys, Node) ->
+    {value, #process{pid = ParentPid}} = cauder_pool:find_history_start(Node, Pool),
     rollback_until_start(Sys#sys{roll = []}, ParentPid, Node).
 
 %%------------------------------------------------------------------------------
@@ -172,8 +179,8 @@ rollback_start(#sys{procs = PMap} = Sys, Node) ->
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-rollback_send(#sys{procs = PMap} = Sys, Uid) ->
-    {value, #proc{pid = SenderPid}} = cauder_utils:find_process_with_send(PMap, Uid),
+rollback_send(#sys{pool = Pool} = Sys, Uid) ->
+    {value, #process{pid = SenderPid}} = cauder_pool:find_history_send(Uid, Pool),
     rollback_until_send(Sys#sys{roll = []}, SenderPid, Uid).
 
 %%------------------------------------------------------------------------------
@@ -185,8 +192,8 @@ rollback_send(#sys{procs = PMap} = Sys, Uid) ->
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-rollback_receive(#sys{procs = PMap} = Sys, Uid) ->
-    {value, #proc{pid = ReceiverPid}} = cauder_utils:find_process_with_receive(PMap, Uid),
+rollback_receive(#sys{pool = Pool} = Sys, Uid) ->
+    {value, #process{pid = ReceiverPid}} = cauder_pool:find_history_receive(Uid, Pool),
     rollback_until_receive(Sys#sys{roll = []}, ReceiverPid, Uid).
 
 %%------------------------------------------------------------------------------
@@ -198,8 +205,8 @@ rollback_receive(#sys{procs = PMap} = Sys, Uid) ->
     Name :: atom(),
     NewSystem :: cauder_system:system().
 
-rollback_variable(#sys{procs = PMap} = Sys, Name) ->
-    {value, #proc{pid = Pid}} = cauder_utils:find_process_with_variable(PMap, Name),
+rollback_variable(#sys{pool = Pool} = Sys, Name) ->
+    {value, #process{pid = Pid}} = cauder_pool:find_variable(Name, Pool),
     rollback_until_variable(Sys#sys{roll = []}, Pid, Name).
 
 %%%=============================================================================
@@ -208,21 +215,21 @@ rollback_variable(#sys{procs = PMap} = Sys, Name) ->
 
 -spec rollback_nodes(System, Pid, Nodes) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Nodes :: [node()],
     NewSystem :: cauder_system:system().
 
-rollback_nodes(#sys{nodes = SysNodes, procs = PMap} = Sys0, Pid, Nodes) ->
-    #proc{node = Node} = maps:get(Pid, PMap),
+rollback_nodes(#sys{nodes = SysNodes, pool = Pool} = Sys0, Pid, Nodes) ->
+    #process{node = Node} = cauder_pool:get(Pid, Pool),
     ProcViewOfNodes = SysNodes -- [Node],
     [FirstNode | _] = ProcViewOfNodes -- Nodes,
-    {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_start(PMap, FirstNode),
+    {value, #process{pid = ParentPid}} = cauder_pool:find_history_start(FirstNode, Pool),
     rollback_until_start(Sys0, ParentPid, FirstNode).
 
 -spec rollback_spawn(System, Pid, SpawnPid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
-    SpawnPid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
+    SpawnPid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
 rollback_spawn(Sys0, Pid, SpawnPid) ->
@@ -240,7 +247,7 @@ rollback_spawn(Sys0, Pid, SpawnPid) ->
 
 -spec rollback_start(System, Pid, SpawnNode) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     SpawnNode :: node(),
     NewSystem :: cauder_system:system().
 
@@ -259,8 +266,8 @@ rollback_start(Sys0, Pid, SpawnNode) ->
 
 -spec rollback_send(System, Pid, DestPid, Uid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
-    DestPid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
+    DestPid :: cauder_process:id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
@@ -281,12 +288,12 @@ rollback_send(Sys0, Pid, DestPid, Uid) ->
 
 -spec rollback_until_spawn(System, Pid, SpawnPid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
-    SpawnPid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
+    SpawnPid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
-rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+rollback_until_spawn(#sys{pool = Pool} = Sys0, Pid, SpawnPid) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
         {value, #h_spawn{pid = SpawnPid}} ->
             rollback_step(Sys0, Pid);
@@ -297,41 +304,42 @@ rollback_until_spawn(#sys{procs = PMap} = Sys0, Pid, SpawnPid) ->
 
 -spec rollback_until_start(System, Pid, Node) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Node :: node(),
     NewSystem :: cauder_system:system().
 
-rollback_until_start(#sys{procs = PMap} = Sys0, Pid, SpawnNode) ->
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+rollback_until_start(#sys{pool = Pool} = Sys0, Pid, StartNode) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_start{node = SpawnNode, success = true}} ->
-            ProcsOnNode = cauder_utils:find_process_on_node(PMap, SpawnNode),
-            ProcsWithRead = cauder_utils:find_process_with_read(PMap, SpawnNode),
-            ProcsWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, SpawnNode),
-            case {ProcsOnNode, ProcsWithRead, ProcsWithFailedStart} of
-                {false, false, false} ->
-                    undo_step(Sys0, Pid);
-                {{value, #proc{pid = ProcOnNodePid}}, _, _} ->
-                    {value, #proc{pid = ParentPid}} = cauder_utils:find_process_with_spawn(PMap, ProcOnNodePid),
-                    rollback_step(Sys0, ParentPid);
-                {_, {value, #proc{pid = FirstProcPid}}, _} ->
-                    rollback_step(Sys0, FirstProcPid);
-                {_, _, {value, #proc{pid = FirstProcPid}}} ->
-                    rollback_step(Sys0, FirstProcPid)
+        {value, #h_start{node = StartNode, success = true}} ->
+            case cauder_pool:find_on_node(StartNode, Pool) of
+                [P1 | _] ->
+                    {value, P2} = cauder_pool:find_history_spawn(P1#process.pid, Pool),
+                    rollback_step(Sys0, P2#process.pid);
+                [] ->
+                    case cauder_pool:find_history_nodes(StartNode, Pool) of
+                        {value, P1} ->
+                            rollback_step(Sys0, P1#process.pid);
+                        false ->
+                            case cauder_pool:find_history_failed_start(StartNode, Pool) of
+                                {value, P1} -> rollback_step(Sys0, P1#process.pid);
+                                false -> undo_step(Sys0, Pid)
+                            end
+                    end
             end;
         {value, _} ->
             Sys1 = rollback_step(Sys0, Pid),
-            rollback_until_start(Sys1, Pid, SpawnNode)
+            rollback_until_start(Sys1, Pid, StartNode)
     end.
 
 -spec rollback_until_send(System, Pid, Uid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+rollback_until_send(#sys{pool = Pool} = Sys0, Pid, Uid) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
         {value, #h_send{msg = #message{uid = Uid}}} ->
             rollback_step(Sys0, Pid);
@@ -342,12 +350,12 @@ rollback_until_send(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 
 -spec rollback_until_receive(System, Pid, Uid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+rollback_until_receive(#sys{pool = Pool} = Sys0, Pid, Uid) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
         {value, #h_receive{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Sys0, Pid, Uid);
@@ -358,13 +366,13 @@ rollback_until_receive(#sys{procs = PMap} = Sys0, Pid, Uid) ->
 
 -spec rollback_after_receive(System, Pid, Uid) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
 rollback_after_receive(Sys0, Pid, Uid) ->
-    #sys{procs = PMap} = Sys1 = rollback_step(Sys0, Pid),
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+    #sys{pool = Pool} = Sys1 = rollback_step(Sys0, Pid),
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
         {value, #h_send{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Sys1, Pid, Uid);
@@ -374,12 +382,12 @@ rollback_after_receive(Sys0, Pid, Uid) ->
 
 -spec rollback_until_variable(System, Pid, Name) -> NewSystem when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Name :: atom(),
     NewSystem :: cauder_system:system().
 
-rollback_until_variable(#sys{procs = PMap} = Sys0, Pid, Name) ->
-    #proc{env = Bs} = maps:get(Pid, PMap),
+rollback_until_variable(#sys{pool = Pool} = Sys0, Pid, Name) ->
+    #process{env = Bs} = cauder_pool:get(Pid, Pool),
     case cauder_bindings:is_bound(Name, Bs) of
         true ->
             Sys0;
@@ -392,7 +400,7 @@ rollback_until_variable(#sys{procs = PMap} = Sys0, Pid, Name) ->
 
 -spec options(System, Pid) -> Options when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Options :: [cauder_types:option()].
 
 options(Sys, Pid) ->
@@ -401,7 +409,7 @@ options(Sys, Pid) ->
 
 -spec undo_step(System, Pid) -> System when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id().
+    Pid :: cauder_process:id().
 
 undo_step(System, Pid) ->
     [#opt{pid = Pid, sem = Sem} | _] = options(System, Pid),

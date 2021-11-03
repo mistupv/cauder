@@ -44,7 +44,7 @@
     | {self, cauder_syntax:af_variable()}
     | {node, cauder_syntax:af_variable()}
     | {nodes, cauder_syntax:af_variable()}
-    | {send, cauder_process:proc_id(), term()}
+    | {send, cauder_process:id(), term()}
     | {rec, cauder_syntax:af_variable(), cauder_syntax:af_clause_seq()}.
 
 -type trace_result() :: #trace_result{}.

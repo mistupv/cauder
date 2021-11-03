@@ -23,7 +23,7 @@
     position = -1 :: integer(),
     task :: atom() | undefined,
     system :: cauder_system:system() | undefined,
-    pid :: cauder_process:proc_id() | undefined
+    pid :: cauder_process:id() | undefined
 }).
 
 -define(GUI_DB, 'cauder_wx/database').

@@ -34,6 +34,7 @@
 -define(SERVER, ?MODULE).
 
 -include("cauder.hrl").
+-include("cauder_process.hrl").
 
 -record(state, {
     subs = [] :: [pid()],
@@ -238,7 +239,7 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_seman
 
 -spec step(Semantics, Pid, Steps, Scheduler) -> Reply when
     Semantics :: cauder_types:semantics(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     Scheduler :: cauder_types:message_scheduler(),
     Reply :: {ok, CurrentSystem} | busy,
@@ -281,7 +282,7 @@ step_multiple(Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step_mu
 %% @see task_replay_steps/2
 
 -spec replay_steps(Pid, Steps) -> Reply when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
@@ -299,7 +300,7 @@ replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid,
 %% @see task_replay_spawn/2
 
 -spec replay_spawn(Pid) -> Reply when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -385,7 +386,7 @@ replay_full_log() -> gen_server:call(?SERVER, {user, {replay_full_log, []}}).
 %% @see task_rollback_steps/2
 
 -spec rollback_steps(Pid, Steps) -> Reply when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
@@ -420,7 +421,7 @@ rollback_start(Node) -> gen_server:call(?SERVER, {user, {rollback_start, Node}})
 %% @see task_rollback_spawn/2
 
 -spec rollback_spawn(Pid) -> Reply when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -528,7 +529,7 @@ get_path() -> gen_server:call(?SERVER, {user, {get, path}}).
 %% `busy' will be returned instead.
 
 -spec set_binding(Pid, {Key, Value}) -> ok | busy when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Key :: atom(),
     Value :: term().
 
@@ -625,11 +626,17 @@ handle_call({user, _}, _From, #state{task = {_, _, _}} = State) ->
     {reply, busy, State};
 %%%=============================================================================
 
-handle_call({user, {set, {binding, Pid}, {Name, Value}}}, _From, #state{system = Sys0} = State) ->
-    #sys{procs = #{Pid := #proc{env = Bs0} = P} = Ps} = Sys0,
-    Bs1 = cauder_bindings:add(Name, Value, Bs0),
-    Sys1 = Sys0#sys{procs = Ps#{Pid := P#proc{env = Bs1}}},
-    {reply, ok, State#state{system = Sys1}};
+handle_call({user, {set, {binding, Pid}, {Name, Value}}}, _From, State0) ->
+    #state{system = Sys0} = State0,
+    #sys{pool = Pool0} = Sys0,
+    Pool1 = cauder_pool:update_with(
+        Pid,
+        fun(P) -> cauder_process:add_binding(Name, Value, P) end,
+        Pool0
+    ),
+    Sys1 = Sys0#sys{pool = Pool1},
+    State1 = State0#state{system = Sys1},
+    {reply, ok, State1};
 %%%=============================================================================
 
 handle_call({user, {task, {resume, MessageId}}}, _From, #state{task = {_, Pid, suspended}} = State) ->
@@ -743,7 +750,7 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
     ).
 
 -spec suspend_task(Receiver, Messages, CurrentSystem) -> {SuspendTime, ({resume, MessageId} | cancel)} when
-    Receiver :: cauder_process:proc_id(),
+    Receiver :: cauder_process:id(),
     Messages :: [cauder_mailbox:uid()],
     CurrentSystem :: cauder_system:system(),
     SuspendTime :: integer(),
@@ -786,15 +793,15 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->
-                Pid = cauder_utils:fresh_pid(),
-                Proc = #proc{
+                Pid = cauder_process:new_pid(),
+                Proc = #process{
                     node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
+                    expr = [cauder_syntax:remote_call(Mod, Fun, Args)],
                     spf = {Mod, Fun, length(Args)}
                 },
                 #sys{
-                    procs = #{Pid => Proc},
+                    pool = cauder_pool:new(Proc),
                     nodes = [Node]
                 }
             end
@@ -816,14 +823,14 @@ task_start_replay(TracePath, undefined) ->
                     traces = Traces
                 } = cauder_utils:load_trace(TracePath),
                 AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, Args)),
-                Proc = #proc{
+                Proc = #process{
                     node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
+                    expr = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
                     spf = {Mod, Fun, length(Args)}
                 },
                 #sys{
-                    procs = #{Pid => Proc},
+                    pool = cauder_pool:new(Proc),
                     traces = Traces,
                     nodes = [Node]
                 }
@@ -836,7 +843,7 @@ task_start_replay(TracePath, undefined) ->
 
 -spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
     Semantics :: cauder_types:semantics(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: non_neg_integer(),
     Scheduler :: cauder_types:message_scheduler(),
     System :: cauder_system:system(),
@@ -862,7 +869,7 @@ task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
 %%%=============================================================================
 
 -spec task_replay_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: non_neg_integer(),
     System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
@@ -873,7 +880,7 @@ task_replay_steps({Pid, Steps}, Sys0) ->
     {success, {StepsDone, Steps}, Time, Sys1}.
 
 -spec task_replay_spawn(Pid, System) -> task_result(Pid) when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     System :: cauder_system:system().
 
 task_replay_spawn(Pid, Sys0) ->
@@ -951,7 +958,7 @@ task_replay_full_log([], Sys0) ->
 %%%=============================================================================
 
 -spec task_rollback_steps({Pid, Steps}, System) -> task_result({StepsDone, Steps}) when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: non_neg_integer(),
     System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
@@ -979,7 +986,7 @@ task_rollback_start(Node, Sys0) ->
     {success, Node, Time, Sys1}.
 
 -spec task_rollback_spawn(Pid, System) -> task_result(Pid) when
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     System :: cauder_system:system().
 
 task_rollback_spawn(Pid, Sys0) ->
@@ -1052,7 +1059,7 @@ task_rollback_variable(Name, Sys0) ->
     Semantics :: cauder_types:semantics(),
     Scheduler :: cauder_types:message_scheduler(),
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     Completion :: success | cancel,
     NewSystem :: cauder_system:system(),
@@ -1156,7 +1163,7 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
 
 -spec replay_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
     NewSystem :: cauder_system:system(),
@@ -1188,7 +1195,7 @@ replay_full_log(Sys = #sys{traces = LMap}) ->
 
 -spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     System :: cauder_system:system(),
-    Pid :: cauder_process:proc_id(),
+    Pid :: cauder_process:id(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
     NewSystem :: cauder_system:system(),
