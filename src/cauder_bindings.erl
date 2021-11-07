@@ -28,16 +28,13 @@ new() -> maps:new().
 add(Name, Value, Bs) ->
     maps:put(Name, Value, Bs).
 
--spec get(Name, Bindings) -> Value when
+-spec get(Name, Bindings) -> {ok, Value} | error when
     Name :: cauder_bindings:name(),
     Bindings :: cauder_bindings:bindings(),
     Value :: cauder_bindings:value().
 
 get(Name, Bs) ->
-    case maps:find(Name, Bs) of
-        {ok, Value} -> {value, Value};
-        error -> unbound
-    end.
+    maps:find(Name, Bs).
 
 -spec is_bound(Name, Bindings) -> boolean() when
     Name :: cauder_bindings:name(),

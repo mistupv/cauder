@@ -438,8 +438,10 @@ is_dead(#process{}) -> false.
 
 process_node(Pid, Pool) ->
     case cauder_pool:find(Pid, Pool) of
-        {value, #process{node = Node}} -> Node;
-        false -> false
+        {ok, #process{node = Node}} ->
+            Node;
+        error ->
+            false
     end.
 
 -spec is_conc_item(Entry) -> boolean() when

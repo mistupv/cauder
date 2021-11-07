@@ -42,9 +42,9 @@
 
 can_rollback_step(Pid, #system{pool = Pool}) ->
     case cauder_pool:find(Pid, Pool) of
-        {value, #process{hist = Hist}} ->
+        {ok, #process{hist = Hist}} ->
             not cauder_history:is_empty(Hist);
-        false ->
+        error ->
             false
     end.
 
@@ -58,7 +58,10 @@ can_rollback_step(Pid, #system{pool = Pool}) ->
     CanRollback :: boolean().
 
 can_rollback_spawn(Pid, #system{pool = Pool}) ->
-    cauder_pool:find_history_spawn(Pid, Pool) =/= false.
+    case cauder_pool:find_history_spawn(Pid, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the start of the node with the given name can be
@@ -83,7 +86,10 @@ can_rollback_start(Node, #system{pool = Pool, nodes = Nodes}) ->
     CanRollback :: boolean().
 
 can_rollback_send(Uid, #system{pool = Pool}) ->
-    cauder_pool:find_history_send(Uid, Pool) =/= false.
+    case cauder_pool:find_history_send(Uid, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the reception of the message with the given uid can be
@@ -95,7 +101,10 @@ can_rollback_send(Uid, #system{pool = Pool}) ->
     CanRollback :: boolean().
 
 can_rollback_receive(Uid, #system{pool = Pool}) ->
-    cauder_pool:find_history_receive(Uid, Pool) =/= false.
+    case cauder_pool:find_history_receive(Uid, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the binding of the variable with the given name can be
@@ -107,7 +116,10 @@ can_rollback_receive(Uid, #system{pool = Pool}) ->
     CanRollback :: boolean().
 
 can_rollback_variable(#system{pool = Pool}, Name) ->
-    cauder_pool:find_variable(Name, Pool) =/= false.
+    case cauder_pool:find_variable(Name, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
 
 %%%=============================================================================
 
@@ -155,7 +167,7 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
     NewSystem :: cauder_system:system().
 
 rollback_spawn(Pid, #system{pool = Pool} = Sys) ->
-    {value, #process{pid = ParentPid}} = cauder_pool:find_history_spawn(Pid, Pool),
+    {ok, #process{pid = ParentPid}} = cauder_pool:find_history_spawn(Pid, Pool),
     rollback_until_spawn(ParentPid, Sys#system{roll = []}, Pid).
 
 %%------------------------------------------------------------------------------
@@ -168,7 +180,7 @@ rollback_spawn(Pid, #system{pool = Pool} = Sys) ->
     NewSystem :: cauder_system:system().
 
 rollback_start(Node, #system{pool = Pool} = Sys) ->
-    {value, #process{pid = ParentPid}} = cauder_pool:find_history_start(Node, Pool),
+    {ok, #process{pid = ParentPid}} = cauder_pool:find_history_start(Node, Pool),
     rollback_until_start(ParentPid, Sys#system{roll = []}, Node).
 
 %%------------------------------------------------------------------------------
@@ -181,7 +193,7 @@ rollback_start(Node, #system{pool = Pool} = Sys) ->
     NewSystem :: cauder_system:system().
 
 rollback_send(Uid, #system{pool = Pool} = Sys) ->
-    {value, #process{pid = SenderPid}} = cauder_pool:find_history_send(Uid, Pool),
+    {ok, #process{pid = SenderPid}} = cauder_pool:find_history_send(Uid, Pool),
     rollback_until_send(SenderPid, Sys#system{roll = []}, Uid).
 
 %%------------------------------------------------------------------------------
@@ -194,7 +206,7 @@ rollback_send(Uid, #system{pool = Pool} = Sys) ->
     NewSystem :: cauder_system:system().
 
 rollback_receive(Uid, #system{pool = Pool} = Sys) ->
-    {value, #process{pid = ReceiverPid}} = cauder_pool:find_history_receive(Uid, Pool),
+    {ok, #process{pid = ReceiverPid}} = cauder_pool:find_history_receive(Uid, Pool),
     rollback_until_receive(ReceiverPid, Sys#system{roll = []}, Uid).
 
 %%------------------------------------------------------------------------------
@@ -207,7 +219,7 @@ rollback_receive(Uid, #system{pool = Pool} = Sys) ->
     NewSystem :: cauder_system:system().
 
 rollback_variable(#system{pool = Pool} = Sys, Name) ->
-    {value, #process{pid = Pid}} = cauder_pool:find_variable(Name, Pool),
+    {ok, #process{pid = Pid}} = cauder_pool:find_variable(Name, Pool),
     rollback_until_variable(Pid, Sys#system{roll = []}, Name).
 
 %%%=============================================================================
@@ -224,7 +236,7 @@ rollback_nodes(Pid, #system{pool = Pool, nodes = SysNodes} = Sys0, Nodes) ->
     #process{node = Node} = cauder_pool:get(Pid, Pool),
     ProcViewOfNodes = SysNodes -- [Node],
     [FirstNode | _] = ProcViewOfNodes -- Nodes,
-    {value, #process{pid = ParentPid}} = cauder_pool:find_history_start(FirstNode, Pool),
+    {ok, #process{pid = ParentPid}} = cauder_pool:find_history_start(FirstNode, Pool),
     rollback_until_start(ParentPid, Sys0, FirstNode).
 
 -spec rollback_spawn(Pid, System, SpawnPid) -> NewSystem when
@@ -315,16 +327,16 @@ rollback_until_start(Pid, #system{pool = Pool} = Sys0, StartNode) ->
         {value, #h_start{node = StartNode, success = true}} ->
             case cauder_pool:find_on_node(StartNode, Pool) of
                 [P1 | _] ->
-                    {value, P2} = cauder_pool:find_history_spawn(P1#process.pid, Pool),
+                    {ok, P2} = cauder_pool:find_history_spawn(P1#process.pid, Pool),
                     rollback_step(P2#process.pid, Sys0);
                 [] ->
                     case cauder_pool:find_history_nodes(StartNode, Pool) of
-                        {value, P1} ->
+                        {ok, P1} ->
                             rollback_step(P1#process.pid, Sys0);
-                        false ->
+                        error ->
                             case cauder_pool:find_history_failed_start(StartNode, Pool) of
-                                {value, P1} -> rollback_step(P1#process.pid, Sys0);
-                                false -> undo_step(Pid, Sys0)
+                                {ok, P1} -> rollback_step(P1#process.pid, Sys0);
+                                error -> undo_step(Pid, Sys0)
                             end
                     end
             end;

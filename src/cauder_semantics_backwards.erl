@@ -313,8 +313,8 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
         {value, #h_start{node = StartNode, success = true}} ->
             Bool =
                 cauder_pool:find_on_node(StartNode, Pool) =:= [] andalso
-                    cauder_pool:find_history_nodes(StartNode, Pool) =:= false andalso
-                    cauder_pool:find_history_failed_start(StartNode, Pool) =:= false,
+                    cauder_pool:find_history_nodes(StartNode, Pool) =:= error andalso
+                    cauder_pool:find_history_failed_start(StartNode, Pool) =:= error,
             case Bool of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
                 false -> ?NULL_OPT

@@ -108,7 +108,7 @@ seq(Bs, [E | Es], Stk) ->
     Result :: cauder_types:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
-    {value, Value} = cauder_bindings:get(Name, Bs),
+    {ok, Value} = cauder_bindings:get(Name, Bs),
     #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk};
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
     case is_reducible(H0, Bs) of
@@ -573,9 +573,9 @@ when
 
 match_rec_uid(Cs, Bs0, Uid, Mail0) ->
     case cauder_mailbox:uid_take(Uid, Mail0) of
-        false ->
+        error ->
             nomatch;
-        {value, {Msg, QPos}, Mail1} ->
+        {{Msg, QPos}, Mail1} ->
             case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
                 {match, Bs, Body} -> {Bs, Body, {Msg, QPos}, Mail1};
                 nomatch -> nomatch
@@ -653,11 +653,11 @@ match1({var, _, '_'}, _, Bs) ->
     {match, Bs};
 match1({var, _, Name}, Value, Bs0) ->
     case cauder_bindings:get(Name, Bs0) of
-        {value, Value} ->
+        {ok, Value} ->
             {match, Bs0};
-        {value, _} ->
+        {ok, _} ->
             throw(nomatch);
-        unbound ->
+        error ->
             Bs1 = cauder_bindings:add(Name, Value, Bs0),
             {match, Bs1}
     end;

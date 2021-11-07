@@ -159,7 +159,7 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 %% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
 %% been removed.
 
--spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
+-spec uid_take(Uid, Mailbox1) -> {{Message, QueuePosition}, Mailbox2} | error when
     Uid :: uid(),
     Mailbox1 :: mailbox(),
     Message :: message(),
@@ -169,14 +169,14 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
     case maps:find(Uid, Index) of
         error ->
-            false;
+            error;
         {ok, {Src, Dest}} ->
             SrcMap = maps:get(Dest, DestMap),
             Queue = orddict:fetch(Src, SrcMap),
             {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
             QueuePos = queue_index_of(Message, Queue),
             {_, Mailbox} = delete(Message, Mailbox0),
-            {value, {Message, QueuePos}, Mailbox}
+            {{Message, QueuePos}, Mailbox}
     end.
 
 %%------------------------------------------------------------------------------
@@ -236,10 +236,9 @@ list_insert(Index, Index, Item, List, Acc) -> lists:reverse([Item | Acc], List);
 list_insert(Index, CurrIdx, Item, [H | T], Acc) -> list_insert(Index, CurrIdx + 1, Item, T, [H | Acc]).
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the index of `Item' in `Queue' or `false' if there is no such
-%% item.
+%% @doc Returns the index of `Item' in `Queue'.
 
--spec queue_index_of(Item, Queue) -> Index | false when
+-spec queue_index_of(Item, Queue) -> Index when
     Item :: T,
     Queue :: queue:queue(T),
     Index :: pos_integer(),
@@ -248,10 +247,9 @@ list_insert(Index, CurrIdx, Item, [H | T], Acc) -> list_insert(Index, CurrIdx + 
 queue_index_of(Item, Queue) -> index_of(Item, queue:to_list(Queue)).
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the index of `Item' in `List' or `false' if there is no such
-%% item.
+%% @doc Returns the index of `Item' in `List'.
 
--spec index_of(Item, List) -> Index | false when
+-spec index_of(Item, List) -> Index when
     Item :: T,
     List :: [T],
     Index :: pos_integer(),
@@ -259,6 +257,5 @@ queue_index_of(Item, Queue) -> index_of(Item, queue:to_list(Queue)).
 
 index_of(Item, List) -> index_of(Item, List, 1).
 
-index_of(_, [], _) -> false;
 index_of(Item, [Item | _], Index) -> Index;
 index_of(Item, [_ | Tail], Index) -> index_of(Item, Tail, Index + 1).

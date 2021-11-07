@@ -80,13 +80,13 @@ uid_take_test_() ->
     Tuple3 = uid_take(Uid3, Mail),
 
     [
-        ?_assertMatch({value, {M1, 1}, _}, Tuple1),
-        ?_assertMatch({value, {M2, 1}, _}, Tuple2),
-        ?_assertMatch({value, {M3, 2}, _}, Tuple3),
-        ?_assertEqual(sets:from_list([M2, M3]), sets:from_list(to_list(element(3, Tuple1)))),
-        ?_assertEqual(sets:from_list([M1, M3]), sets:from_list(to_list(element(3, Tuple2)))),
-        ?_assertEqual(sets:from_list([M1, M2]), sets:from_list(to_list(element(3, Tuple3)))),
-        ?_assertNot(uid_take(4, Mail)),
-        ?_assertNot(uid_take(5, Mail)),
-        ?_assertNot(uid_take(6, Mail))
+        ?_assertMatch({{M1, 1}, _}, Tuple1),
+        ?_assertMatch({{M2, 1}, _}, Tuple2),
+        ?_assertMatch({{M3, 2}, _}, Tuple3),
+        ?_assertEqual(sets:from_list([M2, M3]), sets:from_list(to_list(element(2, Tuple1)))),
+        ?_assertEqual(sets:from_list([M1, M3]), sets:from_list(to_list(element(2, Tuple2)))),
+        ?_assertEqual(sets:from_list([M1, M2]), sets:from_list(to_list(element(2, Tuple3)))),
+        ?_assertEqual(error, uid_take(4, Mail)),
+        ?_assertEqual(error, uid_take(5, Mail)),
+        ?_assertEqual(error, uid_take(6, Mail))
     ].

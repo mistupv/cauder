@@ -7,7 +7,6 @@
     remove/2,
     get/2,
     find/2,
-    take/2,
     first/1,
     is_element/2,
     update/2,
@@ -24,8 +23,6 @@
     find_history_receive/2,
     find_variable/2
 ]).
-
--ignore_xref([take/2]).
 
 -include("cauder_process.hrl").
 
@@ -68,28 +65,13 @@ remove(Id, Pool) ->
 get(Id, Pool) ->
     maps:get(Id, Pool).
 
--spec find(Id, Pool) -> {value, Process} | false when
+-spec find(Id, Pool) -> {ok, Process} | error when
     Id :: cauder_process:id(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find(Id, Pool) ->
-    case maps:find(Id, Pool) of
-        {ok, Process} -> {value, Process};
-        error -> false
-    end.
-
--spec take(Id, Pool1) -> {Process, Pool2} | error when
-    Id :: cauder_process:id(),
-    Pool1 :: cauder_pool:pool(),
-    Process :: cauder_process:process(),
-    Pool2 :: cauder_pool:pool().
-
-take(Id, Pool) ->
-    case maps:take(Id, Pool) of
-        error -> false;
-        Tuple -> Tuple
-    end.
+    maps:find(Id, Pool).
 
 -spec first(Pool) -> Process when
     Pool :: cauder_pool:pool(),
@@ -136,75 +118,85 @@ to_list(Pool) -> maps:values(Pool).
 %% @doc Checks the history of each process, until it finds the process that
 %% spawned the process with the given `Pid'.
 
--spec find_history_spawn(Pid, Pool) -> {value, Process} | false when
+-spec find_history_spawn(Pid, Pool) -> {ok, Process} | error when
     Pid :: cauder_process:id(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_spawn(Pid, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_spawn(Pid, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_spawn(Pid, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
 %% @doc Checks the history of each process, until it finds the process that
 %% started the given `Node' node.
 
--spec find_history_start(Node, Pool) -> {value, Process} | false when
+-spec find_history_start(Node, Pool) -> {ok, Process} | error when
     Node :: node(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_start(Node, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_start(Node, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_start(Node, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that tried to start `Node' and failed because
 %% this was already part of the network, by looking at its history.
 
--spec find_history_failed_start(Node, Pool) -> {value, Process} | false when
+-spec find_history_failed_start(Node, Pool) -> {ok, Process} | error when
     Node :: node(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_failed_start(Node, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_failed_start(Node, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_failed_start(Node, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
 %% @doc Checks the history of each process, until it finds the process that
 %% sent the message with the given `Uid'.
 
--spec find_history_send(Uid, Pool) -> {value, Process} | false when
+-spec find_history_send(Uid, Pool) -> {ok, Process} | error when
     Uid :: cauder_mailbox:uid(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_send(Uid, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_send(Uid, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_send(Uid, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
 %% @doc Checks the history of each process, until it finds the process that
 %% sent the message with the given `Uid'.
 
--spec find_history_receive(Uid, Pool) -> {value, Process} | false when
+-spec find_history_receive(Uid, Pool) -> {ok, Process} | error when
     Uid :: cauder_mailbox:uid(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_receive(Uid, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_receive(Uid, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_receive(Uid, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
@@ -225,28 +217,43 @@ find_on_node(Node, Pool) ->
 %% @doc Searches for process(es) that have performed a read of `Node' by means
 %% of the function 'nodes()'
 
--spec find_history_nodes(Node, Pool) -> {value, Process} | false when
+-spec find_history_nodes(Node, Pool) -> {ok, Process} | error when
     Node :: node(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_history_nodes(Node, Pool) ->
-    lists:search(
-        fun(P) -> cauder_history:has_nodes(Node, P#process.hist) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_nodes(Node, P#process.hist) end,
+            maps:values(Pool)
+        )
     ).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that defined the variable with the given name,
 %% by looking at its history.
 
--spec find_variable(Name, Pool) -> {value, Process} | false when
+-spec find_variable(Name, Pool) -> {ok, Process} | error when
     Name :: atom(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
 find_variable(Name, Pool) ->
-    lists:search(
-        fun(P) -> cauder_bindings:is_bound(Name, P#process.env) end,
-        maps:values(Pool)
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_bindings:is_bound(Name, P#process.env) end,
+            maps:values(Pool)
+        )
     ).
+
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+-spec value_to_ok
+    ({value, Value}) -> {ok, Value};
+    (false) -> error.
+
+value_to_ok({value, Value}) -> {ok, Value};
+value_to_ok(false) -> error.

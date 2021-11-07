@@ -169,7 +169,7 @@ update_bindings(_, #wx_state{system = #system{pool = Pool}, pid = Pid, config = 
     {_, IdxToKey} =
         sets:fold(
             fun(Name, {Idx, IdxToKey}) ->
-                Value = cauder_bindings:get(Name, Bs),
+                {ok, Value} = cauder_bindings:get(Name, Bs),
                 wxListCtrl:insertItem(BindingsControl, Idx, ""),
                 wxListCtrl:setItemFont(BindingsControl, Idx, Font),
                 wxListCtrl:setItem(BindingsControl, Idx, 0, atom_to_list(Name)),
