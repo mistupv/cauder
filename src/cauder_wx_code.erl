@@ -8,7 +8,7 @@
 % TODO Remove when migrating to JavaFX
 -elvis([{elvis_style, macro_names, #{regex => "^((wx)?[A-Z][A-Z_0-9]+)$"}}]).
 
--include("cauder.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -202,7 +202,7 @@ update_code(_, #wx_state{pid = undefined}) ->
     unmark_line(CodeControl),
     goto_line(CodeControl, 1),
     ok;
-update_code(_, #wx_state{system = #sys{pool = Pool}, pid = Pid}) ->
+update_code(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CodeControl = cauder_wx:find(?CODE_Code_Control, wxStyledTextCtrl),
     unmark_line(CodeControl),
     #process{expr = [E | _]} = cauder_pool:get(Pid, Pool),
@@ -243,7 +243,7 @@ update_expression(_, #wx_state{system = undefined}) ->
 update_expression(_, #wx_state{pid = undefined}) ->
     wxTextCtrl:clear(cauder_wx:find(?CODE_Expression_Control, wxTextCtrl)),
     ok;
-update_expression(_, #wx_state{system = #sys{pool = Pool}, pid = Pid}) ->
+update_expression(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     ExpressionControl = cauder_wx:find(?CODE_Expression_Control, wxTextCtrl),
     #process{expr = [Expr | _]} = cauder_pool:get(Pid, Pool),
     StrExpr = cauder_pp:expression(Expr),

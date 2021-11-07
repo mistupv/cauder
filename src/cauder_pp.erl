@@ -9,9 +9,9 @@
 -export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
+-include("cauder_process.hrl").
 -include("cauder_stack.hrl").
 -include("cauder_history.hrl").
--include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 

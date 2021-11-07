@@ -27,6 +27,7 @@
 -elvis([{elvis_style, god_modules, disable}]).
 
 -include("cauder.hrl").
+-include("cauder_system.hrl").
 -include("cauder_wx.hrl").
 -include("cauder_wx_statusbar.hrl").
 
@@ -56,8 +57,8 @@ create(Frame) ->
     NewState :: cauder_wx:state().
 
 update(
-    #wx_state{system = #sys{pool = Pool}, config = #config{status_bar = Show}},
-    #wx_state{system = #sys{pool = Pool}, config = #config{status_bar = Show}}
+    #wx_state{system = #system{pool = Pool}, config = #config{status_bar = Show}},
+    #wx_state{system = #system{pool = Pool}, config = #config{status_bar = Show}}
 ) ->
     ok;
 update(_, #wx_state{config = #config{status_bar = false}}) ->
@@ -67,7 +68,7 @@ update(_, #wx_state{system = undefined}) ->
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
     wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
-update(_, #wx_state{system = #sys{pool = Pool}}) ->
+update(_, #wx_state{system = #system{pool = Pool}}) ->
     set_visibility(true),
 
     {Alive, Dead} =

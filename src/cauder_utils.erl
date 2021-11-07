@@ -20,8 +20,8 @@
 -elvis([{elvis_style, god_modules, disable}]).
 
 -include("cauder.hrl").
--include("cauder_history.hrl").
 -include("cauder_process.hrl").
+-include("cauder_history.hrl").
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the function definition that matches the given <i>MFA</i>.
@@ -232,12 +232,12 @@ string_to_expressions(String) ->
 %% @doc Returns a new list containing only the options whose pid, matches the
 %% given pid.
 
--spec filter_options(Options1, Pid) -> Options2 when
-    Options1 :: [cauder_types:option()],
+-spec filter_options(Pid, Options1) -> Options2 when
     Pid :: cauder_process:id(),
+    Options1 :: [cauder_types:option()],
     Options2 :: [cauder_types:option()].
 
-filter_options(Options, Pid) ->
+filter_options(Pid, Options) ->
     lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options).
 
 %%------------------------------------------------------------------------------
@@ -431,12 +431,12 @@ is_dead(#process{}) -> false.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the process node
--spec process_node(Pool, Pid) -> Result when
+-spec process_node(Pid, Pool) -> Result when
     Pool :: cauder_pool:pool(),
     Pid :: cauder_process:id(),
     Result :: node() | false.
 
-process_node(Pool, Pid) ->
+process_node(Pid, Pool) ->
     case cauder_pool:find(Pid, Pool) of
         {value, #process{node = Node}} -> Node;
         false -> false

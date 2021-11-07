@@ -24,6 +24,7 @@
 -define(DBG_FAILURE(Task, Reason, Stacktrace), {dbg, {failure, Task, Reason, Stacktrace}}).
 
 -include("cauder.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -351,7 +352,7 @@ handle_event(?BUTTON_EVENT(Button), #wx_state{pid = Pid} = State) when
     Steps = wxSpinCtrl:getValue(Spinner),
     Choice = cauder_wx:find(?ACTION_Manual_Scheduler, wxChoice),
     Scheduler = wxChoice:getClientData(Choice, wxChoice:getSelection(Choice)),
-    {ok, System} = cauder:step(Sem, Pid, Steps, Scheduler),
+    {ok, System} = cauder:step(Pid, Sem, Steps, Scheduler),
     cauder_wx_statusbar:step_start(Sem),
     {noreply, refresh(State, State#wx_state{system = System, task = step})};
 %%%=============================================================================
@@ -457,7 +458,7 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
 
 handle_event(
     #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Idx}},
-    #wx_state{frame = Frame, system = #sys{pool = Pool}, pid = Pid} = State
+    #wx_state{frame = Frame, system = #system{pool = Pool}, pid = Pid} = State
 ) ->
     #process{env = Bs} = cauder_pool:get(Pid, Pool),
     IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),

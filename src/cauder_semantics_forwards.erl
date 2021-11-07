@@ -18,8 +18,9 @@
 -import(cauder_eval, [is_reducible/2]).
 
 -include("cauder.hrl").
--include("cauder_history.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
+-include("cauder_history.hrl").
 
 %%%=============================================================================
 %%% API
@@ -29,14 +30,14 @@
 %% @doc Performs a single forwards step in the process with the given Pid in the
 %% given System.
 
--spec step(System, Pid, MessageScheduler, Mode) -> NewSystem when
-    System :: cauder_system:system(),
+-spec step(Pid, System, MessageScheduler, Mode) -> NewSystem when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     MessageScheduler :: cauder_types:message_scheduler(),
     Mode :: normal | replay,
     NewSystem :: cauder_system:system().
 
-step(#sys{pool = Pool, nodes = Nodes, traces = LMap} = Sys, Pid, Sched, Mode) ->
+step(Pid, #system{pool = Pool, nodes = Nodes, traces = LMap} = Sys, Sched, Mode) ->
     #process{node = Node, pid = Pid, stack = Stk0, env = Bs0, expr = Es0} =
         P0 = cauder_pool:get(Pid, Pool),
     #result{label = Label, exprs = Es} = Result = cauder_eval:seq(Bs0, Es0, Stk0),
@@ -161,7 +162,7 @@ step(#sys{pool = Pool, nodes = Nodes, traces = LMap} = Sys, Pid, Sched, Mode) ->
     Mode :: normal | replay,
     Options :: [cauder_types:option()].
 
-options(#sys{pool = Pool} = Sys, Mode) ->
+options(#system{pool = Pool} = Sys, Mode) ->
     lists:filtermap(
         fun(#process{expr = E, pid = Pid} = P) ->
             case expression_option(E, P, Mode, Sys) of
@@ -311,7 +312,7 @@ check_reducibility([], _, _, _, 'case') ->
     ?RULE_SEQ;
 check_reducibility([], _, _, _, bif) ->
     ?RULE_SEQ;
-check_reducibility([], #process{node = Node, pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, nodes) ->
+check_reducibility([], #process{node = Node, pid = Pid}, _, #system{traces = LMap, nodes = Nodes}, nodes) ->
     SNodes = Nodes -- [Node],
     Log = extract_log(LMap, Pid, nodes),
     case Log of
@@ -323,7 +324,7 @@ check_reducibility(
     [Cs | []],
     #process{pid = Pid, env = Bs},
     _,
-    #sys{traces = LMap, mail = Mail} = Sys,
+    #system{mail = Mail, traces = LMap} = Sys,
     {'receive', Mode}
 ) ->
     IsMatch =
@@ -339,7 +340,7 @@ check_reducibility(
         true -> ?RULE_RECEIVE;
         false -> ?NOT_EXP
     end;
-check_reducibility([], #process{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, spawn) ->
+check_reducibility([], #process{pid = Pid}, _, #system{traces = LMap, nodes = Nodes}, spawn) ->
     Log = extract_log(LMap, Pid, spawn),
     case Log of
         not_found ->
@@ -350,7 +351,7 @@ check_reducibility([], #process{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes
                 {_, _} -> ?RULE_START
             end
     end;
-check_reducibility([], #process{pid = Pid}, _, #sys{traces = LMap, nodes = Nodes}, start) ->
+check_reducibility([], #process{pid = Pid}, _, #system{traces = LMap, nodes = Nodes}, start) ->
     Log = extract_log(LMap, Pid, start),
     case Log of
         not_found ->
@@ -411,7 +412,7 @@ extract_log(LMap, Pid, send) ->
 fwd_tau(
     #process{hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk},
-    #sys{pool = Pool} = Sys
+    #system{pool = Pool} = Sys
 ) ->
     Entry = #h_tau{env = Bs0, expr = Es0, stack = Stk0},
     Hist2 = cauder_history:push(Entry, Hist),
@@ -421,7 +422,7 @@ fwd_tau(
         env = Bs,
         expr = Es
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool)
     }.
 
@@ -434,7 +435,7 @@ fwd_tau(
 fwd_self(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {self, VarPid}},
-    #sys{pool = Pool} = Sys
+    #system{pool = Pool} = Sys
 ) ->
     Entry = #h_self{env = Bs0, expr = Es0, stack = Stk0},
     Hist2 = cauder_history:push(Entry, Hist),
@@ -444,7 +445,7 @@ fwd_self(
         env = Bs,
         expr = cauder_syntax:replace_variable(Es, VarPid, Pid)
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool)
     }.
 
@@ -457,7 +458,7 @@ fwd_self(
 fwd_node(
     #process{node = Node, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {node, VarNode}},
-    #sys{pool = Pool} = Sys
+    #system{pool = Pool} = Sys
 ) ->
     Entry = #h_node{env = Bs0, expr = Es0, stack = Stk0},
     Hist2 = cauder_history:push(Entry, Hist),
@@ -467,7 +468,7 @@ fwd_node(
         env = Bs,
         expr = cauder_syntax:replace_variable(Es, VarNode, Node)
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool)
     }.
 
@@ -481,7 +482,7 @@ fwd_node(
 fwd_nodes(
     #process{node = Node, pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {nodes, VarNodes}},
-    #sys{nodes = Nodes, traces = LMap, pool = Pool} = Sys,
+    #system{pool = Pool, nodes = Nodes, traces = LMap} = Sys,
     Opts
 ) ->
     NewLog =
@@ -498,7 +499,7 @@ fwd_nodes(
         env = Bs,
         expr = cauder_syntax:replace_variable(Es, VarNodes, NodeList)
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool),
         traces = LMap#{Pid => NewLog}
     }.
@@ -513,7 +514,7 @@ fwd_nodes(
 fwd_spawn_s(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{label = {spawn, VarPid, N, M, F, As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, pool = Pool, x_trace = Trace} = Sys,
+    #system{pool = Pool, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     Inline = maps:get(inline, Opts, false),
@@ -559,7 +560,7 @@ fwd_spawn_s(
         from = Pid,
         to = SpawnPid
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:add(P2, cauder_pool:update(P1, Pool)),
         traces = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
@@ -575,7 +576,7 @@ fwd_spawn_s(
 fwd_spawn_f(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{label = {spawn, VarPid, N, _M, _F, _As}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, pool = Pool, x_trace = Trace} = Sys,
+    #system{pool = Pool, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewLog =
@@ -601,7 +602,7 @@ fwd_spawn_f(
         from = Pid,
         to = SpawnPid
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool),
         traces = LMap#{Pid => NewLog},
         x_trace = [T | Trace]
@@ -617,7 +618,7 @@ fwd_spawn_f(
 fwd_start_s(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{nodes = Nodes, traces = LMap, pool = Pool, x_trace = Trace} = Sys,
+    #system{pool = Pool, nodes = Nodes, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewNode =
@@ -644,11 +645,11 @@ fwd_start_s(
         res = success,
         node = NewNode
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool),
-        x_trace = [T | Trace],
         nodes = [NewNode] ++ Nodes,
-        traces = LMap#{Pid => NewLog}
+        traces = LMap#{Pid => NewLog},
+        x_trace = [T | Trace]
     }.
 
 -spec fwd_start_f(Proc, Result, Sys, Opts) -> NewSystem when
@@ -661,7 +662,7 @@ fwd_start_s(
 fwd_start_f(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{label = {start, VarNode, _Host, _Name}, env = Bs, exprs = Es, stack = Stk},
-    #sys{traces = LMap, pool = Pool, x_trace = Trace} = Sys,
+    #system{pool = Pool, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewNode =
@@ -689,10 +690,10 @@ fwd_start_f(
         res = failure,
         node = NewNode
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool),
-        x_trace = [T | Trace],
-        traces = LMap#{Pid => NewLog}
+        traces = LMap#{Pid => NewLog},
+        x_trace = [T | Trace]
     }.
 
 -spec fwd_send(Proc, Result, Sys, Opts) -> NewSystem when
@@ -705,7 +706,7 @@ fwd_start_f(
 fwd_send(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}},
-    #sys{mail = Mail, traces = LMap, pool = Pool, x_trace = Trace} = Sys,
+    #system{pool = Pool, mail = Mail, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
     NewLog = maps:get(new_log, Opts, []),
@@ -740,7 +741,7 @@ fwd_send(
         val = Val,
         time = M#message.uid
     },
-    Sys#sys{
+    Sys#system{
         mail = cauder_mailbox:add(M, Mail),
         pool = cauder_pool:update(P1, Pool),
         traces = LMap#{Pid => NewLog},
@@ -757,7 +758,7 @@ fwd_send(
 fwd_rec(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
     #result{env = Bs, stack = Stk, label = {rec, _, Cs}},
-    #sys{mail = Mail, traces = LMap0, pool = Pool, x_trace = Trace} = Sys,
+    #system{mail = Mail, pool = Pool, traces = LMap0, x_trace = Trace} = Sys,
     Opts
 ) ->
     Mode =
@@ -801,7 +802,7 @@ fwd_rec(
         val = Msg#message.value,
         time = Msg#message.uid
     },
-    Sys#sys{
+    Sys#system{
         mail = Mail1,
         pool = cauder_pool:update(P1, Pool),
         traces = LMap1,

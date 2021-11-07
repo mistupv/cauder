@@ -9,8 +9,9 @@
 -export([step/2, options/1]).
 
 -include("cauder.hrl").
--include("cauder_history.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
+-include("cauder_history.hrl").
 
 %%%=============================================================================
 %%% API
@@ -20,15 +21,15 @@
 %% @doc Performs a single backwards step in the process with the given Pid in
 %% the given System.
 
--spec step(System, Pid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec step(Pid, System) -> NewSystem when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-step(#sys{pool = Pool} = Sys0, Pid) ->
+step(Pid, #system{pool = Pool} = Sys0) ->
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     {{value, Entry}, RestHist} = cauder_history:pop(Hist),
-    Sys = Sys0#sys{
+    Sys = Sys0#system{
         pool = cauder_pool:update_with(
             Pid,
             fun(P) -> P#process{hist = RestHist} end,
@@ -61,10 +62,10 @@ step(#sys{pool = Pool} = Sys0, Pid) ->
     System :: cauder_system:system(),
     Options :: [cauder_types:option()].
 
-options(#sys{pool = Pool} = Sys) ->
+options(#system{pool = Pool} = Sys) ->
     lists:filtermap(
         fun(#process{pid = Pid}) ->
-            case process_option(Pid, Sys#sys{pool = cauder_pool:remove(Pid, Pool)}) of
+            case process_option(Pid, Sys#system{pool = cauder_pool:remove(Pid, Pool)}) of
                 ?NULL_OPT -> false;
                 Opt -> {true, Opt}
             end
@@ -85,14 +86,14 @@ step_self(Pid, #h_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
 step_node(Pid, #h_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-step_simple(Pid, {Bs, Es, Stk}, #sys{pool = Pool} = Sys) ->
+step_simple(Pid, {Bs, Es, Stk}, #system{pool = Pool} = Sys) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
         env = Bs,
         expr = Es,
         stack = Stk
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P1, Pool)
     }.
 
@@ -104,7 +105,7 @@ step_nodes(
         stack = Stk,
         nodes = HistNodes
     },
-    #sys{
+    #system{
         pool = Pool,
         traces = LMap
     } = Sys
@@ -115,7 +116,7 @@ step_nodes(
         expr = Es,
         stack = Stk
     },
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P, Pool),
         traces = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
     }.
@@ -129,7 +130,7 @@ step_spawn(
         node = Node,
         pid = Gid
     },
-    #sys{
+    #system{
         pool = Pool,
         traces = LMap,
         x_trace = Trace
@@ -147,12 +148,12 @@ step_spawn(
         to = Gid
     },
     Result =
-        case cauder_utils:process_node(Pool, Gid) of
+        case cauder_utils:process_node(Gid, Pool) of
             false -> failure;
             _ -> success
         end,
     NewLog = {spawn, {Node, Gid}, Result},
-    Sys#sys{
+    Sys#system{
         pool = cauder_pool:update(P, cauder_pool:remove(Gid, Pool)),
         traces = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
         x_trace = lists:delete(T, Trace)
@@ -167,10 +168,10 @@ step_start(
         node = Node,
         success = Success
     },
-    #sys{
+    #system{
         pool = Pool,
-        traces = LMap,
         nodes = Nodes,
+        traces = LMap,
         x_trace = Trace
     } = Sys
 ) ->
@@ -192,9 +193,9 @@ step_start(
         node = Node
     },
     Entry1 = {start, Node, Result},
-    Sys#sys{
-        nodes = lists:delete(Node, Nodes),
+    Sys#system{
         pool = cauder_pool:update(P, Pool),
+        nodes = lists:delete(Node, Nodes),
         x_trace = lists:delete(T, Trace),
         traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap)
     }.
@@ -207,7 +208,7 @@ step_send(
         stack = Stk,
         msg = #message{dest = Dest, value = Val, uid = Uid} = Msg
     },
-    #sys{
+    #system{
         mail = Mail,
         pool = Pool,
         traces = LMap,
@@ -229,7 +230,7 @@ step_send(
         time = Uid
     },
     Entry1 = {send, Uid},
-    Sys#sys{
+    Sys#system{
         mail = OldMsgs,
         pool = cauder_pool:update(P, Pool),
         traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
@@ -245,7 +246,7 @@ step_receive(
         msg = M = #message{uid = Uid, value = Value, dest = Pid},
         q_pos = QPos
     },
-    #sys{
+    #system{
         mail = Mail,
         pool = Pool,
         traces = LMap,
@@ -265,7 +266,7 @@ step_receive(
         time = Uid
     },
     Entry1 = {'receive', Uid},
-    Sys#sys{
+    Sys#system{
         mail = cauder_mailbox:insert(M, QPos, Mail),
         pool = cauder_pool:update(P1, Pool),
         traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
@@ -281,7 +282,7 @@ step_receive(
     System :: cauder_system:system(),
     Option :: cauder_types:option() | ?NULL_OPT.
 
-process_option(Pid, #sys{pool = Pool} = Sys) ->
+process_option(Pid, #system{pool = Pool} = Sys) ->
     #process{node = Node, hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
         empty ->
@@ -293,7 +294,7 @@ process_option(Pid, #sys{pool = Pool} = Sys) ->
         {value, #h_node{}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
         {value, #h_nodes{nodes = Nodes}} ->
-            ProcViewOfNodes = lists:delete(Node, Sys#sys.nodes),
+            ProcViewOfNodes = lists:delete(Node, Sys#system.nodes),
             case ProcViewOfNodes =:= Nodes of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
                 false -> ?NULL_OPT
@@ -321,7 +322,7 @@ process_option(Pid, #sys{pool = Pool} = Sys) ->
         {value, #h_start{success = false}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
         {value, #h_send{msg = #message{uid = Uid}}} ->
-            case cauder_mailbox:uid_member(Uid, Sys#sys.mail) of
+            case cauder_mailbox:uid_member(Uid, Sys#system.mail) of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
                 false -> ?NULL_OPT
             end;

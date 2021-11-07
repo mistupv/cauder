@@ -50,19 +50,6 @@
 %%% Records
 %%%=============================================================================
 
-% System
--record(sys, {
-    % Global mailbox
-    mail = cauder_mailbox:new() :: cauder_mailbox:mailbox(),
-    pool :: cauder_pool:pool(),
-    % System log
-    traces = maps:new() :: cauder_trace:trace(),
-    % System nodes
-    nodes = [] :: [node()],
-    x_trace = [] :: [cauder_types:x_trace()],
-    roll = []
-}).
-
 %% Message
 -record(message, {
     % UID

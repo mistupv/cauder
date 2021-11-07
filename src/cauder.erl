@@ -34,6 +34,7 @@
 -define(SERVER, ?MODULE).
 
 -include("cauder.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
 
 -record(state, {
@@ -237,7 +238,7 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_seman
 %%
 %% @see task_step/2
 
--spec step(Semantics, Pid, Steps, Scheduler) -> Reply when
+-spec step(Pid, Semantics, Steps, Scheduler) -> Reply when
     Semantics :: cauder_types:semantics(),
     Pid :: cauder_process:id(),
     Steps :: pos_integer(),
@@ -245,7 +246,7 @@ eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_seman
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
-step(Sem, Pid, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid, Steps, Scheduler}}}).
+step(Pid, Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem, Pid, Steps, Scheduler}}}).
 
 %%%=============================================================================
 
@@ -628,13 +629,13 @@ handle_call({user, _}, _From, #state{task = {_, _, _}} = State) ->
 
 handle_call({user, {set, {binding, Pid}, {Name, Value}}}, _From, State0) ->
     #state{system = Sys0} = State0,
-    #sys{pool = Pool0} = Sys0,
+    #system{pool = Pool0} = Sys0,
     Pool1 = cauder_pool:update_with(
         Pid,
         fun(P) -> cauder_process:add_binding(Name, Value, P) end,
         Pool0
     ),
-    Sys1 = Sys0#sys{pool = Pool1},
+    Sys1 = Sys0#system{pool = Pool1},
     State1 = State0#state{system = Sys1},
     {reply, ok, State1};
 %%%=============================================================================
@@ -800,7 +801,7 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
                     expr = [cauder_syntax:remote_call(Mod, Fun, Args)],
                     spf = {Mod, Fun, length(Args)}
                 },
-                #sys{
+                #system{
                     pool = cauder_pool:new(Proc),
                     nodes = [Node]
                 }
@@ -829,10 +830,10 @@ task_start_replay(TracePath, undefined) ->
                     expr = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
                     spf = {Mod, Fun, length(Args)}
                 },
-                #sys{
+                #system{
                     pool = cauder_pool:new(Proc),
-                    traces = Traces,
-                    nodes = [Node]
+                    nodes = [Node],
+                    traces = Traces
                 }
             end
         ),
@@ -850,7 +851,7 @@ task_start_replay(TracePath, undefined) ->
     StepsDone :: non_neg_integer().
 
 task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
-    {Time, {Completion, Sys1, StepsDone}} = timer:tc(fun() -> step(Sem, Scheduler, Sys0, Pid, Steps) end),
+    {Time, {Completion, Sys1, StepsDone}} = timer:tc(fun() -> step(Sem, Scheduler, Pid, Sys0, Steps) end),
 
     {Completion, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
@@ -875,7 +876,7 @@ task_step_multiple({Sem, Steps, Scheduler}, Sys0) ->
     StepsDone :: non_neg_integer().
 
 task_replay_steps({Pid, Steps}, Sys0) ->
-    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> replay_steps(Sys0, Pid, Steps, 0) end),
+    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> replay_steps(Pid, Sys0, Steps, 0) end),
 
     {success, {StepsDone, Steps}, Time, Sys1}.
 
@@ -887,9 +888,9 @@ task_replay_spawn(Pid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_replay:can_replay_spawn(Sys0, Pid) of
+                case cauder_replay:can_replay_spawn(Pid, Sys0) of
                     false -> error(no_replay);
-                    true -> cauder_replay:replay_spawn(Sys0, Pid, '_')
+                    true -> cauder_replay:replay_spawn(Pid, Sys0, '_')
                 end
             end
         ),
@@ -904,9 +905,9 @@ task_replay_start(Node, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_replay:can_replay_start(Sys0, Node) of
+                case cauder_replay:can_replay_start(Node, Sys0) of
                     false -> error(no_replay);
-                    _ -> cauder_replay:replay_start(Sys0, Node)
+                    _ -> cauder_replay:replay_start(Node, Sys0)
                 end
             end
         ),
@@ -921,9 +922,9 @@ task_replay_send(Uid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_replay:can_replay_send(Sys0, Uid) of
+                case cauder_replay:can_replay_send(Uid, Sys0) of
                     false -> error(no_replay);
-                    true -> cauder_replay:replay_send(Sys0, Uid)
+                    true -> cauder_replay:replay_send(Uid, Sys0)
                 end
             end
         ),
@@ -938,9 +939,9 @@ task_replay_receive(Uid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_replay:can_replay_receive(Sys0, Uid) of
+                case cauder_replay:can_replay_receive(Uid, Sys0) of
                     false -> error(no_replay);
-                    true -> cauder_replay:replay_receive(Sys0, Uid)
+                    true -> cauder_replay:replay_receive(Uid, Sys0)
                 end
             end
         ),
@@ -964,7 +965,7 @@ task_replay_full_log([], Sys0) ->
     StepsDone :: non_neg_integer().
 
 task_rollback_steps({Pid, Steps}, Sys0) ->
-    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> rollback_steps(Sys0, Pid, Steps, 0) end),
+    {Time, {Sys1, StepsDone}} = timer:tc(fun() -> rollback_steps(Pid, Sys0, Steps, 0) end),
 
     {success, {StepsDone, Steps}, Time, Sys1}.
 
@@ -976,9 +977,9 @@ task_rollback_start(Node, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_rollback:can_rollback_start(Sys0, Node) of
+                case cauder_rollback:can_rollback_start(Node, Sys0) of
                     false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_start(Sys0, Node)
+                    true -> cauder_rollback:rollback_start(Node, Sys0)
                 end
             end
         ),
@@ -993,9 +994,9 @@ task_rollback_spawn(Pid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_rollback:can_rollback_spawn(Sys0, Pid) of
+                case cauder_rollback:can_rollback_spawn(Pid, Sys0) of
                     false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_spawn(Sys0, Pid)
+                    true -> cauder_rollback:rollback_spawn(Pid, Sys0)
                 end
             end
         ),
@@ -1010,9 +1011,9 @@ task_rollback_send(Uid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_rollback:can_rollback_send(Sys0, Uid) of
+                case cauder_rollback:can_rollback_send(Uid, Sys0) of
                     false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_send(Sys0, Uid)
+                    true -> cauder_rollback:rollback_send(Uid, Sys0)
                 end
             end
         ),
@@ -1027,9 +1028,9 @@ task_rollback_receive(Uid, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_rollback:can_rollback_receive(Sys0, Uid) of
+                case cauder_rollback:can_rollback_receive(Uid, Sys0) of
                     false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_receive(Sys0, Uid)
+                    true -> cauder_rollback:rollback_receive(Uid, Sys0)
                 end
             end
         ),
@@ -1044,9 +1045,9 @@ task_rollback_variable(Name, Sys0) ->
     {Time, Sys1} =
         timer:tc(
             fun() ->
-                case cauder_rollback:can_rollback_variable(Sys0, Name) of
+                case cauder_rollback:can_rollback_variable(Name, Sys0) of
                     false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_variable(Sys0, Name)
+                    true -> cauder_rollback:rollback_variable(Name, Sys0)
                 end
             end
         ),
@@ -1080,7 +1081,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                             throw({success, Sys0, Step});
                         true ->
                             try
-                                Sys1 = cauder_semantics_forwards:step(Sys0, Pid, Scheduler, normal),
+                                Sys1 = cauder_semantics_forwards:step(Pid, Sys0, Scheduler, normal),
                                 {Sys1}
                             catch
                                 throw:cancel -> throw({cancel, Sys0, Step})
@@ -1092,7 +1093,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                         false ->
                             throw({success, Sys0, Step});
                         true ->
-                            Sys1 = cauder_semantics_backwards:step(Sys0, Pid),
+                            Sys1 = cauder_semantics_backwards:step(Pid, Sys0),
                             {Sys1}
                     end
             end
@@ -1149,8 +1150,8 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
                     {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
                     Sys1 =
                         case Sem of
-                            ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid, ?SCHEDULER_Random, normal);
-                            ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+                            ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
+                            ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
                         end,
                     {Sys1, PidSet1, PidQueue1}
             end
@@ -1161,53 +1162,53 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
         throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
     end.
 
--spec replay_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
-    System :: cauder_system:system(),
+-spec replay_steps(Pid, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
     NewSystem :: cauder_system:system(),
     NewStepsDone :: non_neg_integer().
 
-replay_steps(Sys0, _, Steps, Steps) ->
+replay_steps(_, Sys0, Steps, Steps) ->
     {Sys0, Steps};
-replay_steps(Sys0, Pid, Steps, StepsDone) ->
-    case cauder_replay:can_replay_step(Sys0, Pid) of
+replay_steps(Pid, Sys0, Steps, StepsDone) ->
+    case cauder_replay:can_replay_step(Pid, Sys0) of
         false ->
             {Sys0, StepsDone};
         true ->
-            Sys1 = cauder_replay:replay_step(Sys0, Pid),
-            replay_steps(Sys1, Pid, Steps, StepsDone + 1)
+            Sys1 = cauder_replay:replay_step(Pid, Sys0),
+            replay_steps(Pid, Sys1, Steps, StepsDone + 1)
     end.
 
 -spec replay_full_log(System) -> NewSystem when
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_full_log(Sys = #sys{traces = LMap}) ->
+replay_full_log(Sys = #system{traces = LMap}) ->
     case lists:filter(fun({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
         [] ->
             Sys;
         [{Pid, _Log} | _] ->
-            Sys1 = cauder_replay:replay_step(Sys, Pid),
+            Sys1 = cauder_replay:replay_step(Pid, Sys),
             replay_full_log(Sys1)
     end.
 
--spec rollback_steps(System, Pid, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
-    System :: cauder_system:system(),
+-spec rollback_steps(Pid, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Steps :: pos_integer(),
     StepsDone :: non_neg_integer(),
     NewSystem :: cauder_system:system(),
     NewStepsDone :: non_neg_integer().
 
-rollback_steps(Sys0, _, Steps, Steps) ->
+rollback_steps(_, Sys0, Steps, Steps) ->
     {Sys0, Steps};
-rollback_steps(Sys0, Pid, Steps, StepsDone) ->
-    case cauder_rollback:can_rollback_step(Sys0, Pid) of
+rollback_steps(Pid, Sys0, Steps, StepsDone) ->
+    case cauder_rollback:can_rollback_step(Pid, Sys0) of
         false ->
             {Sys0, StepsDone};
         true ->
-            Sys1 = cauder_rollback:rollback_step(Sys0, Pid),
-            rollback_steps(Sys1, Pid, Steps, StepsDone + 1)
+            Sys1 = cauder_rollback:rollback_step(Pid, Sys0),
+            rollback_steps(Pid, Sys1, Steps, StepsDone + 1)
     end.

@@ -5,6 +5,7 @@
 -export([selected_pid/0]).
 
 -include("cauder.hrl").
+-include("cauder_system.hrl").
 -include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
@@ -87,7 +88,7 @@ update_process(_, #wx_state{system = undefined}) ->
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{pool = Pool}}) ->
+update_process(#wx_state{pid = OldPid}, #wx_state{system = #system{pool = Pool}}) ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
     wxChoice:freeze(Choice),
     wxChoice:enable(Choice),
@@ -408,7 +409,7 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
     ok;
-update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
+update_replay(_, #wx_state{system = #system{traces = Traces}, pid = Pid}) ->
     case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Traces)) of
         true ->
             wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
@@ -503,7 +504,7 @@ update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_rollback(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
     ok;
-update_rollback(_, #wx_state{system = #sys{pool = Pool}, pid = Pid}) ->
+update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CanRollBack =
         lists:any(
             fun(#process{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,

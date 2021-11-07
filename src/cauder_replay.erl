@@ -21,6 +21,7 @@
 ]).
 
 -include("cauder.hrl").
+-include("cauder_system.hrl").
 
 %%%=============================================================================
 %%% API
@@ -30,57 +31,56 @@
 %% @doc Checks whether the process with the given pid can replay a step in the
 %% given system, or not.
 
--spec can_replay_step(System, Pid) -> CanReplay when
-    System :: cauder_system:system(),
+-spec can_replay_step(Pid, System) -> boolean() when
     Pid :: cauder_process:id(),
-    CanReplay :: boolean().
+    System :: cauder_system:system().
 
-can_replay_step(#sys{pool = Pool, traces = Traces}, Pid) ->
+can_replay_step(Pid, #system{pool = Pool, traces = Traces}) ->
     cauder_pool:is_element(Pid, Pool) andalso maps:get(Pid, Traces, []) =/= [].
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the spawning of the process with the given pid can be
 %% replayed in the given system, or not.
 
--spec can_replay_spawn(System, Pid) -> CanReplay when
-    System :: cauder_system:system(),
+-spec can_replay_spawn(Pid, System) -> boolean() when
     Pid :: cauder_process:id(),
-    CanReplay :: boolean().
+    System :: cauder_system:system().
 
-can_replay_spawn(#sys{traces = LMap}, Pid) -> cauder_utils:find_spawn_parent(LMap, Pid) =/= false.
+can_replay_spawn(Pid, #system{traces = LMap}) ->
+    cauder_utils:find_spawn_parent(LMap, Pid) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the starting of the node with the given name can be
 %% replayed in the given system, or not.
 
--spec can_replay_start(System, Node) -> CanReplay when
-    System :: cauder_system:system(),
+-spec can_replay_start(Node, System) -> boolean() when
     Node :: node(),
-    CanReplay :: boolean().
+    System :: cauder_system:system().
 
-can_replay_start(#sys{traces = LMap}, Node) -> cauder_utils:find_node_parent(LMap, Node) =/= false.
+can_replay_start(Node, #system{traces = LMap}) ->
+    cauder_utils:find_node_parent(LMap, Node) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the sending of the message with the given uid can be
 %% replayed in the given system, or not.
 
--spec can_replay_send(System, Uid) -> CanReplay when
-    System :: cauder_system:system(),
+-spec can_replay_send(Uid, System) -> boolean() when
     Uid :: cauder_mailbox:uid(),
-    CanReplay :: boolean().
+    System :: cauder_system:system().
 
-can_replay_send(#sys{traces = LMap}, Uid) -> cauder_utils:find_msg_sender(LMap, Uid) =/= false.
+can_replay_send(Uid, #system{traces = LMap}) ->
+    cauder_utils:find_msg_sender(LMap, Uid) =/= false.
 
 %%------------------------------------------------------------------------------
 %% @doc Checks whether the reception of the message with the given uid can be
 %% replayed in the given system, or not.
 
--spec can_replay_receive(System, Uid) -> CanReplay when
-    System :: cauder_system:system(),
+-spec can_replay_receive(Uid, System) -> boolean() when
     Uid :: cauder_mailbox:uid(),
-    CanReplay :: boolean().
+    System :: cauder_system:system().
 
-can_replay_receive(#sys{traces = LMap}, Uid) -> cauder_utils:find_msg_receiver(LMap, Uid) =/= false.
+can_replay_receive(Uid, #system{traces = LMap}) ->
+    cauder_utils:find_msg_receiver(LMap, Uid) =/= false.
 
 %%%=============================================================================
 
@@ -88,62 +88,66 @@ can_replay_receive(#sys{traces = LMap}, Uid) -> cauder_utils:find_msg_receiver(L
 %% @doc Replays a single step in the process with the given pid, in given the
 %% system.
 
--spec replay_step(System, Pid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_step(Pid, System) -> NewSystem when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_step(#sys{traces = LMap} = Sys, Pid) ->
-    case options(Sys, Pid) of
+replay_step(Pid, #system{traces = LMap} = Sys) ->
+    case options(Pid, Sys) of
         [] ->
             case maps:get(Pid, LMap) of
-                [{send, Uid} | _] -> replay_send(Sys, Uid);
-                [{'receive', Uid} | _] -> replay_receive(Sys, Uid);
-                [{start, Node, success} | _] -> replay_start(Sys, Node);
-                [{spawn, {Node, ChildPid}, success} | _] -> replay_spawn(Sys, '_', {spawn, {Node, ChildPid}, success})
+                [{send, Uid} | _] ->
+                    replay_send(Uid, Sys);
+                [{'receive', Uid} | _] ->
+                    replay_receive(Uid, Sys);
+                [{start, Node, success} | _] ->
+                    replay_start(Node, Sys);
+                [{spawn, {Node, ChildPid}, success} | _] ->
+                    replay_spawn('_', Sys, {spawn, {Node, ChildPid}, success})
             end;
         _ ->
-            cauder_semantics_forwards:step(Sys, Pid, ?SCHEDULER_Random, replay)
+            cauder_semantics_forwards:step(Pid, Sys, ?SCHEDULER_Random, replay)
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the spawning of the process with the given pid, in the given
 %% system.
 
--spec replay_spawn(System, Pid, SpawnInfo) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_spawn(Pid, System, SpawnInfo) -> NewSystem when
     Pid :: cauder_process:id() | '_',
+    System :: cauder_system:system(),
     SpawnInfo :: cauder_trace:trace_action() | '_',
     NewSystem :: cauder_system:system().
 
-replay_spawn(#sys{pool = Pool, traces = LMap} = Sys, Pid, _) when Pid =/= '_' ->
+replay_spawn(Pid, #system{pool = Pool, traces = LMap} = Sys, _) when Pid =/= '_' ->
     case cauder_pool:is_element(Pid, Pool) of
         true ->
             Sys;
         false ->
             LogItem = cauder_utils:find_spawn_log(LMap, Pid),
-            replay_spawn(Sys, '_', LogItem)
+            replay_spawn('_', Sys, LogItem)
     end;
-replay_spawn(#sys{traces = LMap} = Sys, _, {spawn, {_, Pid}, failure}) ->
+replay_spawn(_, #system{traces = LMap} = Sys, {spawn, {_, Pid}, failure}) ->
     case cauder_utils:find_spawn_parent(LMap, Pid) of
-        {value, ParentPid} -> replay_until_spawn(Sys, ParentPid, Pid);
+        {value, ParentPid} -> replay_until_spawn(ParentPid, Sys, Pid);
         false -> Sys
     end;
-replay_spawn(Sys0, _, {spawn, {Node, Pid}, success}) ->
-    #sys{traces = LMap} = Sys = replay_start(Sys0, Node),
+replay_spawn(_, Sys0, {spawn, {Node, Pid}, success}) ->
+    #system{traces = LMap} = Sys = replay_start(Node, Sys0),
     {value, ProcParent} = cauder_utils:find_spawn_parent(LMap, Pid),
-    replay_until_spawn(Sys, ProcParent, Pid).
+    replay_until_spawn(ProcParent, Sys, Pid).
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the starting of the node with the given name, in the given
 %% system.
 
--spec replay_start(System, Node) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_start(Node, System) -> NewSystem when
     Node :: node(),
+    System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_start(#sys{nodes = Nodes, traces = LMap} = Sys, Node) ->
+replay_start(Node, #system{nodes = Nodes, traces = LMap} = Sys) ->
     NodeExists = lists:member(Node, Nodes),
     FutureReads = cauder_utils:find_process_with_future_reads(LMap, Node),
     FailedSpawns = cauder_utils:find_process_with_failed_spawn(LMap, Node),
@@ -154,33 +158,33 @@ replay_start(#sys{nodes = Nodes, traces = LMap} = Sys, Node) ->
             NewSys =
                 case {FutureReads, FailedSpawns} of
                     {{value, ProcWithRead}, _} ->
-                        replay_step(Sys, ProcWithRead);
+                        replay_step(ProcWithRead, Sys);
                     {_, {value, ProcWithFailedSpawn}} ->
-                        replay_step(Sys, ProcWithFailedSpawn);
+                        replay_step(ProcWithFailedSpawn, Sys);
                     {_, _} ->
                         {value, ProcParent} = cauder_utils:find_node_parent(LMap, Node),
-                        replay_until_start(Sys, ProcParent, Node)
+                        replay_until_start(ProcParent, Sys, Node)
                 end,
-            replay_start(NewSys, Node)
+            replay_start(Node, NewSys)
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the sending of the message with the given uid, in the given
 %% system.
 
--spec replay_send(System, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_send(Uid, System) -> NewSystem when
     Uid :: cauder_mailbox:uid(),
+    System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_send(#sys{traces = LMap, mail = Mail} = Sys, Uid) ->
+replay_send(Uid, #system{mail = Mail, traces = LMap} = Sys) ->
     case cauder_mailbox:uid_member(Uid, Mail) of
         % The message has already been sent
         true ->
             Sys;
         false ->
             case cauder_utils:find_msg_sender(LMap, Uid) of
-                {value, SenderPid} -> replay_until_send(Sys, SenderPid, Uid);
+                {value, SenderPid} -> replay_until_send(SenderPid, Sys, Uid);
                 false -> Sys
             end
     end.
@@ -189,14 +193,14 @@ replay_send(#sys{traces = LMap, mail = Mail} = Sys, Uid) ->
 %% @doc Replays the reception of the message with the given uid, in the given
 %% system.
 
--spec replay_receive(System, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_receive(Uid, System) -> NewSystem when
     Uid :: cauder_mailbox:uid(),
+    System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_receive(#sys{traces = LMap} = Sys, Uid) ->
+replay_receive(Uid, #system{traces = LMap} = Sys) ->
     case cauder_utils:find_msg_receiver(LMap, Uid) of
-        {value, ReceiverPid} -> replay_until_receive(Sys, ReceiverPid, Uid);
+        {value, ReceiverPid} -> replay_until_receive(ReceiverPid, Sys, Uid);
         false -> Sys
     end.
 
@@ -204,119 +208,119 @@ replay_receive(#sys{traces = LMap} = Sys, Uid) ->
 %%% Internal functions
 %%%=============================================================================
 
--spec replay_until_spawn(System, ParentPid, Pid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_spawn(ParentPid, System, Pid) -> NewSystem when
     ParentPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Pid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
-replay_until_spawn(Sys0, ParentPid, Pid) ->
-    #sys{pool = Pool} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
+replay_until_spawn(ParentPid, Sys0, Pid) ->
+    #system{pool = Pool} = Sys1 = replay_spawn(ParentPid, Sys0, '_'),
     case cauder_pool:is_element(Pid, Pool) of
         true -> Sys1;
-        false -> replay_until_spawn1(Sys1, ParentPid, Pid)
+        false -> replay_until_spawn1(ParentPid, Sys1, Pid)
     end.
 
--spec replay_until_spawn1(System, ParentPid, Pid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_spawn1(ParentPid, System, Pid) -> NewSystem when
     ParentPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Pid :: cauder_process:id(),
     NewSystem :: cauder_system:system().
 
-replay_until_spawn1(Sys0, ParentPid, Pid) ->
-    #sys{traces = #{ParentPid := ParentLog}} = Sys1 = replay_step(Sys0, ParentPid),
+replay_until_spawn1(ParentPid, Sys0, Pid) ->
+    #system{traces = #{ParentPid := ParentLog}} = Sys1 = replay_step(ParentPid, Sys0),
     case cauder_utils:find_spawn_parent(#{ParentPid => ParentLog}, Pid) of
         false -> Sys1;
-        _ -> replay_until_spawn1(Sys1, ParentPid, Pid)
+        _ -> replay_until_spawn1(ParentPid, Sys1, Pid)
     end.
 
--spec replay_until_start(System, ParentPid, Node) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_start(ParentPid, System, Node) -> NewSystem when
     ParentPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Node :: node(),
     NewSystem :: cauder_system:system().
 
-replay_until_start(Sys0, ParentPid, Node) ->
-    #sys{traces = LMap} = Sys1 = replay_spawn(Sys0, ParentPid, '_'),
+replay_until_start(ParentPid, Sys0, Node) ->
+    #system{traces = LMap} = Sys1 = replay_spawn(ParentPid, Sys0, '_'),
     case cauder_utils:find_node_parent(LMap, Node) of
         false -> Sys1;
-        _ -> replay_until_start1(Sys1, ParentPid, Node)
+        _ -> replay_until_start1(ParentPid, Sys1, Node)
     end.
 
--spec replay_until_start1(System, ParentPid, Node) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_start1(ParentPid, System, Node) -> NewSystem when
     ParentPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Node :: node(),
     NewSystem :: cauder_system:system().
 
-replay_until_start1(Sys0, ParentPid, Node) ->
-    #sys{traces = LMap} = Sys1 = replay_step(Sys0, ParentPid),
+replay_until_start1(ParentPid, Sys0, Node) ->
+    #system{traces = LMap} = Sys1 = replay_step(ParentPid, Sys0),
     case cauder_utils:find_node_parent(LMap, Node) of
         false -> Sys1;
-        _ -> replay_until_start1(Sys1, ParentPid, Node)
+        _ -> replay_until_start1(ParentPid, Sys1, Node)
     end.
 
--spec replay_until_send(System, SenderPid, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_send(SenderPid, System, Uid) -> NewSystem when
     SenderPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-replay_until_send(Sys0, SenderPid, Uid) ->
-    #sys{traces = #{SenderPid := SenderLog}} = Sys1 = replay_spawn(Sys0, SenderPid, '_'),
+replay_until_send(SenderPid, Sys0, Uid) ->
+    #system{traces = #{SenderPid := SenderLog}} = Sys1 = replay_spawn(SenderPid, Sys0, '_'),
     case lists:member({send, Uid}, SenderLog) of
         false -> Sys1;
-        true -> replay_until_send1(Sys1, SenderPid, Uid)
+        true -> replay_until_send1(SenderPid, Sys1, Uid)
     end.
 
--spec replay_until_send1(System, SenderPid, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_send1(SenderPid, System, Uid) -> NewSystem when
     SenderPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-replay_until_send1(Sys0, SenderPid, Uid) ->
-    #sys{traces = #{SenderPid := SenderLog}} = Sys1 = replay_step(Sys0, SenderPid),
+replay_until_send1(SenderPid, Sys0, Uid) ->
+    #system{traces = #{SenderPid := SenderLog}} = Sys1 = replay_step(SenderPid, Sys0),
     case lists:member({send, Uid}, SenderLog) of
         false -> Sys1;
-        true -> replay_until_send1(Sys1, SenderPid, Uid)
+        true -> replay_until_send1(SenderPid, Sys1, Uid)
     end.
 
--spec replay_until_receive(System, ReceiverPid, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_receive(ReceiverPid, System, Uid) -> NewSystem when
     ReceiverPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-replay_until_receive(Sys0, ReceiverPid, Uid) ->
-    Sys1 = replay_spawn(Sys0, ReceiverPid, '_'),
+replay_until_receive(ReceiverPid, Sys0, Uid) ->
+    Sys1 = replay_spawn(ReceiverPid, Sys0, '_'),
     % TODO Review Sys1 or Sys2?
-    #sys{traces = #{ReceiverPid := ReceiverLog}} = Sys2 = replay_send(Sys1, Uid),
+    #system{traces = #{ReceiverPid := ReceiverLog}} = Sys2 = replay_send(Uid, Sys1),
     case lists:member({'receive', Uid}, ReceiverLog) of
         false -> Sys0;
-        true -> replay_until_receive1(Sys2, ReceiverPid, Uid)
+        true -> replay_until_receive1(ReceiverPid, Sys2, Uid)
     end.
 
--spec replay_until_receive1(System, ReceiverPid, Uid) -> NewSystem when
-    System :: cauder_system:system(),
+-spec replay_until_receive1(ReceiverPid, System, Uid) -> NewSystem when
     ReceiverPid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Uid :: cauder_mailbox:uid(),
     NewSystem :: cauder_system:system().
 
-replay_until_receive1(Sys0, ReceiverPid, Uid) ->
-    #sys{traces = #{ReceiverPid := ReceiverLog}} = Sys1 = replay_step(Sys0, ReceiverPid),
+replay_until_receive1(ReceiverPid, Sys0, Uid) ->
+    #system{traces = #{ReceiverPid := ReceiverLog}} = Sys1 = replay_step(ReceiverPid, Sys0),
     case lists:member({'receive', Uid}, ReceiverLog) of
         false -> Sys1;
-        true -> replay_until_receive1(Sys1, ReceiverPid, Uid)
+        true -> replay_until_receive1(ReceiverPid, Sys1, Uid)
     end.
 
 %%%=============================================================================
 
--spec options(System, Pid) -> Options when
-    System :: cauder_system:system(),
+-spec options(Pid, System) -> Options when
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Options :: [cauder_types:option()].
 
-options(Sys, Pid) ->
+options(Pid, Sys) ->
     Opts = cauder_semantics_forwards:options(Sys, replay),
-    cauder_utils:filter_options(Opts, Pid).
+    cauder_utils:filter_options(Pid, Opts).
