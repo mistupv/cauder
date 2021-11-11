@@ -19,6 +19,7 @@
 
 -include("cauder.hrl").
 -include("cauder_system.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
 
@@ -705,7 +706,7 @@ fwd_start_f(
 
 fwd_send(
     #process{pid = Pid, hist = Hist, stack = Stk0, env = Bs0, expr = Es0} = P0,
-    #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dest, Val}},
+    #result{env = Bs, exprs = Es, stack = Stk, label = {send, Dst, Val}},
     #system{pool = Pool, mail = Mail, traces = LMap, x_trace = Trace} = Sys,
     Opts
 ) ->
@@ -714,16 +715,17 @@ fwd_send(
         case maps:find(uid, Opts) of
             error ->
                 #message{
+                    uid = cauder_message:new_uid(),
                     src = Pid,
-                    dest = Dest,
-                    value = Val
+                    dst = Dst,
+                    val = Val
                 };
             {ok, Uid} ->
                 #message{
                     uid = Uid,
                     src = Pid,
-                    dest = Dest,
-                    value = Val
+                    dst = Dst,
+                    val = Val
                 }
         end,
     Entry = #h_send{env = Bs0, expr = Es0, stack = Stk0, msg = M},
@@ -737,7 +739,7 @@ fwd_send(
     T = #x_trace{
         type = ?RULE_SEND,
         from = Pid,
-        to = Dest,
+        to = Dst,
         val = Val,
         time = M#message.uid
     },
@@ -799,7 +801,7 @@ fwd_rec(
     T = #x_trace{
         type = ?RULE_RECEIVE,
         from = Pid,
-        val = Msg#message.value,
+        val = Msg#message.val,
         time = Msg#message.uid
     },
     Sys#system{

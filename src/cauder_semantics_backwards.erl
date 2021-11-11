@@ -10,6 +10,7 @@
 
 -include("cauder.hrl").
 -include("cauder_system.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
 
@@ -206,7 +207,7 @@ step_send(
         env = Bs,
         expr = Es,
         stack = Stk,
-        msg = #message{dest = Dest, value = Val, uid = Uid} = Msg
+        msg = #message{uid = Uid, dst = Dst, val = Val} = Msg
     },
     #system{
         mail = Mail,
@@ -215,7 +216,7 @@ step_send(
         x_trace = Trace
     } = Sys
 ) ->
-    {_, OldMsgs} = cauder_mailbox:delete(Msg, Mail),
+    {_, OldMsgs} = cauder_mailbox:remove(Msg, Mail),
     P0 = cauder_pool:get(Pid, Pool),
     P = P0#process{
         env = Bs,
@@ -225,7 +226,7 @@ step_send(
     T = #x_trace{
         type = ?RULE_SEND,
         from = Pid,
-        to = Dest,
+        to = Dst,
         val = Val,
         time = Uid
     },
@@ -243,7 +244,7 @@ step_receive(
         env = Bs,
         expr = Es,
         stack = Stk,
-        msg = M = #message{uid = Uid, value = Value, dest = Pid},
+        msg = M = #message{uid = Uid, dst = Pid, val = Value},
         q_pos = QPos
     },
     #system{
@@ -322,7 +323,7 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
         {value, #h_start{success = false}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
         {value, #h_send{msg = #message{uid = Uid}}} ->
-            case cauder_mailbox:uid_member(Uid, Sys#system.mail) of
+            case cauder_mailbox:is_element(Uid, Sys#system.mail) of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
                 false -> ?NULL_OPT
             end;

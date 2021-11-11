@@ -5,6 +5,7 @@
 -export([has_nodes/2, has_spawn/2, has_start/2, has_failed_start/2, has_send/2, has_receive/2]).
 
 -include("cauder.hrl").
+-include("cauder_message.hrl").
 -include("cauder_history.hrl").
 
 -export_type([history/0]).
@@ -106,7 +107,7 @@ has_failed_start(Node, [#h_start{node = Node, success = false} | _]) -> true;
 has_failed_start(Node, [_ | H]) -> has_failed_start(Node, H).
 
 -spec has_send(Uid, History) -> boolean() when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     History :: cauder_history:history().
 
 has_send(_, []) -> false;
@@ -114,7 +115,7 @@ has_send(Uid, [#h_send{msg = #message{uid = Uid}} | _]) -> true;
 has_send(Uid, [_ | H]) -> has_send(Uid, H).
 
 -spec has_receive(Uid, History) -> boolean() when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     History :: cauder_history:history().
 
 has_receive(_, []) -> false;

@@ -65,7 +65,7 @@ can_replay_start(Node, #system{traces = LMap}) ->
 %% replayed in the given system, or not.
 
 -spec can_replay_send(Uid, System) -> boolean() when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 can_replay_send(Uid, #system{traces = LMap}) ->
@@ -76,7 +76,7 @@ can_replay_send(Uid, #system{traces = LMap}) ->
 %% replayed in the given system, or not.
 
 -spec can_replay_receive(Uid, System) -> boolean() when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 can_replay_receive(Uid, #system{traces = LMap}) ->
@@ -173,12 +173,12 @@ replay_start(Node, #system{nodes = Nodes, traces = LMap} = Sys) ->
 %% system.
 
 -spec replay_send(Uid, System) -> NewSystem when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
 replay_send(Uid, #system{mail = Mail, traces = LMap} = Sys) ->
-    case cauder_mailbox:uid_member(Uid, Mail) of
+    case cauder_mailbox:is_element(Uid, Mail) of
         % The message has already been sent
         true ->
             Sys;
@@ -194,7 +194,7 @@ replay_send(Uid, #system{mail = Mail, traces = LMap} = Sys) ->
 %% system.
 
 -spec replay_receive(Uid, System) -> NewSystem when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
@@ -263,7 +263,7 @@ replay_until_start1(ParentPid, Sys0, Node) ->
 -spec replay_until_send(SenderPid, System, Uid) -> NewSystem when
     SenderPid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 replay_until_send(SenderPid, Sys0, Uid) ->
@@ -276,7 +276,7 @@ replay_until_send(SenderPid, Sys0, Uid) ->
 -spec replay_until_send1(SenderPid, System, Uid) -> NewSystem when
     SenderPid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 replay_until_send1(SenderPid, Sys0, Uid) ->
@@ -289,7 +289,7 @@ replay_until_send1(SenderPid, Sys0, Uid) ->
 -spec replay_until_receive(ReceiverPid, System, Uid) -> NewSystem when
     ReceiverPid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 replay_until_receive(ReceiverPid, Sys0, Uid) ->
@@ -304,7 +304,7 @@ replay_until_receive(ReceiverPid, Sys0, Uid) ->
 -spec replay_until_receive1(ReceiverPid, System, Uid) -> NewSystem when
     ReceiverPid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 replay_until_receive1(ReceiverPid, Sys0, Uid) ->

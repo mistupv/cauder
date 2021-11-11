@@ -22,7 +22,8 @@
 -spec new_pid() -> Id when
     Id :: cauder_process:id().
 
-new_pid() -> ets:update_counter(?APP_DB, last_pid, 1, {last_pid, -1}).
+new_pid() ->
+    ets:update_counter(?APP_DB, last_pid, 1, {last_pid, -1}).
 
 -spec add_binding(Name, Value, Process) -> NewProcess when
     Name :: cauder_bindings:name(),

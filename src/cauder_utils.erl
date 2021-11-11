@@ -20,6 +20,7 @@
 -elvis([{elvis_style, god_modules, disable}]).
 
 -include("cauder.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
 
@@ -141,7 +142,7 @@ find_node_parent(LMap, Node) ->
 
 -spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
     LMap :: cauder_trace:trace(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Pid :: cauder_process:id().
 
 find_msg_sender(LMap, Uid) ->
@@ -155,7 +156,7 @@ find_msg_sender(LMap, Uid) ->
 
 -spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
     LMap :: cauder_trace:trace(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Pid :: cauder_process:id().
 
 find_msg_receiver(LMap, Uid) ->
@@ -337,15 +338,15 @@ gen_log_start(Node) ->
     Message :: cauder_mailbox:message(),
     Log :: [string()].
 
-gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
+gen_log_send(Pid, #message{uid = Uid, dst = Dst, val = Val}) ->
     [
         [
             "Roll send from ",
             cauder_pp:pid(Pid),
             " of ",
-            cauder_pp:to_string(Value),
+            cauder_pp:to_string(Val),
             " to ",
-            cauder_pp:pid(Dest),
+            cauder_pp:pid(Dst),
             " (",
             cauder_pp:to_string(Uid),
             ")"

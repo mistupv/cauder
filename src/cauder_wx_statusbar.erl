@@ -263,12 +263,12 @@ replay_start_finish(Node, Time) ->
 %%%=============================================================================
 
 -spec replay_send_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 replay_send_start(Uid) -> set_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 
 -spec replay_send_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 replay_send_finish(Uid, Time) ->
@@ -283,12 +283,12 @@ replay_send_fail() -> set_text(?REPLAY_SEND_FAIL).
 %%%=============================================================================
 
 -spec replay_receive_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 replay_receive_start(Uid) -> set_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
 
 -spec replay_receive_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 replay_receive_finish(Uid, Time) ->
@@ -373,12 +373,12 @@ rollback_start_fail() -> set_text(?ROLLBACK_START_FAIL).
 %%%=============================================================================
 
 -spec rollback_send_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 rollback_send_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
 
 -spec rollback_send_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 rollback_send_finish(Uid, Time) ->
@@ -393,12 +393,12 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 %%%=============================================================================
 
 -spec rollback_receive_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 rollback_receive_start(Uid) -> set_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
 
 -spec rollback_receive_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 rollback_receive_finish(Uid, Time) ->

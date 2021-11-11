@@ -6,6 +6,7 @@
 -export([clause_line/3]).
 
 -include("cauder.hrl").
+-include("cauder_message.hrl").
 -include("cauder_stack.hrl").
 
 %%%=============================================================================
@@ -495,7 +496,7 @@ when
     NewMail :: cauder_mailbox:mailbox().
 
 match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
-    case cauder_mailbox:pid_get(Pid, Mail) of
+    case cauder_mailbox:find_destination(Pid, Mail) of
         [] ->
             nomatch;
         QueueList ->
@@ -520,7 +521,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
                                 {_SuspendTime, {resume, Uid}} ->
                                     cauder:resume_task(),
                                     {Bs1, Body, Msg} = maps:get(Uid, MatchingBranchesMap),
-                                    {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+                                    {QPos, NewMail} = cauder_mailbox:remove(Msg, Mail),
                                     {Bs1, Body, {Msg, QPos}, NewMail};
                                 % TODO Use suspend time
                                 {_SuspendTime, cancel} ->
@@ -543,7 +544,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
                             nomatch;
                         Length ->
                             {Bs1, Body, Msg} = lists:nth(rand:uniform(Length), MatchingBranches),
-                            {QPos, NewMail} = cauder_mailbox:delete(Msg, Mail),
+                            {QPos, NewMail} = cauder_mailbox:remove(Msg, Mail),
                             {Bs1, Body, {Msg, QPos}, NewMail}
                     end
             end
@@ -556,14 +557,14 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body().
 
-match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
+match_rec(Cs, Bs0, #message{val = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
 -spec match_rec_uid(Clauses, Bindings, Uid, Mail) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
 when
     Clauses :: cauder_syntax:af_clause_seq(),
     Bindings :: cauder_bindings:bindings(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Mail :: cauder_mailbox:mailbox(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
@@ -572,11 +573,11 @@ when
     NewMail :: cauder_mailbox:mailbox().
 
 match_rec_uid(Cs, Bs0, Uid, Mail0) ->
-    case cauder_mailbox:uid_take(Uid, Mail0) of
+    case cauder_mailbox:take(Uid, Mail0) of
         error ->
             nomatch;
         {{Msg, QPos}, Mail1} ->
-            case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
+            case match_clause(Bs0, Cs, [abstract(Msg#message.val)]) of
                 {match, Bs, Body} -> {Bs, Body, {Msg, QPos}, Mail1};
                 nomatch -> nomatch
             end

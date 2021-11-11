@@ -9,6 +9,7 @@
 -export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_stack.hrl").
 -include("cauder_history.hrl").
@@ -59,9 +60,9 @@ history_entry(#h_start{node = Node, success = true}) ->
     "start(" ++ green(to_string(Node)) ++ ")";
 history_entry(#h_start{node = Node, success = false}) ->
     "start(" ++ red(to_string(Node)) ++ ")";
-history_entry(#h_send{msg = #message{value = Val, uid = Uid}}) ->
+history_entry(#h_send{msg = #message{uid = Uid, val = Val}}) ->
     "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
-history_entry(#h_receive{msg = #message{value = Val, uid = Uid}}) ->
+history_entry(#h_receive{msg = #message{uid = Uid, val = Val}}) ->
     "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")".
 
 %%%=============================================================================

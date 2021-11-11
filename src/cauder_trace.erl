@@ -10,9 +10,9 @@
 
 -type trace() :: #{cauder_process:id() => [trace_action()]}.
 -type trace_action() ::
-    {send, cauder_mailbox:uid()}
-    %| {deliver, cauder_mailbox:uid()}
-    | {'receive', cauder_mailbox:uid()}
+    {send, cauder_message:uid()}
+    %| {deliver, cauder_message:uid()}
+    | {'receive', cauder_message:uid()}
     | {nodes, [node()]}
     | {start, node(), success}
     | {start, node(), failure}
@@ -20,8 +20,8 @@
     | {spawn, {node(), cauder_process:id()}, failure}.
 
 -type trace_entry_search() ::
-    {send, cauder_mailbox:uid()}
-    | {'receive', cauder_mailbox:uid()}
+    {send, cauder_message:uid()}
+    | {'receive', cauder_message:uid()}
     | {start, node(), success}
     | {spawn, {'_', cauder_process:id()}, '_'}
     | {spawn, {node(), '_'}, failure}.

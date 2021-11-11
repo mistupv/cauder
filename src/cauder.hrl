@@ -50,18 +50,6 @@
 %%% Records
 %%%=============================================================================
 
-%% Message
--record(message, {
-    % UID
-    uid = cauder_mailbox:uid() :: cauder_mailbox:uid(),
-    % Message
-    value :: term(),
-    % Sender PID
-    src :: cauder_process:id(),
-    % Receiver PID
-    dest :: cauder_process:id()
-}).
-
 % Option
 -record(opt, {
     % integer
@@ -80,7 +68,7 @@
     node :: undefined | node(),
     val :: undefined | term(),
     res :: success | failure | undefined,
-    time :: undefined | cauder_mailbox:uid()
+    time :: undefined | cauder_message:uid()
 }).
 
 % Evaluation result

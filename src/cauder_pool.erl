@@ -170,7 +170,7 @@ find_history_failed_start(Node, Pool) ->
 %% sent the message with the given `Uid'.
 
 -spec find_history_send(Uid, Pool) -> {ok, Process} | error when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
@@ -187,7 +187,7 @@ find_history_send(Uid, Pool) ->
 %% sent the message with the given `Uid'.
 
 -spec find_history_receive(Uid, Pool) -> {ok, Process} | error when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 

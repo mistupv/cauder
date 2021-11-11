@@ -24,6 +24,7 @@
 
 -include("cauder.hrl").
 -include("cauder_system.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
 
@@ -81,7 +82,7 @@ can_rollback_start(Node, #system{pool = Pool, nodes = Nodes}) ->
 %% rolled back in the given system, or not.
 
 -spec can_rollback_send(Uid, System) -> CanRollback when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     CanRollback :: boolean().
 
@@ -96,7 +97,7 @@ can_rollback_send(Uid, #system{pool = Pool}) ->
 %% rolled back in the given system, or not.
 
 -spec can_rollback_receive(Uid, System) -> CanRollback when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     CanRollback :: boolean().
 
@@ -145,9 +146,9 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
         {value, #h_nodes{nodes = Nodes}} when ProcViewOfNodes =/= Nodes ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_nodes(Pid)},
             rollback_nodes(Pid, Sys, Nodes);
-        {value, #h_send{msg = #message{dest = Dest, uid = Uid} = Msg}} ->
+        {value, #h_send{msg = #message{uid = Uid, dst = Dst} = Msg}} ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
-            rollback_send(Pid, Sys, Dest, Uid);
+            rollback_send(Pid, Sys, Dst, Uid);
         {value, _} ->
             [#opt{pid = Pid, sem = Sem} | _] = options(Pid, Sys0),
             case Sem of
@@ -188,7 +189,7 @@ rollback_start(Node, #system{pool = Pool} = Sys) ->
 %% system.
 
 -spec rollback_send(Uid, System) -> NewSystem when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
@@ -201,7 +202,7 @@ rollback_send(Uid, #system{pool = Pool} = Sys) ->
 %% system.
 
 -spec rollback_receive(Uid, System) -> NewSystem when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
@@ -281,7 +282,7 @@ rollback_start(Pid, Sys0, SpawnNode) ->
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
     DestPid :: cauder_process:id(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 rollback_send(Pid, Sys0, DestPid, Uid) ->
@@ -348,7 +349,7 @@ rollback_until_start(Pid, #system{pool = Pool} = Sys0, StartNode) ->
 -spec rollback_until_send(Pid, System, Uid) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 rollback_until_send(Pid, #system{pool = Pool} = Sys0, Uid) ->
@@ -364,7 +365,7 @@ rollback_until_send(Pid, #system{pool = Pool} = Sys0, Uid) ->
 -spec rollback_until_receive(Pid, System, Uid) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 rollback_until_receive(Pid, #system{pool = Pool} = Sys0, Uid) ->
@@ -380,7 +381,7 @@ rollback_until_receive(Pid, #system{pool = Pool} = Sys0, Uid) ->
 -spec rollback_after_receive(Pid, System, Uid) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     NewSystem :: cauder_system:system().
 
 rollback_after_receive(Pid, Sys0, Uid) ->

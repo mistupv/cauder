@@ -6,6 +6,7 @@
 
 -include("cauder.hrl").
 -include("cauder_system.hrl").
+-include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").

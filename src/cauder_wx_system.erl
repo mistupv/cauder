@@ -5,6 +5,7 @@
 
 -include("cauder.hrl").
 -include("cauder_system.hrl").
+-include("cauder_message.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -163,13 +164,13 @@ update_mail(_, #wx_state{system = #system{mail = Mail}, config = #config{mailbox
     wxListCtrl:freeze(MailArea),
     wxListCtrl:deleteAllItems(MailArea),
     lists:foldl(
-        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+        fun(#message{uid = Uid, src = Src, dst = Dst, val = Val}, Row) ->
             wxListCtrl:insertItem(MailArea, Row, ""),
             wxListCtrl:setItemFont(MailArea, Row, Font),
             wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
-            wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
+            wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Val)),
             wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
-            wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
+            wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dst)),
             Row + 1
         end,
         0,
@@ -186,15 +187,15 @@ update_mail(_, #wx_state{system = #system{mail = Mail}, pid = Pid, config = #con
         undefined ->
             ok;
         Pid ->
-            Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:pid_get(Pid, Mail)),
+            Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:find_destination(Pid, Mail)),
             lists:foldl(
-                fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+                fun(#message{uid = Uid, src = Src, dst = Dst, val = Val}, Row) ->
                     wxListCtrl:insertItem(MailArea, Row, ""),
                     wxListCtrl:setItemFont(MailArea, Row, Font),
                     wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
-                    wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Value)),
+                    wxListCtrl:setItem(MailArea, Row, 1, cauder_pp:to_string(Val)),
                     wxListCtrl:setItem(MailArea, Row, 2, cauder_pp:to_string(Src)),
-                    wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dest)),
+                    wxListCtrl:setItem(MailArea, Row, 3, cauder_pp:to_string(Dst)),
                     Row + 1
                 end,
                 0,

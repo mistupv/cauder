@@ -335,7 +335,7 @@ replay_start(Node) -> gen_server:call(?SERVER, {user, {replay_start, Node}}).
 %% @see task_replay_send/2
 
 -spec replay_send(Uid) -> Reply when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -352,7 +352,7 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 %% @see task_replay_receive/2
 
 -spec replay_receive(Uid) -> Reply when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -439,7 +439,7 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 %% @see task_rollback_send/2
 
 -spec rollback_send(Uid) -> Reply when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -456,7 +456,7 @@ rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 %% @see task_rollback_receive/2
 
 -spec rollback_receive(Uid) -> Reply when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -752,10 +752,10 @@ run_task(Task, Args, System) when is_function(Task, 2) ->
 
 -spec suspend_task(Receiver, Messages, CurrentSystem) -> {SuspendTime, ({resume, MessageId} | cancel)} when
     Receiver :: cauder_process:id(),
-    Messages :: [cauder_mailbox:uid()],
+    Messages :: [cauder_message:uid()],
     CurrentSystem :: cauder_system:system(),
     SuspendTime :: integer(),
-    MessageId :: cauder_mailbox:uid().
+    MessageId :: cauder_message:uid().
 
 suspend_task(Receiver, Messages, System) ->
     ok = gen_server:call(?SERVER, {task, {suspend, Receiver, Messages, System}}),
@@ -915,7 +915,7 @@ task_replay_start(Node, Sys0) ->
     {success, Node, Time, Sys1}.
 
 -spec task_replay_send(Uid, System) -> task_result(Uid) when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 task_replay_send(Uid, Sys0) ->
@@ -932,7 +932,7 @@ task_replay_send(Uid, Sys0) ->
     {success, Uid, Time, Sys1}.
 
 -spec task_replay_receive(Uid, System) -> task_result(Uid) when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 task_replay_receive(Uid, Sys0) ->
@@ -1004,7 +1004,7 @@ task_rollback_spawn(Pid, Sys0) ->
     {success, Pid, Time, Sys1}.
 
 -spec task_rollback_send(Uid, System) -> task_result(Uid) when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 task_rollback_send(Uid, Sys0) ->
@@ -1021,7 +1021,7 @@ task_rollback_send(Uid, Sys0) ->
     {success, Uid, Time, Sys1}.
 
 -spec task_rollback_receive(Uid, System) -> task_result(Uid) when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     System :: cauder_system:system().
 
 task_rollback_receive(Uid, Sys0) ->
