@@ -36,6 +36,7 @@
 -include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_process.hrl").
+-include("cauder_tracer.hrl").
 
 -record(state, {
     subs = [] :: [pid()],
@@ -799,7 +800,7 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
                     node = Node,
                     pid = Pid,
                     expr = [cauder_syntax:remote_call(Mod, Fun, Args)],
-                    spf = {Mod, Fun, length(Args)}
+                    entry_point = {Mod, Fun, length(Args)}
                 },
                 #system{
                     pool = cauder_pool:new(Proc),
@@ -817,23 +818,23 @@ task_start_replay(TracePath, undefined) ->
     {Time, System} =
         timer:tc(
             fun() ->
-                #trace_result{
+                #trace_info{
                     node = Node,
                     pid = Pid,
-                    call = {Mod, Fun, Args},
-                    traces = Traces
+                    call = {M, F, As},
+                    trace = Trace
                 } = cauder_utils:load_trace(TracePath),
-                AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, Args)),
-                Proc = #process{
+                AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, As)),
+                P = #process{
                     node = Node,
                     pid = Pid,
-                    expr = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
-                    spf = {Mod, Fun, length(Args)}
+                    entry_point = {M, F, length(As)},
+                    expr = [cauder_syntax:remote_call(M, F, AbstractArgs)]
                 },
                 #system{
-                    pool = cauder_pool:new(Proc),
+                    pool = cauder_pool:new(P),
                     nodes = [Node],
-                    traces = Traces
+                    log = cauder_trace:to_log(Trace)
                 }
             end
         ),
@@ -1185,11 +1186,11 @@ replay_steps(Pid, Sys0, Steps, StepsDone) ->
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
-replay_full_log(Sys = #system{traces = LMap}) ->
-    case lists:filter(fun({_Pid, Log}) -> Log /= [] end, maps:to_list(LMap)) of
+replay_full_log(#system{log = Log} = Sys) ->
+    case cauder_log:pids(Log) of
         [] ->
             Sys;
-        [{Pid, _Log} | _] ->
+        [Pid | _] ->
             Sys1 = cauder_replay:replay_step(Pid, Sys),
             replay_full_log(Sys1)
     end.

@@ -9,10 +9,7 @@
     process_scheduler/0,
     message_scheduler/0,
     rule/0,
-    x_trace/0,
-    result/0,
-    label/0,
-    trace_result/0
+    x_trace/0
 ]).
 
 % Abstract format types
@@ -31,20 +28,3 @@
 
 % TODO What is the purpose of this?
 -type x_trace() :: #x_trace{}.
-
--type result() :: #result{}.
--type label() ::
-    tau
-    | {spawn, cauder_syntax:af_variable(), cauder_syntax:af_literal()}
-    | {spawn, cauder_syntax:af_variable(), node(), cauder_syntax:af_literal()}
-    | {spawn, cauder_syntax:af_variable(), module(), atom(), [term()]}
-    | {spawn, cauder_syntax:af_variable(), node(), module(), atom(), [term()]}
-    | {start, cauder_syntax:af_variable(), node()}
-    | {start, cauder_syntax:af_variable(), atom(), atom()}
-    | {self, cauder_syntax:af_variable()}
-    | {node, cauder_syntax:af_variable()}
-    | {nodes, cauder_syntax:af_variable()}
-    | {send, cauder_process:id(), term()}
-    | {rec, cauder_syntax:af_variable(), cauder_syntax:af_clause_seq()}.
-
--type trace_result() :: #trace_result{}.

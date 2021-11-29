@@ -273,19 +273,15 @@ update_log(_, #wx_state{pid = undefined}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
     wxTextCtrl:clear(cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl)),
     ok;
-update_log(_, #wx_state{system = #system{traces = LMap}, pid = Pid}) ->
+update_log(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
 
     LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),
     wxTextCtrl:freeze(LogControl),
     wxTextCtrl:clear(LogControl),
-    case LMap of
-        #{Pid := Log} ->
-            Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_entry/1, Log))),
-            pp_marked_text(LogControl, Entries);
-        _ ->
-            ok
-    end,
+    Actions = cauder_log:get(Pid, Log),
+    Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:log_action/1, Actions))),
+    pp_marked_text(LogControl, Entries),
     wxTextCtrl:thaw(LogControl).
 
 %%%=============================================================================

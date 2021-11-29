@@ -23,6 +23,7 @@
 -endif.
 
 -export_type([
+    line/0,
     abstract_expr/0,
     af_args/0,
     af_literal/0,

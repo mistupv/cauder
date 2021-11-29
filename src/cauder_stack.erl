@@ -41,8 +41,8 @@ peek([Entry | _]) -> Entry.
 pop([Entry | Stack]) -> {Entry, Stack}.
 
 -spec push(Entry, Stack1) -> Stack2 when
-    Stack1 :: cauder_stack:stack(),
     Entry :: cauder_stack:entry(),
+    Stack1 :: cauder_stack:stack(),
     Stack2 :: cauder_stack:stack().
 
 push(Entry, Stack1) -> [Entry | Stack1].

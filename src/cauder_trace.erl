@@ -1,27 +1,80 @@
 -module(cauder_trace).
 
 %% API
--export([]).
--export_type([
-    trace/0,
-    trace_action/0,
-    trace_entry_search/0
+-export([
+    new/0,
+    push/3,
+    reverse_actions/1,
+    to_log/1
 ]).
 
--type trace() :: #{cauder_process:id() => [trace_action()]}.
--type trace_action() ::
-    {send, cauder_message:uid()}
-    %| {deliver, cauder_message:uid()}
-    | {'receive', cauder_message:uid()}
-    | {nodes, [node()]}
-    | {start, node(), success}
-    | {start, node(), failure}
-    | {spawn, {node(), cauder_process:id()}, success}
-    | {spawn, {node(), cauder_process:id()}, failure}.
+-include("cauder_trace.hrl").
+-include("cauder_log.hrl").
 
--type trace_entry_search() ::
-    {send, cauder_message:uid()}
-    | {'receive', cauder_message:uid()}
-    | {start, node(), success}
-    | {spawn, {'_', cauder_process:id()}, '_'}
-    | {spawn, {node(), '_'}, failure}.
+-export_type([trace/0]).
+
+-opaque trace() :: #{cauder_process:id() => [cauder_trace:action(), ...]}.
+-type action() ::
+    action_spawn()
+    | action_send()
+    | action_receive()
+    | action_nodes()
+    | action_start().
+
+-type action_spawn() :: #trace_spawn{}.
+-type action_send() :: #trace_send{}.
+-type action_receive() :: #trace_receive{}.
+-type action_nodes() :: #trace_nodes{}.
+-type action_start() :: #trace_start{}.
+
+%%%=============================================================================
+%%% API
+%%%=============================================================================
+
+-spec new() -> cauder_trace:trace().
+
+new() -> maps:new().
+
+-spec push(Pid, Action, Trace) -> NewTrace when
+    Pid :: cauder_process:id(),
+    Action :: cauder_trace:action(),
+    Trace :: cauder_trace:trace(),
+    NewTrace :: cauder_trace:trace().
+
+push(Pid, Action, Trace) ->
+    maps:update_with(Pid, fun(Actions) -> [Action | Actions] end, [Action], Trace).
+
+-spec reverse_actions(Trace) -> NewTrace when
+    Trace :: cauder_trace:trace(),
+    NewTrace :: cauder_trace:trace().
+
+reverse_actions(Trace) ->
+    maps:map(fun(_, Actions) -> lists:reverse(Actions) end, Trace).
+
+-spec to_log(Trace) -> Log when
+    Trace :: cauder_trace:trace(),
+    Log :: cauder_log:log().
+
+to_log(Trace) ->
+    FilteredTrace = maps:map(fun(_, As) -> lists:filtermap(fun filtermap_action/1, As) end, Trace),
+    List = maps:to_list(FilteredTrace),
+    cauder_log:from_list(List).
+
+%%%=============================================================================
+%%% Internal functions
+%%%=============================================================================
+
+-spec filtermap_action(TraceAction) -> {true, LogAction} | false when
+    TraceAction :: cauder_trace:action(),
+    LogAction :: cauder_log:action().
+
+filtermap_action(#trace_spawn{node = Node, pid = Pid, success = Success}) ->
+    {true, #log_spawn{node = Node, pid = Pid, success = Success}};
+filtermap_action(#trace_send{uid = Uid}) ->
+    {true, #log_send{uid = Uid}};
+filtermap_action(#trace_receive{uid = Uid}) ->
+    {true, #log_receive{uid = Uid}};
+filtermap_action(#trace_nodes{nodes = Nodes}) ->
+    {true, #log_nodes{nodes = Nodes}};
+filtermap_action(#trace_start{node = Node, success = Success}) ->
+    {true, #log_start{node = Node, success = Success}}.

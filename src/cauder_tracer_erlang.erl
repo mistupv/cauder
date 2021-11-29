@@ -1,4 +1,4 @@
--module(tracer_erlang).
+-module(cauder_tracer_erlang).
 
 %% API
 -export([start/4, apply/3, send_distributed/2, send_centralized/2, nodes/0]).
@@ -22,7 +22,7 @@ start(MainPid, Module, Function, Args) ->
     receive
         start -> ok
     end,
-    tracer_erlang:apply(Module, Function, Args).
+    cauder_tracer_erlang:apply(Module, Function, Args).
 
 -spec apply(Module, Function, Args) -> term() when
     Module :: module(),

@@ -52,8 +52,8 @@ peek([Entry | _]) -> Entry.
 pop([Entry | History]) -> {Entry, History}.
 
 -spec push(Entry, History1) -> History2 when
-    History1 :: cauder_history:history(),
     Entry :: cauder_history:entry(),
+    History1 :: cauder_history:history(),
     History2 :: cauder_history:history().
 
 push(Entry, History1) -> [Entry | History1].

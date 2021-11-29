@@ -1,4 +1,4 @@
--module(tracer_transform).
+-module(cauder_tracer_transform).
 
 %% API
 -export([parse_transform/2]).
@@ -81,7 +81,7 @@ instrument_send(Destination, Message) ->
             centralized -> send_centralized
         end,
     erl_syntax:application(
-        erl_syntax:atom(tracer_erlang),
+        erl_syntax:atom(cauder_tracer_erlang),
         erl_syntax:atom(FunctionName),
         [Destination, Message]
     ).
@@ -134,7 +134,7 @@ instrument_receive_clause(Clause) ->
 
 instrument_nodes() ->
     erl_syntax:application(
-        erl_syntax:atom(tracer_erlang),
+        erl_syntax:atom(cauder_tracer_erlang),
         erl_syntax:atom(nodes),
         []
     ).

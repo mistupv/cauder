@@ -8,6 +8,31 @@
 -include("cauder.hrl").
 -include("cauder_message.hrl").
 -include("cauder_stack.hrl").
+-include("cauder_eval.hrl").
+
+-export_type([result/0, label/0]).
+
+-type result() :: #result{}.
+-type label() ::
+    label_tau()
+    | label_spawn_fun()
+    | label_spawn_mfa()
+    | label_start()
+    | label_self()
+    | label_node()
+    | label_nodes()
+    | label_send()
+    | label_receive().
+
+-type label_tau() :: #l_tau{}.
+-type label_spawn_fun() :: #l_spawn_fun{}.
+-type label_spawn_mfa() :: #l_spawn_mfa{}.
+-type label_start() :: #l_start{}.
+-type label_self() :: #l_self{}.
+-type label_node() :: #l_node{}.
+-type label_nodes() :: #l_nodes{}.
+-type label_send() :: #l_send{}.
+-type label_receive() :: #l_receive{}.
 
 %%%=============================================================================
 %%% API
@@ -26,16 +51,16 @@
     Bindings :: cauder_bindings:bindings(),
     Expressions :: [cauder_syntax:abstract_expr()],
     Stack :: cauder_stack:stack(),
-    Result :: cauder_types:result().
+    Result :: cauder_eval:result().
 
 eval_list(Bs, [E | Es], Stk) ->
     case is_reducible(E, Bs) of
         true ->
-            R = #result{exprs = Es1} = expr(Bs, E, Stk),
-            R#result{exprs = Es1 ++ Es};
+            R = #result{expr = Es1} = expr(Bs, E, Stk),
+            R#result{expr = Es1 ++ Es};
         false ->
-            R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
-            R#result{exprs = [E | Es1]}
+            R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+            R#result{expr = [E | Es1]}
     end.
 
 %%------------------------------------------------------------------------------
@@ -55,7 +80,7 @@ eval_list(Bs, [E | Es], Stk) ->
     Bindings :: cauder_bindings:bindings(),
     Expressions :: [cauder_syntax:abstract_expr()],
     Stack :: cauder_stack:stack(),
-    Result :: cauder_types:result().
+    Result :: cauder_eval:result().
 
 seq(Bs, [E | Es], Stk) ->
     case is_reducible(E, Bs) of
@@ -67,33 +92,33 @@ seq(Bs, [E | Es], Stk) ->
                     case Entry of
                         {value, #s_function{env = Bs1, expr = Es1, var = Var}} ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
-                            #result{env = Bs1, exprs = Es2, stack = Stk1};
+                            #result{env = Bs1, expr = Es2, stack = Stk1};
                         {value, #s_block{expr = Es1, var = Var}} ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
-                            #result{env = Bs, exprs = Es2, stack = Stk1}
+                            #result{env = Bs, expr = Es2, stack = Stk1}
                     end;
                 _ ->
-                    #result{env = Bs, exprs = Es, stack = Stk}
+                    #result{env = Bs, expr = Es, stack = Stk}
             end;
         true ->
-            #result{env = Bs1, exprs = Es1, stack = Stk1} = Result = expr(Bs, E, Stk),
+            #result{env = Bs1, expr = Es1, stack = Stk1} = Result = expr(Bs, E, Stk),
             case cauder_stack:pop(Stk1) of
                 {{value, #s_function{env = Bs2, expr = Es2} = Entry}, Stk} ->
                     Entry1 = Entry#s_function{env = Bs1, expr = Es1 ++ Es},
                     Result#result{
                         env = Bs2,
-                        exprs = Es2,
+                        expr = Es2,
                         stack = cauder_stack:push(Entry1, Stk)
                     };
                 {{value, #s_block{expr = Es2} = Entry}, Stk} ->
                     Entry1 = Entry#s_block{expr = Es1 ++ Es},
                     Result#result{
-                        exprs = Es2,
+                        expr = Es2,
                         stack = cauder_stack:push(Entry1, Stk)
                     };
                 {{value, _}, _} ->
                     Result#result{
-                        exprs = Es1 ++ Es
+                        expr = Es1 ++ Es
                     }
             end
     end.
@@ -106,39 +131,39 @@ seq(Bs, [E | Es], Stk) ->
     Bindings :: cauder_bindings:bindings(),
     Expression :: cauder_syntax:abstract_expr(),
     Stack :: cauder_stack:stack(),
-    Result :: cauder_types:result().
+    Result :: cauder_eval:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
     {ok, Value} = cauder_bindings:get(Name, Bs),
-    #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk};
+    #result{env = Bs, expr = [{value, Line, Value}], stack = Stk};
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
     case is_reducible(H0, Bs) of
         true ->
-            R = #result{exprs = [H]} = expr(Bs, H0, Stk),
+            R = #result{expr = [H]} = expr(Bs, H0, Stk),
             case is_value(H) andalso is_value(T0) of
-                true -> R#result{exprs = [{value, Line, [concrete(H) | concrete(T0)]}]};
-                false -> R#result{exprs = [setelement(3, E, H)]}
+                true -> R#result{expr = [{value, Line, [concrete(H) | concrete(T0)]}]};
+                false -> R#result{expr = [setelement(3, E, H)]}
             end;
         false ->
             case is_reducible(T0, Bs) of
                 true ->
-                    R = #result{exprs = [T]} = expr(Bs, T0, Stk),
+                    R = #result{expr = [T]} = expr(Bs, T0, Stk),
                     case is_value(H0) andalso is_value(T) of
-                        true -> R#result{exprs = [{value, Line, [concrete(H0) | concrete(T)]}]};
-                        false -> R#result{exprs = [setelement(4, E, T)]}
+                        true -> R#result{expr = [{value, Line, [concrete(H0) | concrete(T)]}]};
+                        false -> R#result{expr = [setelement(4, E, T)]}
                     end;
                 false ->
-                    #result{env = Bs, exprs = [{value, Line, [concrete(H0) | concrete(T0)]}], stack = Stk}
+                    #result{env = Bs, expr = [{value, Line, [concrete(H0) | concrete(T0)]}], stack = Stk}
             end
     end;
 expr(Bs, E = {tuple, Line, Es0}, Stk) ->
-    R = #result{exprs = Es} = eval_list(Bs, Es0, Stk),
+    R = #result{expr = Es} = eval_list(Bs, Es0, Stk),
     case is_value(Es) of
         true ->
             Tuple = list_to_tuple(lists:map(fun concrete/1, Es)),
-            #result{env = Bs, exprs = [{value, Line, Tuple}], stack = Stk};
+            #result{env = Bs, expr = [{value, Line, Tuple}], stack = Stk};
         false ->
-            R#result{exprs = [setelement(3, E, Es)]}
+            R#result{expr = [setelement(3, E, Es)]}
     end;
 expr(Bs, {'if', Line, Cs}, Stk0) ->
     case match_if(Bs, Cs) of
@@ -146,7 +171,7 @@ expr(Bs, {'if', Line, Cs}, Stk0) ->
             Var = cauder_utils:temp_variable(Line),
             Entry = #s_block{type = 'if', expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
-            #result{env = Bs, exprs = [Var], stack = Stk};
+            #result{env = Bs, expr = [Var], stack = Stk};
         nomatch ->
             error(if_clause)
     end;
@@ -160,7 +185,7 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
                     Var = cauder_utils:temp_variable(Line),
                     Entry = #s_block{type = 'case', expr = Body, var = Var},
                     Stk = cauder_stack:push(Entry, Stk0),
-                    #result{env = Bs, exprs = [Var], stack = Stk};
+                    #result{env = Bs, expr = [Var], stack = Stk};
                 nomatch ->
                     error({case_clause, concrete(A)})
             end
@@ -172,7 +197,8 @@ expr(Bs, {'receive', Line, Cs}, Stk0) ->
     VarBody = cauder_utils:temp_variable(Line),
     Entry = #s_block{type = 'receive', expr = [VarBody], var = Var},
     Stk = cauder_stack:push(Entry, Stk0),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
+    Label = #l_receive{var = VarBody, clauses = Cs},
+    #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 % TODO Support fun() as entry point argument?
 % TODO Handle calls to interpreted fun() from uninterpreted module
 expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
@@ -190,32 +216,35 @@ expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
             % TODO Support more arities
             _ -> error({argument_limit, Arity})
         end,
-    #result{env = Bs, exprs = [{value, Line, Fun}], stack = Stk0};
+    #result{env = Bs, expr = [{value, Line, Fun}], stack = Stk0};
 expr(Bs, E = {bif, Line, M, F, As}, Stk) ->
     case is_reducible(As, Bs) of
         true ->
             eval_and_update({Bs, As, Stk}, {5, E});
         false ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
-            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr(Bs, {self, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {self, Var}};
+    Label = #l_self{var = Var},
+    #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, {node, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {node, Var}};
+    Label = #l_node{var = Var},
+    #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, {nodes, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {nodes, Var}};
+    Label = #l_nodes{var = Var},
+    #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     case is_reducible(Fun, Bs) of
         true ->
             eval_and_update({Bs, Fun, Stk}, {3, E});
         false ->
             Var = cauder_utils:temp_variable(Line),
-            Label = {spawn, Var, Fun},
-            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+            Label = #l_spawn_fun{var = Var, function = Fun},
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
     case is_reducible(N, Bs) of
@@ -227,8 +256,8 @@ expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
                     eval_and_update({Bs, Fun, Stk}, {4, E});
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = {spawn, Var, concrete(N), Fun},
-                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                    Label = #l_spawn_fun{var = Var, node = concrete(N), function = Fun},
+                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
 expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
@@ -245,8 +274,13 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
                             eval_and_update({Bs, As, Stk}, {5, E});
                         false ->
                             Var = cauder_utils:temp_variable(Line),
-                            Label = {spawn, Var, concrete(M), concrete(F), concrete(As)},
-                            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                            Label = #l_spawn_mfa{
+                                var = Var,
+                                module = concrete(M),
+                                function = concrete(F),
+                                args = concrete(As)
+                            },
+                            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                     end
             end
     end;
@@ -268,8 +302,14 @@ expr(Bs, E = {spawn, Line, N, M, F, As}, Stk) ->
                                     eval_and_update({Bs, As, Stk}, {6, E});
                                 false ->
                                     Var = cauder_utils:temp_variable(Line),
-                                    Label = {spawn, Var, concrete(N), concrete(M), concrete(F), concrete(As)},
-                                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                                    Label = #l_spawn_mfa{
+                                        var = Var,
+                                        node = concrete(N),
+                                        module = concrete(M),
+                                        function = concrete(F),
+                                        args = concrete(As)
+                                    },
+                                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                             end
                     end
             end
@@ -280,8 +320,8 @@ expr(Bs, E = {start, Line, N}, Stk) ->
             eval_and_update({Bs, N, Stk}, {3, E});
         false ->
             Var = cauder_utils:temp_variable(Line),
-            Label = {start, Var, concrete(N)},
-            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+            Label = #l_start{var = Var, name = concrete(N)},
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {start, Line, H, N}, Stk) ->
     case is_reducible(H, Bs) of
@@ -293,8 +333,8 @@ expr(Bs, E = {start, Line, H, N}, Stk) ->
                     eval_and_update({Bs, N, Stk}, {4, E});
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = {start, Var, concrete(H), concrete(N)},
-                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                    Label = #l_start{var = Var, name = concrete(N), host = concrete(H)},
+                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
 expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op' ->
@@ -306,8 +346,8 @@ expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op
                 true ->
                     eval_and_update({Bs, R, Stk}, {4, E});
                 false ->
-                    Label = {send, concrete(L), concrete(R)},
-                    #result{env = Bs, exprs = [R], stack = Stk, label = Label}
+                    Label = #l_send{dst = concrete(L), val = concrete(R)},
+                    #result{env = Bs, expr = [R], stack = Stk, label = Label}
             end
     end;
 expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
@@ -322,7 +362,7 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
             Var = cauder_utils:temp_variable(Line),
             Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
-            #result{env = Bs0, exprs = [Var], stack = Stk}
+            #result{env = Bs0, expr = [Var], stack = Stk}
     end;
 expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
     case is_reducible(As, Bs0) of
@@ -365,7 +405,7 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
                     Bs = cauder_bindings:merge(Bs1, Bs2),
                     Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
                     Stk = cauder_stack:push(Entry, Stk0),
-                    #result{env = Bs0, exprs = [Var], stack = Stk}
+                    #result{env = Bs0, expr = [Var], stack = Stk}
             end
     end;
 expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
@@ -378,7 +418,7 @@ expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
                     eval_and_update({Bs0, Rhs, Stk}, {4, E});
                 false ->
                     case match(Bs0, [Lhs], [Rhs]) of
-                        {match, Bs} -> #result{env = Bs, exprs = [Rhs], stack = Stk};
+                        {match, Bs} -> #result{env = Bs, expr = [Rhs], stack = Stk};
                         nomatch -> error({badmatch, concrete(Rhs)})
                     end
             end
@@ -389,7 +429,7 @@ expr(Bs, E = {op, Line, Op, As}, Stk) ->
             eval_and_update({Bs, As, Stk}, {4, E});
         false ->
             Value = apply(erlang, Op, lists:map(fun concrete/1, As)),
-            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
     case is_reducible(Lhs, Bs) of
@@ -398,14 +438,14 @@ expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
         false ->
             case Lhs of
                 {value, _, false} ->
-                    #result{env = Bs, exprs = [Lhs], stack = Stk};
+                    #result{env = Bs, expr = [Lhs], stack = Stk};
                 {value, _, true} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
                             eval_and_update({Bs, Rhs, Stk}, {4, E});
                         false ->
                             Value = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
-                            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+                            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
     end;
@@ -416,14 +456,14 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
         false ->
             case Lhs of
                 {value, _, true} ->
-                    #result{env = Bs, exprs = [Lhs], stack = Stk};
+                    #result{env = Bs, expr = [Lhs], stack = Stk};
                 {value, _, false} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
                             eval_and_update({Bs, Rhs, Stk}, {4, E});
                         false ->
                             Value = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
-                            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+                            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
     end.
@@ -442,10 +482,10 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
             Var = cauder_utils:temp_variable(Line),
             Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
-            #result{env = Bs0, exprs = [Var], stack = Stk};
+            #result{env = Bs0, expr = [Var], stack = Stk};
         error ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
-            #result{env = Bs0, exprs = [{value, Line, Value}], stack = Stk0}
+            #result{env = Bs0, expr = [{value, Line, Value}], stack = Stk0}
     end.
 
 %%%=============================================================================
@@ -491,7 +531,7 @@ when
     Sys :: cauder_system:system(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
-    Message :: cauder_types:message(),
+    Message :: cauder_message:message(),
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
 
@@ -568,7 +608,7 @@ when
     Mail :: cauder_mailbox:mailbox(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
-    Message :: cauder_types:message(),
+    Message :: cauder_message:message(),
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
 
@@ -714,7 +754,7 @@ eval_guard(Bs, G) when is_list(G) ->
 eval_guard_test(Bs, Gt) ->
     case is_reducible(Gt, Bs) of
         true ->
-            #result{exprs = [Gt1]} = expr(Bs, Gt, cauder_stack:new()),
+            #result{expr = [Gt1]} = expr(Bs, Gt, cauder_stack:new()),
             eval_guard_test(Bs, Gt1);
         false ->
             Gt
@@ -788,11 +828,11 @@ is_value(E) when is_tuple(E) -> false.
     Stack :: cauder_stack:stack(),
     Index :: pos_integer(),
     Tuple :: tuple(),
-    Result :: cauder_types:result().
+    Result :: cauder_eval:result().
 
 eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
-    R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
-    R#result{exprs = [setelement(Index, Tuple, Es1)]};
+    R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+    R#result{expr = [setelement(Index, Tuple, Es1)]};
 eval_and_update({Bs, E, Stk}, {Index, Tuple}) ->
-    R = #result{exprs = [E1]} = expr(Bs, E, Stk),
-    R#result{exprs = [setelement(Index, Tuple, E1)]}.
+    R = #result{expr = [E1]} = expr(Bs, E, Stk),
+    R#result{expr = [setelement(Index, Tuple, E1)]}.

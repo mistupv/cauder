@@ -13,6 +13,7 @@
 -include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
+-include("cauder_log.hrl").
 
 %%%=============================================================================
 %%% API
@@ -39,21 +40,21 @@ step(Pid, #system{pool = Pool} = Sys0) ->
     },
     case Entry of
         #h_tau{} ->
-            step_tau(Pid, Entry, Sys);
+            rule_local(Pid, Entry, Sys);
         #h_self{} ->
-            step_self(Pid, Entry, Sys);
+            rule_self(Pid, Entry, Sys);
         #h_node{} ->
-            step_node(Pid, Entry, Sys);
+            rule_node(Pid, Entry, Sys);
         #h_nodes{} ->
-            step_nodes(Pid, Entry, Sys);
+            rule_nodes(Pid, Entry, Sys);
         #h_spawn{} ->
-            step_spawn(Pid, Entry, Sys);
+            rule_spawn(Pid, Entry, Sys);
         #h_start{} ->
-            step_start(Pid, Entry, Sys);
+            rule_start(Pid, Entry, Sys);
         #h_send{} ->
-            step_send(Pid, Entry, Sys);
+            rule_send(Pid, Entry, Sys);
         #h_receive{} ->
-            step_receive(Pid, Entry, Sys)
+            rule_receive(Pid, Entry, Sys)
     end.
 
 %%------------------------------------------------------------------------------
@@ -78,16 +79,20 @@ options(#system{pool = Pool} = Sys) ->
 %%% Internal functions
 %%%=============================================================================
 
-step_tau(Pid, #h_tau{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_local(Pid, #h_tau{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-step_self(Pid, #h_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_self(Pid, #h_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-step_node(Pid, #h_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_node(Pid, #h_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-step_simple(Pid, {Bs, Es, Stk}, #system{pool = Pool} = Sys) ->
+step_simple(
+    Pid,
+    {Bs, Es, Stk},
+    #system{pool = Pool} = Sys
+) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
         env = Bs,
@@ -98,91 +103,68 @@ step_simple(Pid, {Bs, Es, Stk}, #system{pool = Pool} = Sys) ->
         pool = cauder_pool:update(P1, Pool)
     }.
 
-step_nodes(
+rule_nodes(
     Pid,
-    #h_nodes{
-        env = Bs,
-        expr = Es,
-        stack = Stk,
-        nodes = HistNodes
-    },
-    #system{
-        pool = Pool,
-        traces = LMap
-    } = Sys
+    #h_nodes{} = Entry,
+    #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-    P = P0#process{
-        env = Bs,
-        expr = Es,
-        stack = Stk
+    P1 = P0#process{
+        env = Entry#h_nodes.env,
+        expr = Entry#h_nodes.expr,
+        stack = Entry#h_nodes.stack
+    },
+    LogAction = #log_nodes{
+        nodes = Entry#h_nodes.nodes
     },
     Sys#system{
-        pool = cauder_pool:update(P, Pool),
-        traces = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
+        pool = cauder_pool:update(P1, Pool),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log)
     }.
 
-step_spawn(
+rule_spawn(
     Pid,
-    #h_spawn{
-        env = Bs,
-        expr = Es,
-        stack = Stk,
-        node = Node,
-        pid = Gid
-    },
-    #system{
-        pool = Pool,
-        traces = LMap,
-        x_trace = Trace
-    } = Sys
+    #h_spawn{pid = Gid} = Entry,
+    #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-    P = P0#process{
-        env = Bs,
-        expr = Es,
-        stack = Stk
+    P1 = P0#process{
+        env = Entry#h_spawn.env,
+        expr = Entry#h_spawn.expr,
+        stack = Entry#h_spawn.stack
+    },
+    LogAction = #log_spawn{
+        node = Entry#h_spawn.node,
+        pid = Gid,
+        success = cauder_pool:is_element(Gid, Pool)
     },
     T = #x_trace{
         type = ?RULE_SPAWN,
         from = Pid,
         to = Gid
     },
-    Result =
-        case cauder_utils:process_node(Gid, Pool) of
-            false -> failure;
-            _ -> success
-        end,
-    NewLog = {spawn, {Node, Gid}, Result},
     Sys#system{
-        pool = cauder_pool:update(P, cauder_pool:remove(Gid, Pool)),
-        traces = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
-        x_trace = lists:delete(T, Trace)
+        pool = cauder_pool:update(P1, cauder_pool:remove(Gid, Pool)),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        x_trace = lists:delete(T, Sys#system.x_trace)
     }.
 
-step_start(
+rule_start(
     Pid,
-    #h_start{
-        env = Bs,
-        expr = Es,
-        stack = Stk,
-        node = Node,
-        success = Success
-    },
-    #system{
-        pool = Pool,
-        nodes = Nodes,
-        traces = LMap,
-        x_trace = Trace
-    } = Sys
+    #h_start{node = Node, success = Success} = Entry,
+    #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P = P0#process{
-        env = Bs,
-        expr = Es,
-        stack = Stk
+        env = Entry#h_start.env,
+        expr = Entry#h_start.expr,
+        stack = Entry#h_start.stack
     },
-    Result =
+    LogAction = #log_start{
+        node = Node,
+        success = Success
+    },
+    Res =
         case Success of
             true -> success;
             false -> failure
@@ -190,38 +172,30 @@ step_start(
     T = #x_trace{
         type = ?RULE_START,
         from = Pid,
-        res = Result,
+        res = Res,
         node = Node
     },
-    Entry1 = {start, Node, Result},
     Sys#system{
         pool = cauder_pool:update(P, Pool),
-        nodes = lists:delete(Node, Nodes),
-        x_trace = lists:delete(T, Trace),
-        traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap)
+        nodes = lists:delete(Node, Sys#system.nodes),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        x_trace = lists:delete(T, Sys#system.x_trace)
     }.
 
-step_send(
+rule_send(
     Pid,
-    #h_send{
-        env = Bs,
-        expr = Es,
-        stack = Stk,
-        msg = #message{uid = Uid, dst = Dst, val = Val} = Msg
-    },
-    #system{
-        mail = Mail,
-        pool = Pool,
-        traces = LMap,
-        x_trace = Trace
-    } = Sys
+    #h_send{msg = #message{uid = Uid, dst = Dst, val = Val} = Msg} = Entry,
+    #system{mail = Mail, pool = Pool} = Sys
 ) ->
-    {_, OldMsgs} = cauder_mailbox:remove(Msg, Mail),
+    {_, OldMail} = cauder_mailbox:remove(Msg, Mail),
     P0 = cauder_pool:get(Pid, Pool),
     P = P0#process{
-        env = Bs,
-        expr = Es,
-        stack = Stk
+        env = Entry#h_send.env,
+        expr = Entry#h_send.expr,
+        stack = Entry#h_send.stack
+    },
+    LogAction = #log_send{
+        uid = Uid
     },
     T = #x_trace{
         type = ?RULE_SEND,
@@ -230,35 +204,26 @@ step_send(
         val = Val,
         time = Uid
     },
-    Entry1 = {send, Uid},
     Sys#system{
-        mail = OldMsgs,
+        mail = OldMail,
         pool = cauder_pool:update(P, Pool),
-        traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
-        x_trace = lists:delete(T, Trace)
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        x_trace = lists:delete(T, Sys#system.x_trace)
     }.
 
-step_receive(
+rule_receive(
     Pid,
-    #h_receive{
-        env = Bs,
-        expr = Es,
-        stack = Stk,
-        msg = M = #message{uid = Uid, dst = Pid, val = Value},
-        q_pos = QPos
-    },
-    #system{
-        mail = Mail,
-        pool = Pool,
-        traces = LMap,
-        x_trace = Trace
-    } = Sys
+    #h_receive{msg = #message{uid = Uid, dst = Pid, val = Value} = Msg, q_pos = QPos} = Entry,
+    #system{mail = Mail, pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
-        env = Bs,
-        expr = Es,
-        stack = Stk
+        env = Entry#h_receive.env,
+        expr = Entry#h_receive.expr,
+        stack = Entry#h_receive.stack
+    },
+    LogAction = #log_receive{
+        uid = Uid
     },
     T = #x_trace{
         type = ?RULE_RECEIVE,
@@ -266,13 +231,14 @@ step_receive(
         val = Value,
         time = Uid
     },
-    Entry1 = {'receive', Uid},
     Sys#system{
-        mail = cauder_mailbox:insert(M, QPos, Mail),
+        mail = cauder_mailbox:insert(Msg, QPos, Mail),
         pool = cauder_pool:update(P1, Pool),
-        traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
-        x_trace = lists:delete(T, Trace)
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        x_trace = lists:delete(T, Sys#system.x_trace)
     }.
+
+%%%=============================================================================
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation option for the given Process, in the given

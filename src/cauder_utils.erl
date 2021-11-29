@@ -6,8 +6,6 @@
 -module(cauder_utils).
 
 -export([fundef_lookup/1]).
--export([find_spawn_log/2, find_spawn_parent/2, find_node_parent/2, find_msg_sender/2, find_msg_receiver/2]).
--export([find_process_with_future_reads/2, find_process_with_failed_spawn/2, process_node/2]).
 -export([check_node_name/1]).
 -export([string_to_expressions/1]).
 -export([filter_options/2]).
@@ -23,6 +21,7 @@
 -include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
+-include("cauder_tracer.hrl").
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the function definition that matches the given <i>MFA</i>.
@@ -54,142 +53,6 @@ fundef_lookup({M, F, A}) ->
                     error
             end
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the given log entry in the given log map.
-%% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
-%% contains the given entry, or `false' if the entry is not found.
-
--spec find_item(LMap, Entry) -> {value, Pid} | false when
-    LMap :: cauder_trace:trace(),
-    Entry :: cauder_trace:trace_entry_search(),
-    Pid :: cauder_process:id().
-
-find_item(LMap, Entry) ->
-    Pair = lists:search(fun({_Pid, Log}) -> compare(Log, Entry) end, maps:to_list(LMap)),
-    case Pair of
-        {value, {Pid, _}} -> {value, Pid};
-        false -> false
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Given two log items returns true if the second one matches the first.
-%% The peculiarity of this function is that allows to search for log items
-%% while not fully specifying their form, indeed the second item can be
-%% called using the wildcard '_' when we are not interested in an element.
-
--spec compare(LogItem, Entry) -> true | false when
-    LogItem :: [cauder_trace:trace_action()],
-    Entry :: cauder_trace:trace_entry_search().
-
-compare([], _) -> false;
-compare([H | _], H) -> true;
-compare([{spawn, {_, Pid}, _} | _], {spawn, {_, Pid}, _}) -> true;
-compare([{spawn, {Node, _}, failure} | _], {spawn, {Node, _}, failure}) -> true;
-compare([_ | T], Entry) -> compare(T, Entry).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for a process whose log has an entry with the information to
-%% spawn the process with the given pid.
-%% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
-%% contains the aforementioned entry, or `false' if the entry is not found.
-
--spec find_spawn_parent(LMap, Pid) -> {value, Parent} | false when
-    LMap :: cauder_trace:trace(),
-    Pid :: cauder_process:id(),
-    Parent :: cauder_process:id().
-
-find_spawn_parent(LMap, Pid) ->
-    find_item(LMap, {spawn, {'_', Pid}, '_'}).
-
-%%---------------------------------------------------------------------------------
-%% @doc Given a pid and a Log map retrieves the log about the spawning of such pid
-
--spec find_spawn_log(LMap, Pid) -> Log when
-    LMap :: cauder_trace:trace(),
-    Pid :: cauder_process:id(),
-    Log :: cauder_trace:trace_action().
-
-find_spawn_log(LMap, Pid) ->
-    {value, Log} = lists:search(
-        fun
-            ({spawn, {_, SpawnPid}, _}) when Pid =:= SpawnPid -> true;
-            (_) -> false
-        end,
-        lists:merge(maps:values(LMap))
-    ),
-    Log.
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for a process whose log has an entry with the information to
-%% start the node with the given name.
-%% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
-%% contains the aforementioned entry, or `false' if the entry is not found.
-
--spec find_node_parent(LMap, Node) -> {value, Parent} | false when
-    LMap :: cauder_trace:trace(),
-    Node :: node(),
-    Parent :: cauder_process:id().
-
-find_node_parent(LMap, Node) ->
-    find_item(LMap, {start, Node, success}).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for a process whose log has an entry with the information to
-%% send the message with the given uid.
-%% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
-%% contains the aforementioned entry, or `false' if the entry is not found.
-
--spec find_msg_sender(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_trace:trace(),
-    Uid :: cauder_message:uid(),
-    Pid :: cauder_process:id().
-
-find_msg_sender(LMap, Uid) ->
-    find_item(LMap, {send, Uid}).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for a process whose log has an entry with the information to
-%% receive the message with the given uid.
-%% Returns `{value, Pid}' where `Pid' is the pid of the process whose log
-%% contains the aforementioned entry, or `false' if the entry is not found.
-
--spec find_msg_receiver(LMap, Uid) -> {value, Pid} | false when
-    LMap :: cauder_trace:trace(),
-    Uid :: cauder_message:uid(),
-    Pid :: cauder_process:id().
-
-find_msg_receiver(LMap, Uid) ->
-    find_item(LMap, {'receive', Uid}).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process(es) that will fail to spawn `Node' and failed because
-%% this was already part of the network, by looking at its log
-
--spec find_process_with_failed_spawn(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_trace:trace(),
-    Node :: node(),
-    Process :: cauder_process:id().
-
-find_process_with_failed_spawn(LMap, Node) ->
-    find_item(LMap, {spawn, {Node, '_'}, failure}).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for the process(es) that will do a read while `Node' was not part of the network
-
--spec find_process_with_future_reads(LMap, Node) -> {value, Process} | false when
-    LMap :: cauder_trace:trace(),
-    Node :: node(),
-    Process :: cauder_process:id().
-
-find_process_with_future_reads(LMap, Node) ->
-    lists:search(
-        fun(Key) ->
-            L = maps:get(Key, LMap),
-            will_always_read(L, Node)
-        end,
-        maps:keys(LMap)
-    ).
 
 %%------------------------------------------------------------------------------
 %% @doc Given an atom that represents a node checks that the format is correct.
@@ -242,18 +105,6 @@ filter_options(Pid, Options) ->
     lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options).
 
 %%------------------------------------------------------------------------------
-%% @doc Checks whether the process will ever perform a read without `Node'
-
--spec will_always_read(Log, Node) -> Result when
-    Log :: [cauder_trace:trace_action()],
-    Node :: node(),
-    Result :: boolean().
-
-will_always_read([], _) -> true;
-will_always_read([{nodes, Nodes} | _], Node) -> lists:member(Node, Nodes);
-will_always_read([_ | RestLog], Node) -> will_always_read(RestLog, Node).
-
-%%------------------------------------------------------------------------------
 %% @doc Returns a new and unique number to use as a variable suffix.
 %%
 %% @see temp_variable/1
@@ -275,7 +126,7 @@ fresh_variable_number() -> ets:update_counter(?APP_DB, last_var, 1, {last_var, -
 %% @see replace_variable/3
 
 -spec temp_variable(Line) -> Variable when
-    Line :: cauder_types:line(),
+    Line :: cauder_syntax:line(),
     Variable :: cauder_syntax:af_variable().
 
 temp_variable(Line) ->
@@ -358,9 +209,9 @@ gen_log_send(Pid, #message{uid = Uid, dst = Dst, val = Val}) ->
 %%------------------------------------------------------------------------------
 %% @doc Load the trace result from the given directory adn returns it.
 
--spec load_trace(TraceDir) -> TraceResult when
+-spec load_trace(TraceDir) -> TraceInfo when
     TraceDir :: file:filename(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_tracer:trace_info().
 
 load_trace(Dir) ->
     ResultFile = filename:join(Dir, "trace_result.log"),
@@ -390,7 +241,7 @@ load_trace(Dir) ->
             maps:new()
         ),
 
-    #trace_result{
+    #trace_info{
         node = InitialNode,
         pid = InitialPid,
         call = {Mod, Fun, Args},
@@ -398,11 +249,11 @@ load_trace(Dir) ->
         return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
-        traces = Traces
+        trace = Traces
     }.
 
 -spec find_last_message_uid(Terms) -> ok when
-    Terms :: [cauder_trace:trace_action()].
+    Terms :: [cauder_trace:action()].
 
 find_last_message_uid(Terms) ->
     AllUids = lists:filtermap(
@@ -429,21 +280,6 @@ find_last_message_uid(Terms) ->
 
 is_dead(#process{expr = [{value, _, _}], stack = Stk}) -> cauder_stack:is_empty(Stk);
 is_dead(#process{}) -> false.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns the process node
--spec process_node(Pid, Pool) -> Result when
-    Pool :: cauder_pool:pool(),
-    Pid :: cauder_process:id(),
-    Result :: node() | false.
-
-process_node(Pid, Pool) ->
-    case cauder_pool:find(Pid, Pool) of
-        {ok, #process{node = Node}} ->
-            Node;
-        error ->
-            false
-    end.
 
 -spec is_conc_item(Entry) -> boolean() when
     Entry :: cauder_history:entry().

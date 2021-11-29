@@ -29,6 +29,7 @@
     stack :: cauder_stack:stack(),
     node :: node(),
     pid :: cauder_process:id()
+    %success :: boolean() % TODO
 }).
 
 -record(h_start, {

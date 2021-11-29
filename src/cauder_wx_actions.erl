@@ -410,49 +410,33 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
     ok;
-update_replay(_, #wx_state{system = #system{traces = Traces}, pid = Pid}) ->
-    case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Traces)) of
+update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
+    case cauder_log:is_empty(Log) of
         true ->
             wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
             ok;
         false ->
             wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
-            CanReplaySteps = maps:get(Pid, Traces, []) =/= [],
+            CanReplaySteps = cauder_log:is_element(Pid, Log),
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
             wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}]),
 
             % TODO Improve to avoid unnecessary updates
 
-            TraceEntries = lists:flatten(maps:values(Traces)),
-            RuleMap =
-                lists:foldl(
-                    fun(Entry, Map) ->
-                        try
-                            {K, V} =
-                                case Entry of
-                                    {send, Uid} -> {send, Uid};
-                                    %{deliver, Uid} -> {deliver, Uid};
-                                    {'receive', Uid} -> {'receive', Uid};
-                                    {start, Node, success} -> {start, Node};
-                                    {spawn, {_Node, ChildPid}, success} -> {spawn, ChildPid};
-                                    _ -> throw(skip)
-                                end,
-                            maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
-                        catch
-                            throw:skip -> Map
-                        end
-                    end,
-                    maps:new(),
-                    TraceEntries
-                ),
+            #{
+                'send' := SendUids,
+                'receive' := ReceiveUids,
+                'start' := StartNodes,
+                'spawn' := SpawnPids
+            } = cauder_log:group_actions(Log),
 
-            update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, maps:get(send, RuleMap, [])),
-            %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, maps:get(deliver, RuleMap, [])),
-            update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, maps:get('receive', RuleMap, [])),
-            update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, maps:get(start, RuleMap, [])),
-            update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, maps:get(spawn, RuleMap, [])),
+            update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, SendUids),
+            %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, DeliverUids),
+            update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, ReceiveUids),
+            update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, StartNodes),
+            update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, SpawnPids),
 
             ok
     end.

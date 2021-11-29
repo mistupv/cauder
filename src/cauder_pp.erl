@@ -5,7 +5,7 @@
 
 -module(cauder_pp).
 
--export([process/1, log_entry/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
+-export([process/1, log_action/1, history_entry/1, stack_entry/1, expression/1, trace_entry/1]).
 -export([pid/1, pp_node/1, to_string/1]).
 
 -include("cauder.hrl").
@@ -13,14 +13,14 @@
 -include("cauder_process.hrl").
 -include("cauder_stack.hrl").
 -include("cauder_history.hrl").
+-include("cauder_log.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
--spec process(Process) -> String when
-    Process :: cauder_process:process(),
-    String :: string().
+-spec process(Process) -> nonempty_string() when
+    Process :: cauder_process:process().
 
-process(#process{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
+process(#process{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc) ->
     Icon =
         case cauder_utils:is_dead(Proc) of
             true -> ?ICON_DEAD;
@@ -30,23 +30,28 @@ process(#process{node = Node, pid = Pid, spf = {M, F, A}} = Proc) ->
 
 %%%=============================================================================
 
--spec log_entry(LogEntry) -> String when
-    LogEntry :: cauder_trace:trace_action(),
-    String :: string().
+-spec log_action(Action) -> nonempty_string() when
+    Action :: cauder_log:action().
 
-log_entry({nodes, Nodes}) -> "nodes(" ++ to_string(Nodes) ++ ")";
-log_entry({spawn, {Node, Pid}, success}) -> "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
-log_entry({spawn, {Node, Pid}, failure}) -> "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
-log_entry({send, Uid}) -> "send(" ++ red(to_string(Uid)) ++ ")";
-log_entry({'receive', Uid}) -> "rec(" ++ blue(to_string(Uid)) ++ ")";
-log_entry({start, NodeName, success}) -> "start(" ++ green(to_string(NodeName)) ++ ")";
-log_entry({start, NodeName, failure}) -> "start(" ++ red(to_string(NodeName)) ++ ")".
+log_action(#log_spawn{node = Node, pid = Pid, success = 'true'}) ->
+    "spawn(" ++ green(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_action(#log_spawn{node = Node, pid = Pid, success = 'false'}) ->
+    "spawn(" ++ red(to_string(Node) ++ ", " ++ to_string(Pid)) ++ ")";
+log_action(#log_send{uid = Uid}) ->
+    "send(" ++ red(to_string(Uid)) ++ ")";
+log_action(#log_receive{uid = Uid}) ->
+    "rec(" ++ blue(to_string(Uid)) ++ ")";
+log_action(#log_nodes{nodes = Nodes}) ->
+    "nodes(" ++ to_string(Nodes) ++ ")";
+log_action(#log_start{node = Node, success = 'true'}) ->
+    "start(" ++ green(to_string(Node)) ++ ")";
+log_action(#log_start{node = Node, success = 'false'}) ->
+    "start(" ++ red(to_string(Node)) ++ ")".
 
 %%%=============================================================================
 
--spec history_entry(Entry) -> String when
-    Entry :: cauder_history:entry(),
-    String :: string().
+-spec history_entry(Entry) -> nonempty_string() when
+    Entry :: cauder_history:entry().
 
 history_entry(#h_tau{}) ->
     "seq";
@@ -67,9 +72,8 @@ history_entry(#h_receive{msg = #message{uid = Uid, val = Val}}) ->
 
 %%%=============================================================================
 
--spec stack_entry(Entry) -> String when
-    Entry :: cauder_stack:entry(),
-    String :: string().
+-spec stack_entry(Entry) -> nonempty_string() when
+    Entry :: cauder_stack:entry().
 
 stack_entry(#s_function{mfa = {M, F, A}}) ->
     io_lib:format("~s:~s/~b", [M, F, A]);
@@ -78,18 +82,16 @@ stack_entry(#s_block{type = Type}) ->
 
 %%%=============================================================================
 
--spec expression(Expression) -> String when
-    Expression :: cauder_syntax:abstract_expr(),
-    String :: string().
+-spec expression(Expression) -> nonempty_string() when
+    Expression :: cauder_syntax:abstract_expr().
 
 expression(Expr) ->
     lists:flatten(erl_prettypr:format(cauder_syntax:to_abstract_expr(Expr), [{paper, 120}, {ribbon, 120}])).
 
 %%%=============================================================================
 
--spec trace_entry(Trace) -> String when
-    Trace :: cauder_types:x_trace(),
-    String :: string().
+-spec trace_entry(Trace) -> nonempty_string() when
+    Trace :: cauder_types:x_trace().
 
 trace_entry(#x_trace{type = ?RULE_SEND, from = From, to = To, val = Val, time = Uid}) ->
     io_lib:format("~s send ~p to ~s (~p)", [pid(From), Val, pid(To), Uid]);
@@ -104,33 +106,32 @@ trace_entry(#x_trace{type = ?RULE_RECEIVE, from = From, val = Val, time = Uid}) 
 
 %%%=============================================================================
 
--spec pid(Pid) -> String when
-    Pid :: cauder_process:id(),
-    String :: string().
+-spec pid(Pid) -> nonempty_string() when
+    Pid :: cauder_process:id().
 
 pid(Pid) -> "Proc. " ++ to_string(Pid).
 
--spec pp_node(Node) -> String when
-    Node :: node(),
-    String :: string().
+-spec pp_node(Node) -> nonempty_string() when
+    Node :: node().
 
 pp_node(Node) -> "Node " ++ to_string(Node).
 
--spec to_string(Term) -> String when
-    Term :: term(),
-    String :: string().
-
-to_string(Term) -> io_lib:format("~p", [Term]).
-
--spec pp_nodes(Nodes) -> String when
-    Nodes :: [node()],
-    String :: string().
+-spec pp_nodes(Nodes) -> nonempty_string() when
+    Nodes :: [node()].
 
 pp_nodes([]) ->
     "[]";
 pp_nodes(Nodes) ->
     [FirstNode | RemNodes] = lists:map(fun(Node) -> to_string(Node) end, Nodes),
     "[" ++ lists:foldl(fun(Node, AccIn) -> Node ++ ", " ++ AccIn end, FirstNode, RemNodes) ++ "]".
+
+%%%=============================================================================
+
+-spec to_string(term()) -> nonempty_string().
+
+to_string(Term) -> io_lib:format("~p", [Term]).
+
+%%%=============================================================================
 
 red(Text) -> [{?wxRED, Text}].
 green(Text) -> [{?CAUDER_GREEN, Text}].

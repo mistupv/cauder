@@ -358,7 +358,7 @@ rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
 rollback_start_begin(Node) -> set_text(io_lib:format(?ROLLBACK_START_BEGIN, [Node])).
 
 -spec rollback_start_finish(Node, Time) -> ok when
-    Node :: cauder_types:net_Node(),
+    Node :: node(),
     Time :: non_neg_integer().
 
 rollback_start_finish(Node, Time) ->

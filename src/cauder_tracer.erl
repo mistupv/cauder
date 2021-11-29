@@ -1,18 +1,30 @@
--module(tracer).
+-module(cauder_tracer).
 
 -behaviour(gen_server).
 
 %% API
--export([trace/3, trace/4]).
+-export([
+    trace/3,
+    trace/4
+]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([
+    init/1,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    terminate/2,
+    code_change/3
+]).
 
 -ignore_xref([trace/3, trace/4]).
 
--include("cauder.hrl").
+-include("cauder_tracer.hrl").
 
 -define(SERVER, ?MODULE).
+
+-type trace_info() :: #trace_info{}.
 
 -record(state, {
     % The pid of the tracer process, used to notify when the execution of the traced process has finished
@@ -21,7 +33,7 @@
     % A map between 'unique integers' and stamps
     stamps = maps:new() :: #{integer() => non_neg_integer()},
     % The trace
-    traces = maps:new() :: cauder_trace:trace(),
+    trace = cauder_trace:new() :: cauder_trace:trace(),
     % A set with all the processes being traced
     processes :: sets:set(pid()),
     % The value returned by the function application
@@ -64,23 +76,23 @@
 %%
 %% @see trace/4
 
--spec trace(Module, Function, Arguments) -> TraceResult when
+-spec trace(Module, Function, Arguments) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_tracer:trace_info().
 
 trace(Mod, Fun, Args) -> trace(Mod, Fun, Args, #{}).
 
 %%------------------------------------------------------------------------------
 %% @doc Traces the evaluation of the expression `apply(Mod, Fun, Args)'.
 
--spec trace(Module, Function, Arguments, Options) -> TraceResult when
+-spec trace(Module, Function, Arguments, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: some_options() | some_options_proplist(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_tracer:trace_info().
 
 trace(Mod, Fun, Args, Opts) when is_list(Opts) -> trace(Mod, Fun, Args, maps:from_list(Opts));
 trace(Mod, Fun, Args, Opts) when is_map(Opts) -> do_trace(Mod, Fun, Args, maps:merge(default_options(), Opts)).
@@ -128,22 +140,26 @@ init({MainPid, TracedPid}) ->
     Reply :: Reply,
     NewState :: state().
 
-handle_call(get_traces, _From, #state{traces = Trace} = State) ->
-    ReversedTrace = maps:map(fun(_, V) -> lists:reverse(V) end, Trace),
-    {reply, {ok, ReversedTrace}, State};
+handle_call(get_traces, _From, #state{trace = Trace0} = State) ->
+    Trace1 = cauder_trace:reverse_actions(Trace0),
+    {reply, {ok, Trace1}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
     {reply, ReturnValue, State};
 %% ========== 'call' trace messages ========== %%
 %% Generate message stamp
-handle_call({trace, Pid, call, {tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
+handle_call({trace, Pid, call, {cauder_tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
     Pid ! {stamp, erlang:unique_integer()},
     {reply, ok, State};
 %% ========== 'return_from' trace messages ========== %%
 %% Save return value
-handle_call({trace, _Pid, return_from, {tracer_erlang, apply, 3}, ReturnValue}, _From, #state{return = none} = State) ->
+handle_call(
+    {trace, _Pid, return_from, {cauder_tracer_erlang, apply, 3}, ReturnValue},
+    _From,
+    #state{return = none} = State
+) ->
     {reply, ok, State#state{return = {value, ReturnValue}}};
 %% Call to `nodes()`
-handle_call({trace, Pid, return_from, {tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
+handle_call({trace, Pid, return_from, {cauder_tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
     State1 = add_to_trace(Pid, {nodes, Nodes}, State),
     {reply, ok, State1};
 %% ========== 'send' trace messages ========== %%
@@ -193,11 +209,11 @@ handle_call({trace, Pid, exit, _Reason}, _From, #state{main_pid = MainPid, proce
     end,
     {reply, ok, State1};
 %% ========== Ignored trace messages ========== %%
-handle_call({trace, _, call, {tracer_erlang, apply, [_, _, _]}}, _From, State) ->
+handle_call({trace, _, call, {cauder_tracer_erlang, apply, [_, _, _]}}, _From, State) ->
     {reply, ok, State};
-handle_call({trace, _, call, {tracer_erlang, nodes, []}}, _From, State) ->
+handle_call({trace, _, call, {cauder_tracer_erlang, nodes, []}}, _From, State) ->
     {reply, ok, State};
-handle_call({trace, _, return_from, {tracer_erlang, send_centralized, 2}, _}, _From, State) ->
+handle_call({trace, _, return_from, {cauder_tracer_erlang, send_centralized, 2}, _}, _From, State) ->
     {reply, ok, State};
 handle_call({trace, _, send_to_non_existing_process, {{stamp, _Stamp}, _Message}, _}, _From, State) ->
     % TODO Log lost messages
@@ -274,12 +290,12 @@ code_change(_OldVsn, State, _Extra) -> {ok, State}.
 %%% Internal functions
 %%%=============================================================================
 
--spec do_trace(Module, Function, Arguments, Options) -> TraceResult when
+-spec do_trace(Module, Function, Arguments, Options) -> TraceInfo when
     Module :: module(),
     Function :: atom(),
     Arguments :: [term()],
     Options :: all_options(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_tracer:trace_info().
 
 do_trace(Module, Function, Args, Opts) ->
     Dir = maps:get(dir, Opts),
@@ -299,10 +315,10 @@ do_trace(Module, Function, Args, Opts) ->
         lists:usort([Module | Modules])
     ),
 
-    load(tracer_erlang),
+    load(cauder_tracer_erlang),
 
     MainPid = self(),
-    TracedPid = spawn(tracer_erlang, start, [MainPid, Module, Function, Args]),
+    TracedPid = spawn(cauder_tracer_erlang, start, [MainPid, Module, Function, Args]),
     {ok, _} = gen_server:start_link({local, ?SERVER}, ?MODULE, {MainPid, TracedPid}, []),
 
     dbg:tracer(process, {fun trace_handler/2, []}),
@@ -314,9 +330,9 @@ do_trace(Module, Function, Args, Opts) ->
         {['_', {result, {error, '_'}}], [], []}
     ]),
     dbg:tpe('receive', [{['_', '_', {{stamp, '_'}, '_'}], [], []}]),
-    dbg:tpl(tracer_erlang, apply, 3, [{'_', [], [{return_trace}]}]),
-    dbg:tpl(tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
-    dbg:tpl(tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(cauder_tracer_erlang, apply, 3, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(cauder_tracer_erlang, send_centralized, 2, [{'_', [], [{return_trace}]}]),
+    dbg:tpl(cauder_tracer_erlang, nodes, 0, [{'_', [], [{return_trace}]}]),
 
     receive
         setup_complete -> ok
@@ -338,7 +354,7 @@ do_trace(Module, Function, Args, Opts) ->
     ReturnValue = gen_server:call(?SERVER, get_return_value),
     gen_server:stop(?SERVER),
 
-    Result = #trace_result{
+    Result = #trace_info{
         node = node(),
         pid = cauder_process:from_pid(TracedPid),
         call = {Module, Function, Args},
@@ -346,7 +362,7 @@ do_trace(Module, Function, Args, Opts) ->
         return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
-        traces = Traces
+        trace = Traces
     },
 
     case Output of
@@ -370,7 +386,7 @@ instrument(Mod, Dir, StampMode) ->
         binary,
         return,
         {i, Dir},
-        {parse_transform, tracer_transform},
+        {parse_transform, cauder_tracer_transform},
         % Tracer options
         {stamp_mode, StampMode}
     ],
@@ -401,16 +417,16 @@ trace_handler(Trace, []) ->
     ok = gen_server:call(?SERVER, Trace),
     [].
 
--spec add_to_trace(Pid, Entry, State) -> NewState when
+-spec add_to_trace(Pid, Action, State) -> NewState when
     Pid :: pid(),
-    Entry :: cauder_trace:trace_action(),
+    Action :: cauder_trace:action(),
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
-    Index = cauder_process:from_pid(Pid),
-    Trace1 = maps:update_with(Index, fun(Other) -> [Entry | Other] end, [Entry], Trace0),
-    State#state{traces = Trace1}.
+add_to_trace(Pid, Action, #state{trace = Trace0} = State) ->
+    Id = cauder_process:from_pid(Pid),
+    Trace1 = cauder_trace:push(Id, Action, Trace0),
+    State#state{trace = Trace1}.
 
 -spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
     Pid :: pid(),
@@ -419,12 +435,12 @@ add_to_trace(Pid, Entry, #state{traces = Trace0} = State) ->
     State :: state(),
     NewState :: state().
 
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StamPool0, traces = Trace0} = State) when is_atom(Tag) ->
-    PidIndex = cauder_process:from_pid(Pid),
-    {Uid, StamPool1} = get_uid(Stamp, StamPool0, Table),
-    Entry = {Tag, Uid},
-    Trace1 = maps:update_with(PidIndex, fun(L) -> [Entry | L] end, [Entry], Trace0),
-    State#state{stamps = StamPool1, traces = Trace1}.
+add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampPool0, trace = Trace0} = State) when is_atom(Tag) ->
+    Id = cauder_process:from_pid(Pid),
+    {Uid, StampPool1} = get_uid(Stamp, StampPool0, Table),
+    Action = {Tag, Uid},
+    Trace1 = cauder_trace:push(Id, Action, Trace0),
+    State#state{stamps = StampPool1, trace = Trace1}.
 
 -spec get_uid(Stamp, Map, Table) -> {Uid, NewMap} when
     Stamp :: integer(),
@@ -443,14 +459,14 @@ get_uid(Stamp, Map, Table) ->
             {Uid, Map}
     end.
 
--spec write_trace(Dir, TraceResult) -> ok when
+-spec write_trace(Dir, TraceInfo) -> ok when
     Dir :: file:filename(),
-    TraceResult :: cauder_types:trace_result().
+    TraceInfo :: cauder_tracer:trace_info().
 
 write_trace(Dir, TraceResult) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_result | Values] = tuple_to_list(TraceResult),
-    Fields = record_info(fields, trace_result),
+    [trace_info | Values] = tuple_to_list(TraceResult),
+    Fields = record_info(fields, trace_info),
     {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),

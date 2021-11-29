@@ -1,7 +1,7 @@
 -record(process, {
     node :: node(),
     pid :: cauder_process:id(),
-    spf :: mfa(),
+    entry_point :: mfa(),
     env = cauder_bindings:new() :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack = cauder_stack:new() :: cauder_stack:stack(),
