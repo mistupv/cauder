@@ -39,21 +39,21 @@ step(Pid, #system{pool = Pool} = Sys0) ->
         )
     },
     case Entry of
-        #h_tau{} ->
+        #hist_tau{} ->
             rule_local(Pid, Entry, Sys);
-        #h_self{} ->
+        #hist_self{} ->
             rule_self(Pid, Entry, Sys);
-        #h_node{} ->
+        #hist_node{} ->
             rule_node(Pid, Entry, Sys);
-        #h_nodes{} ->
+        #hist_nodes{} ->
             rule_nodes(Pid, Entry, Sys);
-        #h_spawn{} ->
+        #hist_spawn{} ->
             rule_spawn(Pid, Entry, Sys);
-        #h_start{} ->
+        #hist_start{} ->
             rule_start(Pid, Entry, Sys);
-        #h_send{} ->
+        #hist_send{} ->
             rule_send(Pid, Entry, Sys);
-        #h_receive{} ->
+        #hist_receive{} ->
             rule_receive(Pid, Entry, Sys)
     end.
 
@@ -79,13 +79,13 @@ options(#system{pool = Pool} = Sys) ->
 %%% Internal functions
 %%%=============================================================================
 
-rule_local(Pid, #h_tau{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_local(Pid, #hist_tau{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-rule_self(Pid, #h_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_self(Pid, #hist_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
-rule_node(Pid, #h_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
+rule_node(Pid, #hist_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
     step_simple(Pid, {Bs, Es, Stk}, Sys).
 
 step_simple(
@@ -105,17 +105,17 @@ step_simple(
 
 rule_nodes(
     Pid,
-    #h_nodes{} = Entry,
+    #hist_nodes{} = Entry,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
-        env = Entry#h_nodes.env,
-        expr = Entry#h_nodes.expr,
-        stack = Entry#h_nodes.stack
+        env = Entry#hist_nodes.env,
+        expr = Entry#hist_nodes.expr,
+        stack = Entry#hist_nodes.stack
     },
     LogAction = #log_nodes{
-        nodes = Entry#h_nodes.nodes
+        nodes = Entry#hist_nodes.nodes
     },
     Sys#system{
         pool = cauder_pool:update(P1, Pool),
@@ -124,17 +124,17 @@ rule_nodes(
 
 rule_spawn(
     Pid,
-    #h_spawn{pid = Gid} = Entry,
+    #hist_spawn{pid = Gid} = Entry,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
-        env = Entry#h_spawn.env,
-        expr = Entry#h_spawn.expr,
-        stack = Entry#h_spawn.stack
+        env = Entry#hist_spawn.env,
+        expr = Entry#hist_spawn.expr,
+        stack = Entry#hist_spawn.stack
     },
     LogAction = #log_spawn{
-        node = Entry#h_spawn.node,
+        node = Entry#hist_spawn.node,
         pid = Gid,
         success = cauder_pool:is_element(Gid, Pool)
     },
@@ -151,14 +151,14 @@ rule_spawn(
 
 rule_start(
     Pid,
-    #h_start{node = Node, success = Success} = Entry,
+    #hist_start{node = Node, success = Success} = Entry,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P = P0#process{
-        env = Entry#h_start.env,
-        expr = Entry#h_start.expr,
-        stack = Entry#h_start.stack
+        env = Entry#hist_start.env,
+        expr = Entry#hist_start.expr,
+        stack = Entry#hist_start.stack
     },
     LogAction = #log_start{
         node = Node,
@@ -184,15 +184,15 @@ rule_start(
 
 rule_send(
     Pid,
-    #h_send{msg = #message{uid = Uid, dst = Dst, val = Val} = Msg} = Entry,
+    #hist_send{msg = #message{uid = Uid, dst = Dst, val = Val} = Msg} = Entry,
     #system{mail = Mail, pool = Pool} = Sys
 ) ->
     {_, OldMail} = cauder_mailbox:remove(Msg, Mail),
     P0 = cauder_pool:get(Pid, Pool),
     P = P0#process{
-        env = Entry#h_send.env,
-        expr = Entry#h_send.expr,
-        stack = Entry#h_send.stack
+        env = Entry#hist_send.env,
+        expr = Entry#hist_send.expr,
+        stack = Entry#hist_send.stack
     },
     LogAction = #log_send{
         uid = Uid
@@ -213,14 +213,14 @@ rule_send(
 
 rule_receive(
     Pid,
-    #h_receive{msg = #message{uid = Uid, dst = Pid, val = Value} = Msg, q_pos = QPos} = Entry,
+    #hist_receive{msg = #message{uid = Uid, dst = Pid, val = Value} = Msg, q_pos = QPos} = Entry,
     #system{mail = Mail, pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     P1 = P0#process{
-        env = Entry#h_receive.env,
-        expr = Entry#h_receive.expr,
-        stack = Entry#h_receive.stack
+        env = Entry#hist_receive.env,
+        expr = Entry#hist_receive.expr,
+        stack = Entry#hist_receive.stack
     },
     LogAction = #log_receive{
         uid = Uid
@@ -254,19 +254,19 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
     case cauder_history:peek(Hist) of
         empty ->
             ?NULL_OPT;
-        {value, #h_tau{}} ->
+        {value, #hist_tau{}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
-        {value, #h_self{}} ->
+        {value, #hist_self{}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
-        {value, #h_node{}} ->
+        {value, #hist_node{}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
-        {value, #h_nodes{nodes = Nodes}} ->
+        {value, #hist_nodes{nodes = Nodes}} ->
             ProcViewOfNodes = lists:delete(Node, Sys#system.nodes),
             case ProcViewOfNodes =:= Nodes of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
                 false -> ?NULL_OPT
             end;
-        {value, #h_spawn{pid = SpawnPid}} ->
+        {value, #hist_spawn{pid = SpawnPid}} ->
             try cauder_pool:get(SpawnPid, Pool) of
                 P1 ->
                     case cauder_history:is_empty(P1#process.hist) of
@@ -277,7 +277,7 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
                 % this case covers the scenario of a failed spawn
                 error:{badkey, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN}
             end;
-        {value, #h_start{node = StartNode, success = true}} ->
+        {value, #hist_start{node = StartNode, success = true}} ->
             Bool =
                 cauder_pool:find_on_node(StartNode, Pool) =:= [] andalso
                     cauder_pool:find_history_nodes(StartNode, Pool) =:= error andalso
@@ -286,13 +286,13 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
                 false -> ?NULL_OPT
             end;
-        {value, #h_start{success = false}} ->
+        {value, #hist_start{success = false}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-        {value, #h_send{msg = #message{uid = Uid}}} ->
+        {value, #hist_send{msg = #message{uid = Uid}}} ->
             case cauder_mailbox:is_element(Uid, Sys#system.mail) of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
                 false -> ?NULL_OPT
             end;
-        {value, #h_receive{}} ->
+        {value, #hist_receive{}} ->
             #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}
     end.

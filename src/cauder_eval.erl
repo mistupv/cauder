@@ -24,15 +24,15 @@
     | label_send()
     | label_receive().
 
--type label_tau() :: #l_tau{}.
--type label_spawn_fun() :: #l_spawn_fun{}.
--type label_spawn_mfa() :: #l_spawn_mfa{}.
--type label_start() :: #l_start{}.
--type label_self() :: #l_self{}.
--type label_node() :: #l_node{}.
--type label_nodes() :: #l_nodes{}.
--type label_send() :: #l_send{}.
--type label_receive() :: #l_receive{}.
+-type label_tau() :: #label_tau{}.
+-type label_spawn_fun() :: #label_spawn_fun{}.
+-type label_spawn_mfa() :: #label_spawn_mfa{}.
+-type label_start() :: #label_start{}.
+-type label_self() :: #label_self{}.
+-type label_node() :: #label_node{}.
+-type label_nodes() :: #label_nodes{}.
+-type label_send() :: #label_send{}.
+-type label_receive() :: #label_receive{}.
 
 %%%=============================================================================
 %%% API
@@ -197,7 +197,7 @@ expr(Bs, {'receive', Line, Cs}, Stk0) ->
     VarBody = cauder_utils:temp_variable(Line),
     Entry = #s_block{type = 'receive', expr = [VarBody], var = Var},
     Stk = cauder_stack:push(Entry, Stk0),
-    Label = #l_receive{var = VarBody, clauses = Cs},
+    Label = #label_receive{var = VarBody, clauses = Cs},
     #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 % TODO Support fun() as entry point argument?
 % TODO Handle calls to interpreted fun() from uninterpreted module
@@ -227,15 +227,15 @@ expr(Bs, E = {bif, Line, M, F, As}, Stk) ->
     end;
 expr(Bs, {self, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    Label = #l_self{var = Var},
+    Label = #label_self{var = Var},
     #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, {node, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    Label = #l_node{var = Var},
+    Label = #label_node{var = Var},
     #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, {nodes, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    Label = #l_nodes{var = Var},
+    Label = #label_nodes{var = Var},
     #result{env = Bs, expr = [Var], stack = Stk, label = Label};
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     case is_reducible(Fun, Bs) of
@@ -243,7 +243,7 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
             eval_and_update({Bs, Fun, Stk}, {3, E});
         false ->
             Var = cauder_utils:temp_variable(Line),
-            Label = #l_spawn_fun{var = Var, function = Fun},
+            Label = #label_spawn_fun{var = Var, function = Fun},
             #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
@@ -256,7 +256,7 @@ expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
                     eval_and_update({Bs, Fun, Stk}, {4, E});
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = #l_spawn_fun{var = Var, node = concrete(N), function = Fun},
+                    Label = #label_spawn_fun{var = Var, node = concrete(N), function = Fun},
                     #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
@@ -274,7 +274,7 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
                             eval_and_update({Bs, As, Stk}, {5, E});
                         false ->
                             Var = cauder_utils:temp_variable(Line),
-                            Label = #l_spawn_mfa{
+                            Label = #label_spawn_mfa{
                                 var = Var,
                                 module = concrete(M),
                                 function = concrete(F),
@@ -302,7 +302,7 @@ expr(Bs, E = {spawn, Line, N, M, F, As}, Stk) ->
                                     eval_and_update({Bs, As, Stk}, {6, E});
                                 false ->
                                     Var = cauder_utils:temp_variable(Line),
-                                    Label = #l_spawn_mfa{
+                                    Label = #label_spawn_mfa{
                                         var = Var,
                                         node = concrete(N),
                                         module = concrete(M),
@@ -320,7 +320,7 @@ expr(Bs, E = {start, Line, N}, Stk) ->
             eval_and_update({Bs, N, Stk}, {3, E});
         false ->
             Var = cauder_utils:temp_variable(Line),
-            Label = #l_start{var = Var, name = concrete(N)},
+            Label = #label_start{var = Var, name = concrete(N)},
             #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {start, Line, H, N}, Stk) ->
@@ -333,7 +333,7 @@ expr(Bs, E = {start, Line, H, N}, Stk) ->
                     eval_and_update({Bs, N, Stk}, {4, E});
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = #l_start{var = Var, name = concrete(N), host = concrete(H)},
+                    Label = #label_start{var = Var, name = concrete(N), host = concrete(H)},
                     #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
@@ -346,7 +346,7 @@ expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op
                 true ->
                     eval_and_update({Bs, R, Stk}, {4, E});
                 false ->
-                    Label = #l_send{dst = concrete(L), val = concrete(R)},
+                    Label = #label_send{dst = concrete(L), val = concrete(R)},
                     #result{env = Bs, expr = [R], stack = Stk, label = Label}
             end
     end;

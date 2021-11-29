@@ -20,7 +20,7 @@
 -spec process(Process) -> nonempty_string() when
     Process :: cauder_process:process().
 
-process(#process{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc) ->
+process(#process{node = Node, pid = Pid, mfa = {M, F, A}} = Proc) ->
     Icon =
         case cauder_utils:is_dead(Proc) of
             true -> ?ICON_DEAD;
@@ -53,21 +53,21 @@ log_action(#log_start{node = Node, success = 'false'}) ->
 -spec history_entry(Entry) -> nonempty_string() when
     Entry :: cauder_history:entry().
 
-history_entry(#h_tau{}) ->
+history_entry(#hist_tau{}) ->
     "seq";
-history_entry(#h_self{}) ->
+history_entry(#hist_self{}) ->
     "self";
-history_entry(#h_nodes{nodes = Nodes}) ->
+history_entry(#hist_nodes{nodes = Nodes}) ->
     "nodes(" ++ pp_nodes(Nodes) ++ ")";
-history_entry(#h_spawn{node = Node, pid = Pid}) ->
+history_entry(#hist_spawn{node = Node, pid = Pid}) ->
     "spawn(" ++ to_string(Node) ++ ", " ++ to_string(Pid) ++ ")";
-history_entry(#h_start{node = Node, success = true}) ->
+history_entry(#hist_start{node = Node, success = true}) ->
     "start(" ++ green(to_string(Node)) ++ ")";
-history_entry(#h_start{node = Node, success = false}) ->
+history_entry(#hist_start{node = Node, success = false}) ->
     "start(" ++ red(to_string(Node)) ++ ")";
-history_entry(#h_send{msg = #message{uid = Uid, val = Val}}) ->
+history_entry(#hist_send{msg = #message{uid = Uid, val = Val}}) ->
     "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
-history_entry(#h_receive{msg = #message{uid = Uid, val = Val}}) ->
+history_entry(#hist_receive{msg = #message{uid = Uid, val = Val}}) ->
     "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")".
 
 %%%=============================================================================

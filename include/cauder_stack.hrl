@@ -1,5 +1,5 @@
 -record(s_function, {
-    mfa :: erlang:mfa(),
+    mfa :: mfa(),
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     var :: cauder_syntax:af_variable()

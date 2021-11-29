@@ -40,23 +40,23 @@ step(Pid, Sys, Sched, Mode) ->
     #process{stack = Stk0, env = Bs0, expr = Es0} = cauder_pool:get(Pid, Sys#system.pool),
     Result = cauder_eval:seq(Bs0, Es0, Stk0),
     case Result#result.label of
-        #l_tau{} ->
+        #label_tau{} ->
             rule_local(Pid, Result, Sys);
-        #l_send{} ->
+        #label_send{} ->
             rule_send(Pid, Result, Sys);
-        #l_receive{var = Var} when Result#result.expr == [Var] ->
+        #label_receive{var = Var} when Result#result.expr == [Var] ->
             rule_receive(Pid, Result, Mode, Sched, Sys);
-        #l_self{} ->
+        #label_self{} ->
             rule_self(Pid, Result, Sys);
-        #l_node{} ->
+        #label_node{} ->
             rule_node(Pid, Result, Sys);
-        #l_nodes{} ->
+        #label_nodes{} ->
             rule_nodes(Pid, Result, Sys);
-        #l_spawn_fun{} ->
+        #label_spawn_fun{} ->
             rule_spawn(Pid, Result, Sys);
-        #l_spawn_mfa{} ->
+        #label_spawn_mfa{} ->
             rule_spawn(Pid, Result, Sys);
-        #l_start{} ->
+        #label_start{} ->
             rule_start(Pid, Result, Sys)
     end.
 
@@ -98,11 +98,11 @@ options(#system{pool = Pool} = Sys, Mode) ->
 
 rule_local(
     Pid,
-    #result{label = #l_tau{}} = Result,
+    #result{label = #label_tau{}} = Result,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #h_tau{
+    HistEntry = #hist_tau{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack
@@ -125,7 +125,7 @@ rule_local(
 
 rule_send(
     Pid,
-    #result{label = #l_send{dst = Dst, val = Val}} = Result,
+    #result{label = #label_send{dst = Dst, val = Val}} = Result,
     #system{pool = Pool, log = Log0} = Sys
 ) ->
     {Uid, Log1} =
@@ -144,7 +144,7 @@ rule_send(
     },
 
     P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #h_send{
+    HistEntry = #hist_send{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack,
@@ -180,7 +180,7 @@ rule_send(
 
 rule_receive(
     Pid,
-    #result{env = Bs, label = #l_receive{clauses = Cs}} = Result,
+    #result{env = Bs, label = #label_receive{clauses = Cs}} = Result,
     Mode,
     Sched,
     #system{mail = Mail, pool = Pool, log = Log0} = Sys
@@ -204,7 +204,7 @@ rule_receive(
         end,
 
     P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #h_receive{
+    HistEntry = #hist_receive{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack,
@@ -238,11 +238,11 @@ rule_receive(
 
 rule_self(
     Pid,
-    #result{label = #l_self{var = VarPid}} = Result,
+    #result{label = #label_self{var = VarPid}} = Result,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #h_self{
+    HistEntry = #hist_self{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack
@@ -265,11 +265,11 @@ rule_self(
 
 rule_node(
     Pid,
-    #result{label = #l_node{var = VarNode}} = Result,
+    #result{label = #label_node{var = VarNode}} = Result,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #h_node{
+    HistEntry = #hist_node{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack
@@ -292,7 +292,7 @@ rule_node(
 
 rule_nodes(
     Pid,
-    #result{label = #l_nodes{var = VarNodes}} = Result,
+    #result{label = #label_nodes{var = VarNodes}} = Result,
     #system{pool = Pool, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
@@ -306,7 +306,7 @@ rule_nodes(
         end,
     OtherNodes = lists:delete(P0#process.node, LogEntry#log_nodes.nodes),
 
-    HistEntry = #h_nodes{
+    HistEntry = #hist_nodes{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack,
@@ -338,8 +338,8 @@ rule_spawn(
 
     {VarPid, Node} =
         case Label of
-            #l_spawn_fun{var = Var, node = N} -> {Var, N};
-            #l_spawn_mfa{var = Var, node = N} -> {Var, N}
+            #label_spawn_fun{var = Var, node = N} -> {Var, N};
+            #label_spawn_mfa{var = Var, node = N} -> {Var, N}
         end,
     {LogEntry, Log1} =
         case cauder_log:pop_spawn(Pid, Log0) of
@@ -359,7 +359,7 @@ rule_spawn(
                 {Entry, Log0}
         end,
 
-    HistEntry = #h_spawn{
+    HistEntry = #hist_spawn{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack,
@@ -376,20 +376,20 @@ rule_spawn(
     },
     P2 =
         case Label of
-            #l_spawn_fun{function = {value, Line, Fun} = FunLiteral} ->
+            #label_spawn_fun{function = {value, Line, Fun} = FunLiteral} ->
                 {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
                 {arity, A} = erlang:fun_info(Fun, arity),
                 #process{
                     node = LogEntry#log_spawn.node,
                     pid = LogEntry#log_spawn.pid,
-                    entry_point = {M, F, A},
+                    mfa = {M, F, A},
                     expr = [{apply_fun, Line, FunLiteral, []}]
                 };
-            #l_spawn_mfa{module = M, function = F, args = As} ->
+            #label_spawn_mfa{module = M, function = F, args = As} ->
                 #process{
                     node = LogEntry#log_spawn.node,
                     pid = LogEntry#log_spawn.pid,
-                    entry_point = {M, F, length(As)},
+                    mfa = {M, F, length(As)},
                     expr = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))]
                 }
         end,
@@ -417,7 +417,7 @@ rule_spawn(
 
 rule_start(
     Pid,
-    #result{label = #l_start{var = VarNode, name = Name} = Label} = Result,
+    #result{label = #label_start{var = VarNode, name = Name} = Label} = Result,
     #system{pool = Pool, nodes = Nodes0, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
@@ -427,7 +427,7 @@ rule_start(
             'nonode@nohost' ->
                 error(not_alive);
             ProcessNode ->
-                case Label#l_start.host of
+                case Label#label_start.host of
                     'undefined' ->
                         [_Name, Host0] = string:split(atom_to_list(ProcessNode), <<"$">>, 'leading'),
                         Host0;
@@ -457,7 +457,7 @@ rule_start(
             true -> {ok, Node};
             false -> {error, {already_running, Node}}
         end,
-    HistEntry = #h_start{
+    HistEntry = #hist_start{
         env = P0#process.env,
         expr = P0#process.expr,
         stack = P0#process.stack,

@@ -1,29 +1,29 @@
--record(h_tau, {
+-record(hist_tau, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack()
 }).
 
--record(h_self, {
+-record(hist_self, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack()
 }).
 
--record(h_node, {
+-record(hist_node, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack()
 }).
 
--record(h_nodes, {
+-record(hist_nodes, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     nodes :: [node()]
 }).
 
--record(h_spawn, {
+-record(hist_spawn, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
@@ -32,7 +32,7 @@
     %success :: boolean() % TODO
 }).
 
--record(h_start, {
+-record(hist_start, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
@@ -40,14 +40,14 @@
     success :: boolean()
 }).
 
--record(h_send, {
+-record(hist_send, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     msg :: cauder_mailbox:message()
 }).
 
--record(h_receive, {
+-record(hist_receive, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),

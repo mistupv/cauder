@@ -21,14 +21,14 @@
     | entry_send()
     | entry_rec().
 
--type entry_tau() :: #h_tau{}.
--type entry_self() :: #h_self{}.
--type entry_node() :: #h_node{}.
--type entry_nodes() :: #h_nodes{}.
--type entry_spawn() :: #h_spawn{}.
--type entry_start() :: #h_start{}.
--type entry_send() :: #h_send{}.
--type entry_rec() :: #h_receive{}.
+-type entry_tau() :: #hist_tau{}.
+-type entry_self() :: #hist_self{}.
+-type entry_node() :: #hist_node{}.
+-type entry_nodes() :: #hist_nodes{}.
+-type entry_spawn() :: #hist_spawn{}.
+-type entry_start() :: #hist_start{}.
+-type entry_send() :: #hist_send{}.
+-type entry_rec() :: #hist_receive{}.
 
 %%%=============================================================================
 %%% API
@@ -79,7 +79,7 @@ to_list(History) -> History.
     History :: cauder_history:history().
 
 has_nodes(_, []) -> false;
-has_nodes(Node, [#h_nodes{nodes = Nodes} | H]) -> lists:member(Node, Nodes) orelse has_nodes(Node, H);
+has_nodes(Node, [#hist_nodes{nodes = Nodes} | H]) -> lists:member(Node, Nodes) orelse has_nodes(Node, H);
 has_nodes(Node, [_ | H]) -> has_nodes(Node, H).
 
 -spec has_spawn(Pid, History) -> boolean() when
@@ -87,7 +87,7 @@ has_nodes(Node, [_ | H]) -> has_nodes(Node, H).
     History :: cauder_history:history().
 
 has_spawn(_, []) -> false;
-has_spawn(Pid, [#h_spawn{pid = Pid} | _]) -> true;
+has_spawn(Pid, [#hist_spawn{pid = Pid} | _]) -> true;
 has_spawn(Pid, [_ | H]) -> has_spawn(Pid, H).
 
 -spec has_start(Node, History) -> boolean() when
@@ -95,7 +95,7 @@ has_spawn(Pid, [_ | H]) -> has_spawn(Pid, H).
     History :: cauder_history:history().
 
 has_start(_, []) -> false;
-has_start(Node, [#h_start{node = Node, success = true} | _]) -> true;
+has_start(Node, [#hist_start{node = Node, success = true} | _]) -> true;
 has_start(Node, [_ | H]) -> has_start(Node, H).
 
 -spec has_failed_start(Node, History) -> boolean() when
@@ -103,7 +103,7 @@ has_start(Node, [_ | H]) -> has_start(Node, H).
     History :: cauder_history:history().
 
 has_failed_start(_, []) -> false;
-has_failed_start(Node, [#h_start{node = Node, success = false} | _]) -> true;
+has_failed_start(Node, [#hist_start{node = Node, success = false} | _]) -> true;
 has_failed_start(Node, [_ | H]) -> has_failed_start(Node, H).
 
 -spec has_send(Uid, History) -> boolean() when
@@ -111,7 +111,7 @@ has_failed_start(Node, [_ | H]) -> has_failed_start(Node, H).
     History :: cauder_history:history().
 
 has_send(_, []) -> false;
-has_send(Uid, [#h_send{msg = #message{uid = Uid}} | _]) -> true;
+has_send(Uid, [#hist_send{msg = #message{uid = Uid}} | _]) -> true;
 has_send(Uid, [_ | H]) -> has_send(Uid, H).
 
 -spec has_receive(Uid, History) -> boolean() when
@@ -119,5 +119,5 @@ has_send(Uid, [_ | H]) -> has_send(Uid, H).
     History :: cauder_history:history().
 
 has_receive(_, []) -> false;
-has_receive(Uid, [#h_receive{msg = #message{uid = Uid}} | _]) -> true;
+has_receive(Uid, [#hist_receive{msg = #message{uid = Uid}} | _]) -> true;
 has_receive(Uid, [_ | H]) -> has_receive(Uid, H).

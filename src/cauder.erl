@@ -800,7 +800,7 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
                     node = Node,
                     pid = Pid,
                     expr = [cauder_syntax:remote_call(Mod, Fun, Args)],
-                    entry_point = {Mod, Fun, length(Args)}
+                    mfa = {Mod, Fun, length(Args)}
                 },
                 #system{
                     pool = cauder_pool:new(Proc),
@@ -828,7 +828,7 @@ task_start_replay(TracePath, undefined) ->
                 P = #process{
                     node = Node,
                     pid = Pid,
-                    entry_point = {M, F, length(As)},
+                    mfa = {M, F, length(As)},
                     expr = [cauder_syntax:remote_call(M, F, AbstractArgs)]
                 },
                 #system{

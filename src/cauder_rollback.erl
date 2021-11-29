@@ -137,16 +137,16 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
     #process{hist = Hist, node = Node} = cauder_pool:get(Pid, Pool),
     ProcViewOfNodes = SysNodes -- [Node],
     case cauder_history:peek(Hist) of
-        {value, #h_spawn{pid = SpawnPid}} ->
+        {value, #hist_spawn{pid = SpawnPid}} ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_spawn(SpawnPid)},
             rollback_spawn(Pid, Sys, SpawnPid);
-        {value, #h_start{node = StartNode, success = true}} ->
+        {value, #hist_start{node = StartNode, success = true}} ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_start(StartNode)},
             rollback_start(Pid, Sys, StartNode);
-        {value, #h_nodes{nodes = Nodes}} when ProcViewOfNodes =/= Nodes ->
+        {value, #hist_nodes{nodes = Nodes}} when ProcViewOfNodes =/= Nodes ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_nodes(Pid)},
             rollback_nodes(Pid, Sys, Nodes);
-        {value, #h_send{msg = #message{uid = Uid, dst = Dst} = Msg}} ->
+        {value, #hist_send{msg = #message{uid = Uid, dst = Dst} = Msg}} ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
             rollback_send(Pid, Sys, Dst, Uid);
         {value, _} ->
@@ -309,7 +309,7 @@ rollback_send(Pid, Sys0, DestPid, Uid) ->
 rollback_until_spawn(Pid, #system{pool = Pool} = Sys0, SpawnPid) ->
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_spawn{pid = SpawnPid}} ->
+        {value, #hist_spawn{pid = SpawnPid}} ->
             rollback_step(Pid, Sys0);
         {value, _} ->
             Sys1 = rollback_step(Pid, Sys0),
@@ -325,7 +325,7 @@ rollback_until_spawn(Pid, #system{pool = Pool} = Sys0, SpawnPid) ->
 rollback_until_start(Pid, #system{pool = Pool} = Sys0, StartNode) ->
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_start{node = StartNode, success = true}} ->
+        {value, #hist_start{node = StartNode, success = true}} ->
             case cauder_pool:find_on_node(StartNode, Pool) of
                 [P1 | _] ->
                     {ok, P2} = cauder_pool:find_history_spawn(P1#process.pid, Pool),
@@ -355,7 +355,7 @@ rollback_until_start(Pid, #system{pool = Pool} = Sys0, StartNode) ->
 rollback_until_send(Pid, #system{pool = Pool} = Sys0, Uid) ->
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_send{msg = #message{uid = Uid}}} ->
+        {value, #hist_send{msg = #message{uid = Uid}}} ->
             rollback_step(Pid, Sys0);
         {value, _} ->
             Sys1 = rollback_step(Pid, Sys0),
@@ -371,7 +371,7 @@ rollback_until_send(Pid, #system{pool = Pool} = Sys0, Uid) ->
 rollback_until_receive(Pid, #system{pool = Pool} = Sys0, Uid) ->
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_receive{msg = #message{uid = Uid}}} ->
+        {value, #hist_receive{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Pid, Sys0, Uid);
         {value, _} ->
             Sys1 = rollback_step(Pid, Sys0),
@@ -388,7 +388,7 @@ rollback_after_receive(Pid, Sys0, Uid) ->
     #system{pool = Pool} = Sys1 = rollback_step(Pid, Sys0),
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
     case cauder_history:peek(Hist) of
-        {value, #h_send{msg = #message{uid = Uid}}} ->
+        {value, #hist_send{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Pid, Sys1, Uid);
         {value, _} ->
             Sys1

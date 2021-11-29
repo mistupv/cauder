@@ -284,11 +284,11 @@ is_dead(#process{}) -> false.
 -spec is_conc_item(Entry) -> boolean() when
     Entry :: cauder_history:entry().
 
-is_conc_item(#h_tau{}) -> false;
-is_conc_item(#h_self{}) -> false;
-is_conc_item(#h_node{}) -> false;
-is_conc_item(#h_nodes{}) -> true;
-is_conc_item(#h_start{}) -> true;
-is_conc_item(#h_spawn{}) -> true;
-is_conc_item(#h_send{}) -> true;
-is_conc_item(#h_receive{}) -> true.
+is_conc_item(#hist_tau{}) -> false;
+is_conc_item(#hist_self{}) -> false;
+is_conc_item(#hist_node{}) -> false;
+is_conc_item(#hist_nodes{}) -> true;
+is_conc_item(#hist_start{}) -> true;
+is_conc_item(#hist_spawn{}) -> true;
+is_conc_item(#hist_send{}) -> true;
+is_conc_item(#hist_receive{}) -> true.
