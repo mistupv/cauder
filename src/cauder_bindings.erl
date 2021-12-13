@@ -1,7 +1,7 @@
 -module(cauder_bindings).
 
 %% API
--export([new/0, add/3, get/2, is_bound/2, merge/2, to_list/1]).
+-export([new/0, add/3, find/2, is_bound/2, merge/2, to_list/1]).
 
 -export_type([binding/0, bindings/0]).
 
@@ -28,12 +28,12 @@ new() -> maps:new().
 add(Name, Value, Bs) ->
     maps:put(Name, Value, Bs).
 
--spec get(Name, Bindings) -> {ok, Value} | error when
+-spec find(Name, Bindings) -> {ok, Value} | error when
     Name :: cauder_bindings:name(),
     Bindings :: cauder_bindings:bindings(),
     Value :: cauder_bindings:value().
 
-get(Name, Bs) ->
+find(Name, Bs) ->
     maps:find(Name, Bs).
 
 -spec is_bound(Name, Bindings) -> boolean() when

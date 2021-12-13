@@ -134,7 +134,7 @@ seq(Bs, [E | Es], Stk) ->
     Result :: cauder_eval:result().
 
 expr(Bs, {var, Line, Name}, Stk) ->
-    {ok, Value} = cauder_bindings:get(Name, Bs),
+    {ok, Value} = cauder_bindings:find(Name, Bs),
     #result{env = Bs, expr = [{value, Line, Value}], stack = Stk};
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
     case is_reducible(H0, Bs) of
@@ -693,7 +693,7 @@ match1({value, _, V}, V, Bs) ->
 match1({var, _, '_'}, _, Bs) ->
     {match, Bs};
 match1({var, _, Name}, Value, Bs0) ->
-    case cauder_bindings:get(Name, Bs0) of
+    case cauder_bindings:find(Name, Bs0) of
         {ok, Value} ->
             {match, Bs0};
         {ok, _} ->

@@ -14,7 +14,6 @@
 -export([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
 -export([load_file/1, init_system/4, init_system/1, stop_system/0]).
 -export([suspend_task/3, resume_task/0]).
--export([eval_opts/1]).
 -export([step/4]).
 -export([step_multiple/3]).
 -export([replay_steps/2, replay_send/1, replay_spawn/1, replay_start/1, replay_receive/1, replay_full_log/0]).
@@ -211,21 +210,6 @@ init_system(Path) ->
     CurrentSystem :: cauder_system:system().
 
 stop_system() -> gen_server:call(?SERVER, {user, stop}).
-
-%%%=============================================================================
-
-%%------------------------------------------------------------------------------
-%% @doc Returns the evaluation options for the given system.
-%%
-%% This is a synchronous action.
-%%
-%% @todo Remove argument
-
--spec eval_opts(System) -> Options when
-    System :: cauder_system:system(),
-    Options :: [cauder_types:option()].
-
-eval_opts(Sys) -> cauder_semantics_forwards:options(Sys, normal) ++ cauder_semantics_backwards:options(Sys).
 
 %%%=============================================================================
 
@@ -1057,23 +1041,23 @@ task_rollback_variable(Name, Sys0) ->
 
 %%%=============================================================================
 
--spec step(Semantics, Scheduler, System, Pid, Steps) -> {Completion, NewSystem, StepsDone} when
+-spec step(Semantics, Scheduler, Pid, System, Steps) -> {Completion, NewSystem, StepsDone} when
     Semantics :: cauder_types:semantics(),
     Scheduler :: cauder_types:message_scheduler(),
-    System :: cauder_system:system(),
     Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
     Steps :: pos_integer(),
     Completion :: success | cancel,
     NewSystem :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
-step(Sem, Scheduler, Sys, Pid, Steps) ->
+step(Sem, Scheduler, Pid, Sys, Steps) ->
     CanStep =
         fun(Opts) ->
             lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts)
         end,
-    DoStep =
-        fun(Step, {Sys0}) ->
+    DoStep = lists:foldl(
+        fun(Step, Sys0) ->
             case Sem of
                 ?FWD_SEM ->
                     Opts = cauder_semantics_forwards:options(Sys0, normal),
@@ -1082,8 +1066,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                             throw({success, Sys0, Step});
                         true ->
                             try
-                                Sys1 = cauder_semantics_forwards:step(Pid, Sys0, Scheduler, normal),
-                                {Sys1}
+                                cauder_semantics_forwards:step(Pid, Sys0, Scheduler, normal)
                             catch
                                 throw:cancel -> throw({cancel, Sys0, Step})
                             end
@@ -1094,13 +1077,15 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                         false ->
                             throw({success, Sys0, Step});
                         true ->
-                            Sys1 = cauder_semantics_backwards:step(Pid, Sys0),
-                            {Sys1}
+                            cauder_semantics_backwards:step(Pid, Sys0)
                     end
             end
         end,
-    try lists:foldl(DoStep, {Sys}, lists:seq(0, Steps - 1)) of
-        {Sys1} -> {success, Sys1, Steps}
+        Sys,
+        lists:seq(0, Steps - 1)
+    ),
+    try DoStep of
+        Sys1 -> {success, Sys1, Steps}
     catch
         throw:{_, _, _} = Result -> Result
     end.

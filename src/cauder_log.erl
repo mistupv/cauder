@@ -67,17 +67,19 @@ new() -> maps:new().
 get(Pid, Log) ->
     maps:get(Pid, Log, []).
 
--spec peek(Pid, Log) -> {value, Action} | empty when
+-spec peek(Pid, Log) -> {value, Action} | empty | error when
     Pid :: cauder_process:id(),
     Log :: cauder_log:log(),
     Action :: cauder_log:action().
 
 peek(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [Action | _] ->
+    case maps:find(Pid, Log) of
+        {ok, [Action | _]} ->
             {value, Action};
-        [] ->
-            empty
+        {ok, []} ->
+            empty;
+        error ->
+            error
     end.
 
 -spec pop_spawn(Pid, Log) -> {Action, NewLog} | error when
@@ -87,8 +89,8 @@ peek(Pid, Log) ->
     NewLog :: cauder_log:log().
 
 pop_spawn(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [#log_spawn{} = Action | Actions] ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_spawn{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -101,8 +103,8 @@ pop_spawn(Pid, Log) ->
     NewLog :: cauder_log:log().
 
 pop_send(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [#log_send{} = Action | Actions] ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_send{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -115,8 +117,8 @@ pop_send(Pid, Log) ->
     NewLog :: cauder_log:log().
 
 pop_receive(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [#log_receive{} = Action | Actions] ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_receive{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -129,8 +131,8 @@ pop_receive(Pid, Log) ->
     NewLog :: cauder_log:log().
 
 pop_nodes(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [#log_nodes{} = Action | Actions] ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_nodes{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -143,8 +145,8 @@ pop_nodes(Pid, Log) ->
     NewLog :: cauder_log:log().
 
 pop_start(Pid, Log) ->
-    case maps:get(Pid, Log) of
-        [#log_start{} = Action | Actions] ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_start{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -208,6 +210,7 @@ rdep(Pid, LMap0) ->
     ChildPid :: cauder_process:id(),
     Log :: cauder_log:log().
 
+has_spawn(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
 has_spawn(Pid, ChildPid, Log) ->
     lists:any(
         fun
@@ -222,6 +225,7 @@ has_spawn(Pid, ChildPid, Log) ->
     Uid :: cauder_message:uid(),
     Log :: cauder_log:log().
 
+has_send(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
 has_send(Pid, Uid, Log) ->
     lists:any(
         fun
@@ -236,6 +240,7 @@ has_send(Pid, Uid, Log) ->
     Uid :: cauder_message:uid(),
     Log :: cauder_log:log().
 
+has_receive(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
 has_receive(Pid, Uid, Log) ->
     lists:any(
         fun

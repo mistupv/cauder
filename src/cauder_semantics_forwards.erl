@@ -346,15 +346,15 @@ rule_spawn(
             {#log_spawn{} = Entry, Log} ->
                 {Entry, Log};
             error ->
-                SpawnNode =
+                {SpawnNode, Success} =
                     case Node of
-                        undefined -> P0#process.node;
-                        _ -> Node
+                        undefined -> {P0#process.node, true};
+                        _ -> {Node, lists:member(Node, Sys#system.nodes)}
                     end,
                 Entry = #log_spawn{
                     node = SpawnNode,
                     pid = cauder_process:new_pid(),
-                    success = lists:member(Node, Sys#system.nodes)
+                    success = Success
                 },
                 {Entry, Log0}
         end,

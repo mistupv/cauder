@@ -5,6 +5,7 @@
     new/1,
     add/2,
     remove/2,
+    take/2,
     get/2,
     find/2,
     first/1,
@@ -56,6 +57,15 @@ add(Process, Pool) ->
 
 remove(Id, Pool) ->
     maps:remove(Id, Pool).
+
+-spec take(Id, Pool1) -> {Process, Pool2} | error when
+    Id :: cauder_process:id(),
+    Pool1 :: cauder_pool:pool(),
+    Process :: cauder_process:process(),
+    Pool2 :: cauder_pool:pool().
+
+take(Id, Pool) ->
+    maps:take(Id, Pool).
 
 -spec get(Id, Pool) -> Process when
     Id :: cauder_process:id(),

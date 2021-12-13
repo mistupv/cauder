@@ -67,7 +67,7 @@ step(Pid, #system{pool = Pool} = Sys0) ->
 options(#system{pool = Pool} = Sys) ->
     lists:filtermap(
         fun(#process{pid = Pid}) ->
-            case process_option(Pid, Sys#system{pool = cauder_pool:remove(Pid, Pool)}) of
+            case process_option(Pid, Sys) of
                 ?NULL_OPT -> false;
                 Opt -> {true, Opt}
             end
@@ -249,8 +249,8 @@ rule_receive(
     System :: cauder_system:system(),
     Option :: cauder_types:option() | ?NULL_OPT.
 
-process_option(Pid, #system{pool = Pool} = Sys) ->
-    #process{node = Node, hist = Hist} = cauder_pool:get(Pid, Pool),
+process_option(Pid, Sys) ->
+    {#process{node = Node, hist = Hist}, Pool1} = cauder_pool:take(Pid, Sys#system.pool),
     case cauder_history:peek(Hist) of
         empty ->
             ?NULL_OPT;
@@ -267,7 +267,7 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
                 false -> ?NULL_OPT
             end;
         {value, #hist_spawn{pid = SpawnPid}} ->
-            try cauder_pool:get(SpawnPid, Pool) of
+            try cauder_pool:get(SpawnPid, Pool1) of
                 P1 ->
                     case cauder_history:is_empty(P1#process.hist) of
                         true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
@@ -279,9 +279,9 @@ process_option(Pid, #system{pool = Pool} = Sys) ->
             end;
         {value, #hist_start{node = StartNode, success = true}} ->
             Bool =
-                cauder_pool:find_on_node(StartNode, Pool) =:= [] andalso
-                    cauder_pool:find_history_nodes(StartNode, Pool) =:= error andalso
-                    cauder_pool:find_history_failed_start(StartNode, Pool) =:= error,
+                cauder_pool:find_on_node(StartNode, Pool1) =:= [] andalso
+                    cauder_pool:find_history_nodes(StartNode, Pool1) =:= error andalso
+                    cauder_pool:find_history_failed_start(StartNode, Pool1) =:= error,
             case Bool of
                 true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
                 false -> ?NULL_OPT

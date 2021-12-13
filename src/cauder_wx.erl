@@ -463,7 +463,7 @@ handle_event(
     #process{env = Bs} = cauder_pool:get(Pid, Pool),
     IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
     Name = maps:get(Idx, IdxToKey),
-    {ok, Value} = cauder_bindings:get(Name, Bs),
+    {ok, Value} = cauder_bindings:find(Name, Bs),
     case cauder_wx_dialog:edit_binding(Frame, {Name, Value}) of
         {Name, NewValue} -> ok = cauder:set_binding(Pid, {Name, NewValue});
         cancel -> ok

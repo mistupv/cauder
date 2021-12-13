@@ -1,8 +1,17 @@
 -module(cauder_stack).
 
 %% API
--export([new/0, peek/1, pop/1, push/2, is_empty/1, to_list/1]).
--export([current_module/1]).
+-export([
+    new/0,
+    peek/1,
+    pop/1,
+    push/2,
+    is_empty/1,
+    to_list/1
+]).
+-export([
+    current_module/1
+]).
 
 -include("cauder_stack.hrl").
 
@@ -31,14 +40,16 @@ new() -> [].
     Stack :: cauder_stack:stack(),
     Entry :: cauder_stack:entry().
 
-peek([Entry | _]) -> Entry.
+peek([]) -> empty;
+peek([Entry | _]) -> {value, Entry}.
 
 -spec pop(Stack1) -> {{value, Entry}, Stack2} | {empty, Stack1} when
     Stack1 :: cauder_stack:stack(),
     Entry :: cauder_stack:entry(),
     Stack2 :: cauder_stack:stack().
 
-pop([Entry | Stack]) -> {Entry, Stack}.
+pop([] = Stack) -> {empty, Stack};
+pop([Entry | Stack]) -> {{value, Entry}, Stack}.
 
 -spec push(Entry, Stack1) -> Stack2 when
     Entry :: cauder_stack:entry(),
@@ -59,6 +70,8 @@ is_empty(_) -> false.
 
 to_list(Stack) -> Stack.
 
+%%%=============================================================================
+%%% Utils
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------

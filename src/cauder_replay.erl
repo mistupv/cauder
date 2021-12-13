@@ -120,7 +120,7 @@ replay_step(Pid, #system{log = Log} = Sys) ->
 -spec replay_spawn(Pid, System, SpawnInfo) -> NewSystem when
     Pid :: cauder_process:id() | '_',
     System :: cauder_system:system(),
-    SpawnInfo :: cauder_trace:action() | '_',
+    SpawnInfo :: cauder_log:action_spawn() | '_',
     NewSystem :: cauder_system:system().
 
 replay_spawn(Pid, #system{pool = Pool, log = Log} = Sys, _) when Pid =/= '_' ->
@@ -128,7 +128,7 @@ replay_spawn(Pid, #system{pool = Pool, log = Log} = Sys, _) when Pid =/= '_' ->
         true ->
             Sys;
         false ->
-            Action = cauder_log:find_spawn_action(Pid, Log),
+            {ok, Action} = cauder_log:find_spawn_action(Pid, Log),
             replay_spawn('_', Sys, Action)
     end;
 replay_spawn(_, #system{log = Log} = Sys, {spawn, {_, Pid}, failure}) ->
@@ -138,7 +138,7 @@ replay_spawn(_, #system{log = Log} = Sys, {spawn, {_, Pid}, failure}) ->
         error ->
             Sys
     end;
-replay_spawn(_, Sys0, {spawn, {Node, Pid}, success}) ->
+replay_spawn(_, Sys0, #log_spawn{node = Node, pid = Pid, success = 'true'}) ->
     #system{log = Log} = Sys = replay_start(Node, Sys0),
     {ok, ProcParent} = cauder_log:find_spawn(Pid, Log),
     replay_until_spawn(ProcParent, Sys, Pid).

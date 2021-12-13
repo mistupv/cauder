@@ -232,9 +232,10 @@ update_manual(_, #wx_state{pid = undefined}) ->
 update_manual(_, #wx_state{system = System, pid = Pid}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
-    Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
-    CanFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    CanBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    OptFwd = cauder_semantics_forwards:options(System, normal),
+    OptBwd = cauder_semantics_backwards:options(System),
+    CanFwd = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, OptFwd),
+    CanBwd = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, OptBwd),
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
     wxButton:enable(cauder_wx:find(?ACTION_Manual_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
@@ -346,13 +347,14 @@ update_automatic(_, #wx_state{system = undefined}) ->
 update_automatic(_, #wx_state{system = System}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
 
-    Options = cauder:eval_opts(System),
-    HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    OptFwd = cauder_semantics_forwards:options(System, normal),
+    OptBwd = cauder_semantics_backwards:options(System),
+    CanFwd = OptFwd =/= [],
+    CanBwd = OptBwd =/= [],
 
-    wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
+    wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, CanBwd}]),
     ok.
 
 %%%=============================================================================

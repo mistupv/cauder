@@ -1,8 +1,22 @@
 -module(cauder_history).
 
 %% API
--export([new/0, peek/1, pop/1, push/2, is_empty/1, to_list/1]).
--export([has_nodes/2, has_spawn/2, has_start/2, has_failed_start/2, has_send/2, has_receive/2]).
+-export([
+    new/0,
+    peek/1,
+    pop/1,
+    push/2,
+    is_empty/1,
+    to_list/1
+]).
+-export([
+    has_nodes/2,
+    has_spawn/2,
+    has_start/2,
+    has_failed_start/2,
+    has_send/2,
+    has_receive/2
+]).
 
 -include("cauder.hrl").
 -include("cauder_message.hrl").
@@ -42,14 +56,16 @@ new() -> [].
     History :: cauder_history:history(),
     Entry :: cauder_history:entry().
 
-peek([Entry | _]) -> Entry.
+peek([]) -> empty;
+peek([Entry | _]) -> {value, Entry}.
 
 -spec pop(History1) -> {{value, Entry}, History2} | {empty, History1} when
     History1 :: cauder_history:history(),
     Entry :: cauder_history:entry(),
     History2 :: cauder_history:history().
 
-pop([Entry | History]) -> {Entry, History}.
+pop([] = History) -> {empty, History};
+pop([Entry | History]) -> {{value, Entry}, History}.
 
 -spec push(Entry, History1) -> History2 when
     Entry :: cauder_history:entry(),
