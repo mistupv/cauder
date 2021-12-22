@@ -15,11 +15,11 @@
     to_list/1
 ]).
 -export([
-    find_history_spawn/2,
-    find_history_start/2,
     find_on_node/2,
-    find_history_failed_start/2,
     find_history_nodes/2,
+    find_history_start/2,
+    find_history_failed_start/2,
+    find_history_spawn/2,
     find_history_send/2,
     find_history_receive/2,
     find_variable/2
@@ -125,18 +125,32 @@ to_list(Pool) -> maps:values(Pool).
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
-%% @doc Checks the history of each process, until it finds the process that
-%% spawned the process with the given `Pid'.
+%% @doc Returns a list of all the processes running on the given `Node'.
 
--spec find_history_spawn(Pid, Pool) -> {ok, Process} | error when
-    Pid :: cauder_process:id(),
+-spec find_on_node(Node, Pool) -> [Process] when
+    Node :: node(),
     Pool :: cauder_pool:pool(),
     Process :: cauder_process:process().
 
-find_history_spawn(Pid, Pool) ->
+find_on_node(Node, Pool) ->
+    lists:filter(
+        fun(P) -> P#process.node =:= Node end,
+        maps:values(Pool)
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a read of `Node' by means
+%% of the function 'nodes()'
+
+-spec find_history_nodes(Node, Pool) -> {ok, Process} | error when
+    Node :: node(),
+    Pool :: cauder_pool:pool(),
+    Process :: cauder_process:process().
+
+find_history_nodes(Node, Pool) ->
     value_to_ok(
         lists:search(
-            fun(P) -> cauder_history:has_spawn(Pid, P#process.hist) end,
+            fun(P) -> cauder_history:has_nodes(Node, P#process.hist) end,
             maps:values(Pool)
         )
     ).
@@ -177,6 +191,23 @@ find_history_failed_start(Node, Pool) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Checks the history of each process, until it finds the process that
+%% spawned the process with the given `Pid'.
+
+-spec find_history_spawn(Pid, Pool) -> {ok, Process} | error when
+    Pid :: cauder_process:id(),
+    Pool :: cauder_pool:pool(),
+    Process :: cauder_process:process().
+
+find_history_spawn(Pid, Pool) ->
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_spawn(Pid, P#process.hist) end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the history of each process, until it finds the process that
 %% sent the message with the given `Uid'.
 
 -spec find_history_send(Uid, Pool) -> {ok, Process} | error when
@@ -205,37 +236,6 @@ find_history_receive(Uid, Pool) ->
     value_to_ok(
         lists:search(
             fun(P) -> cauder_history:has_receive(Uid, P#process.hist) end,
-            maps:values(Pool)
-        )
-    ).
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a list of all the processes running on the given `Node'.
-
--spec find_on_node(Node, Pool) -> [Process] when
-    Node :: node(),
-    Pool :: cauder_pool:pool(),
-    Process :: cauder_process:process().
-
-find_on_node(Node, Pool) ->
-    lists:filter(
-        fun(P) -> P#process.node =:= Node end,
-        maps:values(Pool)
-    ).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches for process(es) that have performed a read of `Node' by means
-%% of the function 'nodes()'
-
--spec find_history_nodes(Node, Pool) -> {ok, Process} | error when
-    Node :: node(),
-    Pool :: cauder_pool:pool(),
-    Process :: cauder_process:process().
-
-find_history_nodes(Node, Pool) ->
-    value_to_ok(
-        lists:search(
-            fun(P) -> cauder_history:has_nodes(Node, P#process.hist) end,
             maps:values(Pool)
         )
     ).

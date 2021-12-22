@@ -26,6 +26,7 @@
 -include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_process.hrl").
+-include("cauder_semantics.hrl").
 -include("cauder_wx.hrl").
 -include_lib("wx/include/wx.hrl").
 
@@ -777,12 +778,12 @@ refresh(OldState, NewState) ->
         | ?ACTION_Manual_Backward_Button
         | ?ACTION_Automatic_Forward_Button
         | ?ACTION_Automatic_Backward_Button,
-    Semantics :: ?FWD_SEM | ?BWD_SEM.
+    Semantics :: cauder_semantics:semantics().
 
-button_to_semantics(?ACTION_Manual_Forward_Button) -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_Backward_Button) -> ?BWD_SEM;
-button_to_semantics(?ACTION_Automatic_Forward_Button) -> ?FWD_SEM;
-button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?BWD_SEM.
+button_to_semantics(?ACTION_Manual_Forward_Button) -> ?SEM_FWD;
+button_to_semantics(?ACTION_Manual_Backward_Button) -> ?SEM_BWD;
+button_to_semantics(?ACTION_Automatic_Forward_Button) -> ?SEM_FWD;
+button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?SEM_BWD.
 
 %%%=============================================================================
 

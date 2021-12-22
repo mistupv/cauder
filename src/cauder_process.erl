@@ -1,16 +1,18 @@
 -module(cauder_process).
 
 %% API
--export([new_pid/0, add_binding/3]).
+-export([new_pid/0, add_binding/3, is_alive/1]).
 -export([from_pid/1]).
 
 -include("cauder.hrl").
 -include("cauder_process.hrl").
 
--export_type([id/0, process/0]).
+-export_type([id/0, process/0, scheduler/0]).
 
 -opaque id() :: pos_integer().
 -type process() :: #process{}.
+
+-type scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
 
 %%%=============================================================================
 %%% API
@@ -33,6 +35,13 @@ new_pid() ->
 
 add_binding(Name, Value, #process{env = Bs0} = P) ->
     P#process{env = cauder_bindings:add(Name, Value, Bs0)}.
+
+-spec is_alive(Process) -> IsDead when
+    Process :: cauder_process:process(),
+    IsDead :: boolean().
+
+is_alive(#process{expr = [{value, _, _}], stack = Stk}) -> not cauder_stack:is_empty(Stk);
+is_alive(#process{}) -> true.
 
 %%%=============================================================================
 %%% Utils

@@ -7,3 +7,6 @@
     stack = cauder_stack:new() :: cauder_stack:stack(),
     hist = cauder_history:new() :: cauder_history:history()
 }).
+
+-define(SCHEDULER_RoundRobin, round_robin).
+-define(SCHEDULER_FCFS, fcfs).

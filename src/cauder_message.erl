@@ -6,10 +6,12 @@
 -include("cauder.hrl").
 -include("cauder_message.hrl").
 
--export_type([uid/0, message/0]).
+-export_type([uid/0, message/0, scheduler/0]).
 
 -opaque uid() :: pos_integer().
 -type message() :: #message{}.
+
+-type scheduler() :: ?SCHEDULER_Random | ?SCHEDULER_Manual.
 
 %%%=============================================================================
 %%% API

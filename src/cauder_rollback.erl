@@ -7,26 +7,26 @@
 
 -export([
     can_rollback_step/2,
-    can_rollback_spawn/2,
     can_rollback_start/2,
+    can_rollback_spawn/2,
     can_rollback_send/2,
     can_rollback_receive/2,
     can_rollback_variable/2
 ]).
 -export([
     rollback_step/2,
-    rollback_spawn/2,
     rollback_start/2,
+    rollback_spawn/2,
     rollback_send/2,
     rollback_receive/2,
     rollback_variable/2
 ]).
 
--include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_message.hrl").
 -include("cauder_process.hrl").
 -include("cauder_history.hrl").
+-include("cauder_semantics.hrl").
 
 %%%=============================================================================
 %%% API
@@ -150,26 +150,8 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
             rollback_send(Pid, Sys, Dst, Uid);
         {value, _} ->
-            [#opt{pid = Pid, sem = Sem} | _] = options(Pid, Sys0),
-            case Sem of
-                % FIXME Why does it go forwards??
-                ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
-                ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
-            end
+            cauder_semantics_backwards:step(Pid, Sys0)
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Rolls back the spawning of the process with the given pid, in the given
-%% system.
-
--spec rollback_spawn(Pid, System) -> NewSystem when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system(),
-    NewSystem :: cauder_system:system().
-
-rollback_spawn(Pid, #system{pool = Pool} = Sys) ->
-    {ok, #process{pid = ParentPid}} = cauder_pool:find_history_spawn(Pid, Pool),
-    rollback_until_spawn(ParentPid, Sys#system{roll = []}, Pid).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the start of the node with the given name, in the given
@@ -183,6 +165,19 @@ rollback_spawn(Pid, #system{pool = Pool} = Sys) ->
 rollback_start(Node, #system{pool = Pool} = Sys) ->
     {ok, #process{pid = ParentPid}} = cauder_pool:find_history_start(Node, Pool),
     rollback_until_start(ParentPid, Sys#system{roll = []}, Node).
+
+%%------------------------------------------------------------------------------
+%% @doc Rolls back the spawning of the process with the given pid, in the given
+%% system.
+
+-spec rollback_spawn(Pid, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rollback_spawn(Pid, #system{pool = Pool} = Sys) ->
+    {ok, #process{pid = ParentPid}} = cauder_pool:find_history_spawn(Pid, Pool),
+    rollback_until_spawn(ParentPid, Sys#system{roll = []}, Pid).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the sending of the message with the given uid, in the given
@@ -240,25 +235,6 @@ rollback_nodes(Pid, #system{pool = Pool, nodes = SysNodes} = Sys0, Nodes) ->
     {ok, #process{pid = ParentPid}} = cauder_pool:find_history_start(FirstNode, Pool),
     rollback_until_start(ParentPid, Sys0, FirstNode).
 
--spec rollback_spawn(Pid, System, SpawnPid) -> NewSystem when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system(),
-    SpawnPid :: cauder_process:id(),
-    NewSystem :: cauder_system:system().
-
-rollback_spawn(Pid, Sys0, SpawnPid) ->
-    Opts = options(Pid, Sys0),
-    case lists:search(fun(#opt{rule = Rule}) -> Rule =:= ?RULE_SPAWN end, Opts) of
-        false ->
-            Sys1 = rollback_step(SpawnPid, Sys0),
-            rollback_spawn(Pid, Sys1, SpawnPid);
-        {value, #opt{pid = Pid, sem = Sem}} ->
-            case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
-                ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
-            end
-    end.
-
 -spec rollback_start(Pid, System, SpawnNode) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
@@ -266,16 +242,29 @@ rollback_spawn(Pid, Sys0, SpawnPid) ->
     NewSystem :: cauder_system:system().
 
 rollback_start(Pid, Sys0, SpawnNode) ->
-    Opts = options(Pid, Sys0),
-    case lists:search(fun(#opt{rule = Rule}) -> Rule =:= ?RULE_START end, Opts) of
-        false ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_START} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
             Sys1 = rollback_step(Pid, Sys0),
-            rollback_start(Pid, Sys1, SpawnNode);
-        {value, #opt{pid = Pid, sem = Sem}} ->
-            case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
-                ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
-            end
+            rollback_start(Pid, Sys1, SpawnNode)
+    end.
+
+-spec rollback_spawn(Pid, System, SpawnPid) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    SpawnPid :: cauder_process:id(),
+    NewSystem :: cauder_system:system().
+
+rollback_spawn(Pid, Sys0, SpawnPid) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_SPAWN} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            Sys1 = rollback_step(SpawnPid, Sys0),
+            rollback_spawn(Pid, Sys1, SpawnPid)
     end.
 
 -spec rollback_send(Pid, System, DestPid, Uid) -> NewSystem when
@@ -286,35 +275,16 @@ rollback_start(Pid, Sys0, SpawnNode) ->
     NewSystem :: cauder_system:system().
 
 rollback_send(Pid, Sys0, DestPid, Uid) ->
-    Opts = options(Pid, Sys0),
-    case lists:search(fun(#opt{rule = Rule}) -> Rule =:= ?RULE_SEND end, Opts) of
-        false ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_SEND} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
             Sys1 = rollback_step(DestPid, Sys0),
-            rollback_send(Pid, Sys1, DestPid, Uid);
-        {value, #opt{pid = Pid, sem = Sem}} ->
-            case Sem of
-                ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
-                ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
-            end
+            rollback_send(Pid, Sys1, DestPid, Uid)
     end.
 
 %%%=============================================================================
-
--spec rollback_until_spawn(Pid, System, SpawnPid) -> NewSystem when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system(),
-    SpawnPid :: cauder_process:id(),
-    NewSystem :: cauder_system:system().
-
-rollback_until_spawn(Pid, #system{pool = Pool} = Sys0, SpawnPid) ->
-    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
-    case cauder_history:peek(Hist) of
-        {value, #hist_spawn{pid = SpawnPid}} ->
-            rollback_step(Pid, Sys0);
-        {value, _} ->
-            Sys1 = rollback_step(Pid, Sys0),
-            rollback_until_spawn(Pid, Sys1, SpawnPid)
-    end.
 
 -spec rollback_until_start(Pid, System, Node) -> NewSystem when
     Pid :: cauder_process:id(),
@@ -337,13 +307,29 @@ rollback_until_start(Pid, #system{pool = Pool} = Sys0, StartNode) ->
                         error ->
                             case cauder_pool:find_history_failed_start(StartNode, Pool) of
                                 {ok, P1} -> rollback_step(P1#process.pid, Sys0);
-                                error -> undo_step(Pid, Sys0)
+                                error -> cauder_semantics_backwards:step(Pid, Sys0)
                             end
                     end
             end;
         {value, _} ->
             Sys1 = rollback_step(Pid, Sys0),
             rollback_until_start(Pid, Sys1, StartNode)
+    end.
+
+-spec rollback_until_spawn(Pid, System, SpawnPid) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    SpawnPid :: cauder_process:id(),
+    NewSystem :: cauder_system:system().
+
+rollback_until_spawn(Pid, #system{pool = Pool} = Sys0, SpawnPid) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+    case cauder_history:peek(Hist) of
+        {value, #hist_spawn{pid = SpawnPid}} ->
+            rollback_step(Pid, Sys0);
+        {value, _} ->
+            Sys1 = rollback_step(Pid, Sys0),
+            rollback_until_spawn(Pid, Sys1, SpawnPid)
     end.
 
 -spec rollback_until_send(Pid, System, Uid) -> NewSystem when
@@ -408,26 +394,4 @@ rollback_until_variable(Pid, #system{pool = Pool} = Sys0, Name) ->
         false ->
             Sys1 = rollback_step(Pid, Sys0),
             rollback_until_variable(Pid, Sys1, Name)
-    end.
-
-%%%=============================================================================
-
--spec options(Pid, System) -> Options when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system(),
-    Options :: [cauder_types:option()].
-
-options(Pid, Sys) ->
-    Opts = cauder_semantics_backwards:options(Sys),
-    cauder_utils:filter_options(Pid, Opts).
-
--spec undo_step(Pid, System) -> System when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system().
-
-undo_step(Pid, System) ->
-    [#opt{pid = Pid, sem = Sem} | _] = options(Pid, System),
-    case Sem of
-        ?FWD_SEM -> cauder_semantics_forwards:step(Pid, System, ?SCHEDULER_Random, normal);
-        ?BWD_SEM -> cauder_semantics_backwards:step(Pid, System)
     end.

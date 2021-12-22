@@ -3,7 +3,6 @@
 %% API
 -export([create/1, update/2]).
 
--include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_process.hrl").
 -include("cauder_wx.hrl").
@@ -348,7 +347,7 @@ update_history(_, #wx_state{system = #system{pool = Pool}, pid = Pid, config = #
     wxTextCtrl:freeze(HistoryControl),
     wxTextCtrl:clear(HistoryControl),
     #process{hist = Hist} = cauder_pool:get(Pid, Pool),
-    Hist1 = lists:filter(fun cauder_utils:is_conc_item/1, cauder_history:to_list(Hist)),
+    Hist1 = lists:filter(fun cauder_history:is_concurrent/1, cauder_history:to_list(Hist)),
     Entries = lists:map(fun cauder_pp:history_entry/1, Hist1),
     Text = lists:flatten(lists:join("\n", Entries)),
     pp_marked_text(HistoryControl, Text),

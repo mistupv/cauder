@@ -3,6 +3,7 @@
     pool :: cauder_pool:pool(),
     nodes = [] :: [node()],
     log = cauder_log:new() :: cauder_log:log(),
-    x_trace = [] :: [cauder_types:x_trace()],
+    trace = cauder_trace:new() :: cauder_trace:trace(),
+    % TODO Remove?
     roll = []
 }).

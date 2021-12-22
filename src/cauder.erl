@@ -11,13 +11,34 @@
 
 %% API
 -export([main/0, main/1, start/0, start_link/0, stop/0]).
--export([subscribe/0, subscribe/1, unsubscribe/0, unsubscribe/1]).
+-export([
+    subscribe/0, subscribe/1,
+    unsubscribe/0, unsubscribe/1
+]).
 -export([load_file/1, init_system/4, init_system/1, stop_system/0]).
 -export([suspend_task/3, resume_task/0]).
+% Manual action
 -export([step/4]).
+% Automatic actions
 -export([step_multiple/3]).
--export([replay_steps/2, replay_send/1, replay_spawn/1, replay_start/1, replay_receive/1, replay_full_log/0]).
--export([rollback_steps/2, rollback_send/1, rollback_spawn/1, rollback_start/1, rollback_receive/1, rollback_variable/1]).
+% Replay actions
+-export([
+    replay_steps/2,
+    replay_start/1,
+    replay_spawn/1,
+    replay_send/1,
+    replay_receive/1,
+    replay_full_log/0
+]).
+% Rollback actions
+-export([
+    rollback_steps/2,
+    rollback_start/1,
+    rollback_spawn/1,
+    rollback_send/1,
+    rollback_receive/1,
+    rollback_variable/1
+]).
 -export([resume/1, cancel/0]).
 -export([get_entry_points/1, get_system/0, get_path/0]).
 -export([set_binding/2]).
@@ -35,7 +56,9 @@
 -include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_process.hrl").
+-include("cauder_message.hrl").
 -include("cauder_tracer.hrl").
+-include("cauder_semantics.hrl").
 
 -record(state, {
     subs = [] :: [pid()],
@@ -224,10 +247,10 @@ stop_system() -> gen_server:call(?SERVER, {user, stop}).
 %% @see task_step/2
 
 -spec step(Pid, Semantics, Steps, Scheduler) -> Reply when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     Pid :: cauder_process:id(),
     Steps :: pos_integer(),
-    Scheduler :: cauder_types:message_scheduler(),
+    Scheduler :: cauder_message:scheduler(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -247,9 +270,9 @@ step(Pid, Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step, {Sem,
 %% @see task_step_multiple/2
 
 -spec step_multiple(Semantics, Steps, Scheduler) -> Reply when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     Steps :: pos_integer(),
-    Scheduler :: cauder_process:process_scheduler(),
+    Scheduler :: cauder_process:scheduler(),
     Reply :: {ok, CurrentSystem} | busy,
     CurrentSystem :: cauder_system:system().
 
@@ -276,23 +299,6 @@ step_multiple(Sem, Steps, Scheduler) -> gen_server:call(?SERVER, {user, {step_mu
 replay_steps(Pid, Steps) -> gen_server:call(?SERVER, {user, {replay_steps, {Pid, Steps}}}).
 
 %%------------------------------------------------------------------------------
-%% @doc Replays the spawning of the process with the given pid.
-%%
-%% This is an asynchronous action: if the server accepts the task then the tuple
-%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
-%% system prior to executing this action, otherwise the atom `busy' is returned,
-%% to indicate that the server is currently executing a different task.
-%%
-%% @see task_replay_spawn/2
-
--spec replay_spawn(Pid) -> Reply when
-    Pid :: cauder_process:id(),
-    Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_system:system().
-
-replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
-
-%%------------------------------------------------------------------------------
 %% @doc Replays the start of the node with the given name.
 %%
 %% This is an asynchronous action: if the server accepts the task then the tuple
@@ -308,6 +314,23 @@ replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
     CurrentSystem :: cauder_system:system().
 
 replay_start(Node) -> gen_server:call(?SERVER, {user, {replay_start, Node}}).
+
+%%------------------------------------------------------------------------------
+%% @doc Replays the spawning of the process with the given pid.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_replay_spawn/2
+
+-spec replay_spawn(Pid) -> Reply when
+    Pid :: cauder_process:id(),
+    Reply :: {ok, CurrentSystem} | busy,
+    CurrentSystem :: cauder_system:system().
+
+replay_spawn(Pid) -> gen_server:call(?SERVER, {user, {replay_spawn, Pid}}).
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the sending of the message with the given uid.
@@ -643,14 +666,14 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
             step -> fun task_step/2;
             step_multiple -> fun task_step_multiple/2;
             replay_steps -> fun task_replay_steps/2;
-            replay_spawn -> fun task_replay_spawn/2;
             replay_start -> fun task_replay_start/2;
+            replay_spawn -> fun task_replay_spawn/2;
             replay_send -> fun task_replay_send/2;
             replay_receive -> fun task_replay_receive/2;
             replay_full_log -> fun task_replay_full_log/2;
             rollback_steps -> fun task_rollback_steps/2;
-            rollback_spawn -> fun task_rollback_spawn/2;
             rollback_start -> fun task_rollback_start/2;
+            rollback_spawn -> fun task_rollback_spawn/2;
             rollback_send -> fun task_rollback_send/2;
             rollback_receive -> fun task_rollback_receive/2;
             rollback_variable -> fun task_rollback_variable/2
@@ -828,10 +851,10 @@ task_start_replay(TracePath, undefined) ->
 %%%=============================================================================
 
 -spec task_step({Semantics, Pid, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     Pid :: cauder_process:id(),
     Steps :: non_neg_integer(),
-    Scheduler :: cauder_types:message_scheduler(),
+    Scheduler :: cauder_message:scheduler(),
     System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
@@ -841,9 +864,9 @@ task_step({Sem, Pid, Steps, Scheduler}, Sys0) ->
     {Completion, {Sem, {StepsDone, Steps}}, Time, Sys1}.
 
 -spec task_step_multiple({Semantics, Steps, Scheduler}, System) -> task_result({Semantics, {StepsDone, Steps}}) when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     Steps :: non_neg_integer(),
-    Scheduler :: cauder_process:process_scheduler(),
+    Scheduler :: cauder_process:scheduler(),
     System :: cauder_system:system(),
     StepsDone :: non_neg_integer().
 
@@ -865,23 +888,6 @@ task_replay_steps({Pid, Steps}, Sys0) ->
 
     {success, {StepsDone, Steps}, Time, Sys1}.
 
--spec task_replay_spawn(Pid, System) -> task_result(Pid) when
-    Pid :: cauder_process:id(),
-    System :: cauder_system:system().
-
-task_replay_spawn(Pid, Sys0) ->
-    {Time, Sys1} =
-        timer:tc(
-            fun() ->
-                case cauder_replay:can_replay_spawn(Pid, Sys0) of
-                    false -> error(no_replay);
-                    true -> cauder_replay:replay_spawn(Pid, Sys0, '_')
-                end
-            end
-        ),
-
-    {success, Pid, Time, Sys1}.
-
 -spec task_replay_start(Node, System) -> task_result(Node) when
     Node :: node(),
     System :: cauder_system:system().
@@ -898,6 +904,23 @@ task_replay_start(Node, Sys0) ->
         ),
 
     {success, Node, Time, Sys1}.
+
+-spec task_replay_spawn(Pid, System) -> task_result(Pid) when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system().
+
+task_replay_spawn(Pid, Sys0) ->
+    {Time, Sys1} =
+        timer:tc(
+            fun() ->
+                case cauder_replay:can_replay_spawn(Pid, Sys0) of
+                    false -> error(no_replay);
+                    true -> cauder_replay:replay_spawn(Pid, Sys0, '_')
+                end
+            end
+        ),
+
+    {success, Pid, Time, Sys1}.
 
 -spec task_replay_send(Uid, System) -> task_result(Uid) when
     Uid :: cauder_message:uid(),
@@ -1042,8 +1065,8 @@ task_rollback_variable(Name, Sys0) ->
 %%%=============================================================================
 
 -spec step(Semantics, Scheduler, Pid, System, Steps) -> {Completion, NewSystem, StepsDone} when
-    Semantics :: cauder_types:semantics(),
-    Scheduler :: cauder_types:message_scheduler(),
+    Semantics :: cauder_semantics:semantics(),
+    Scheduler :: cauder_message:scheduler(),
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
     Steps :: pos_integer(),
@@ -1052,16 +1075,12 @@ task_rollback_variable(Name, Sys0) ->
     StepsDone :: non_neg_integer().
 
 step(Sem, Scheduler, Pid, Sys, Steps) ->
-    CanStep =
-        fun(Opts) ->
-            lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, Opts)
-        end,
     DoStep = lists:foldl(
         fun(Step, Sys0) ->
             case Sem of
-                ?FWD_SEM ->
+                ?SEM_FWD ->
                     Opts = cauder_semantics_forwards:options(Sys0, normal),
-                    case CanStep(Opts) of
+                    case maps:is_key(Pid, Opts) of
                         false ->
                             throw({success, Sys0, Step});
                         true ->
@@ -1071,9 +1090,9 @@ step(Sem, Scheduler, Pid, Sys, Steps) ->
                                 throw:cancel -> throw({cancel, Sys0, Step})
                             end
                     end;
-                ?BWD_SEM ->
+                ?SEM_BWD ->
                     Opts = cauder_semantics_backwards:options(Sys0),
-                    case CanStep(Opts) of
+                    case maps:is_key(Pid, Opts) of
                         false ->
                             throw({success, Sys0, Step});
                         true ->
@@ -1091,8 +1110,8 @@ step(Sem, Scheduler, Pid, Sys, Steps) ->
     end.
 
 -spec step_multiple(Semantics, Scheduler, System, Steps) -> {NewSystem, StepsDone} when
-    Semantics :: cauder_types:semantics(),
-    Scheduler :: cauder_process:process_scheduler(),
+    Semantics :: cauder_semantics:semantics(),
+    Scheduler :: cauder_process:scheduler(),
     System :: cauder_system:system(),
     Steps :: pos_integer(),
     NewSystem :: cauder_system:system(),
@@ -1101,45 +1120,47 @@ step(Sem, Scheduler, Pid, Sys, Steps) ->
 step_multiple(Sem, Scheduler, Sys, Steps) ->
     SchedFun = cauder_scheduler:get(Scheduler),
     DoStep =
-        fun(Step, {Sys0, PidSet0, PidQueue0}) ->
+        fun(Step, {Sys0, Set0, PidQueue0}) ->
             Opts =
                 case Sem of
-                    ?FWD_SEM -> cauder_semantics_forwards:options(Sys0, normal);
-                    ?BWD_SEM -> cauder_semantics_backwards:options(Sys0)
+                    ?SEM_FWD -> cauder_semantics_forwards:options(Sys0, normal);
+                    ?SEM_BWD -> cauder_semantics_backwards:options(Sys0)
                 end,
-            PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
-            case sets:is_empty(PidSet1) of
-                true ->
+            case maps:keys(Opts) of
+                [] ->
                     throw({Sys0, Step});
-                false ->
+                Pids ->
+                    Set1 = sets:from_list(Pids),
                     Change =
-                        case {sets:size(PidSet0), sets:size(PidSet1)} of
+                        case {sets:size(Set0), sets:size(Set1)} of
                             {0, _} ->
-                                {init, sets:to_list(PidSet1)};
+                                {init, Pids};
                             {Size0, Size1} when Size0 < Size1 ->
-                                [AddedPid] = sets:to_list(sets:subtract(PidSet1, PidSet0)),
+                                [AddedPid] = sets:to_list(sets:subtract(Set1, Set0)),
                                 {add, AddedPid};
                             {Size0, Size1} when Size0 > Size1 ->
-                                [RemovedPid] = sets:to_list(sets:subtract(PidSet0, PidSet1)),
+                                [RemovedPid] = sets:to_list(sets:subtract(Set0, Set1)),
                                 {remove, RemovedPid};
                             {Size, Size} ->
                                 case
                                     {
-                                        sets:to_list(sets:subtract(PidSet1, PidSet0)),
-                                        sets:to_list(sets:subtract(PidSet0, PidSet1))
+                                        sets:to_list(sets:subtract(Set1, Set0)),
+                                        sets:to_list(sets:subtract(Set0, Set1))
                                     }
                                 of
-                                    {[], []} -> none;
-                                    {[AddedPid], [RemovedPid]} -> {update, AddedPid, RemovedPid}
+                                    {[], []} ->
+                                        none;
+                                    {[AddedPid], [RemovedPid]} ->
+                                        {update, AddedPid, RemovedPid}
                                 end
                         end,
                     {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
                     Sys1 =
                         case Sem of
-                            ?FWD_SEM -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
-                            ?BWD_SEM -> cauder_semantics_backwards:step(Pid, Sys0)
+                            ?SEM_FWD -> cauder_semantics_forwards:step(Pid, Sys0, ?SCHEDULER_Random, normal);
+                            ?SEM_BWD -> cauder_semantics_backwards:step(Pid, Sys0)
                         end,
-                    {Sys1, PidSet1, PidQueue1}
+                    {Sys1, Set1, PidQueue1}
             end
         end,
     try lists:foldl(DoStep, {Sys, sets:new(), queue:new()}, lists:seq(0, Steps - 1)) of
@@ -1147,6 +1168,8 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
     catch
         throw:{Sys1, StepsDone} -> {Sys1, StepsDone}
     end.
+
+%%%=============================================================================
 
 -spec replay_steps(Pid, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     Pid :: cauder_process:id(),
@@ -1179,6 +1202,8 @@ replay_full_log(#system{log = Log} = Sys) ->
             Sys1 = cauder_replay:replay_step(Pid, Sys),
             replay_full_log(Sys1)
     end.
+
+%%%=============================================================================
 
 -spec rollback_steps(Pid, System, Steps, StepsDone) -> {NewSystem, NewStepsDone} when
     Pid :: cauder_process:id(),

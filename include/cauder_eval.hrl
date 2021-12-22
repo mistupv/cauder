@@ -1,5 +1,23 @@
 -record(label_tau, {}).
 
+-record(label_self, {
+    var :: cauder_syntax:af_variable()
+}).
+
+-record(label_node, {
+    var :: cauder_syntax:af_variable()
+}).
+
+-record(label_nodes, {
+    var :: cauder_syntax:af_variable()
+}).
+
+-record(label_start, {
+    var :: cauder_syntax:af_variable(),
+    name :: atom(),
+    host :: 'undefined' | atom()
+}).
+
 -record(label_spawn_fun, {
     var :: cauder_syntax:af_variable(),
     node :: 'undefined' | node(),
@@ -12,24 +30,6 @@
     module :: module(),
     function :: atom(),
     args :: [term()]
-}).
-
--record(label_start, {
-    var :: cauder_syntax:af_variable(),
-    name :: atom(),
-    host :: 'undefined' | atom()
-}).
-
--record(label_self, {
-    var :: cauder_syntax:af_variable()
-}).
-
--record(label_node, {
-    var :: cauder_syntax:af_variable()
-}).
-
--record(label_nodes, {
-    var :: cauder_syntax:af_variable()
 }).
 
 -record(label_send, {

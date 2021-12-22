@@ -5,7 +5,6 @@
 -export([match_rec_pid/6, match_rec_uid/4]).
 -export([clause_line/3]).
 
--include("cauder.hrl").
 -include("cauder_message.hrl").
 -include("cauder_stack.hrl").
 -include("cauder_eval.hrl").
@@ -13,24 +12,25 @@
 -export_type([result/0, label/0]).
 
 -type result() :: #result{}.
+
 -type label() ::
     label_tau()
-    | label_spawn_fun()
-    | label_spawn_mfa()
-    | label_start()
     | label_self()
     | label_node()
     | label_nodes()
+    | label_start()
+    | label_spawn_fun()
+    | label_spawn_mfa()
     | label_send()
     | label_receive().
 
 -type label_tau() :: #label_tau{}.
--type label_spawn_fun() :: #label_spawn_fun{}.
--type label_spawn_mfa() :: #label_spawn_mfa{}.
--type label_start() :: #label_start{}.
 -type label_self() :: #label_self{}.
 -type label_node() :: #label_node{}.
 -type label_nodes() :: #label_nodes{}.
+-type label_start() :: #label_start{}.
+-type label_spawn_fun() :: #label_spawn_fun{}.
+-type label_spawn_mfa() :: #label_spawn_mfa{}.
 -type label_send() :: #label_send{}.
 -type label_receive() :: #label_receive{}.
 
@@ -527,7 +527,7 @@ when
     Bindings :: cauder_bindings:bindings(),
     RecipientPid :: cauder_process:id(),
     Mail :: cauder_mailbox:mailbox(),
-    Sched :: cauder_types:message_scheduler(),
+    Sched :: cauder_message:scheduler(),
     Sys :: cauder_system:system(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
@@ -593,7 +593,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
 -spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
     Clauses :: cauder_syntax:af_clause_seq(),
     Bindings :: cauder_bindings:bindings(),
-    Message :: cauder_mailbox:message(),
+    Message :: cauder_message:message(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body().
 

@@ -3,7 +3,6 @@
 %%% This module defines functions that transform "parse trees" to custom syntax
 %%% trees based on the ones used by the Erlang debugger.
 %%% @see erl_parse
-%%% @see cauder_types
 %%% @end
 %%%-----------------------------------------------------------------------------
 

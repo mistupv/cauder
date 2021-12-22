@@ -8,19 +8,12 @@
 -export([fundef_lookup/1]).
 -export([check_node_name/1]).
 -export([string_to_expressions/1]).
--export([filter_options/2]).
 -export([temp_variable/1, is_temp_variable_name/1]).
 -export([gen_log_nodes/1, gen_log_send/2, gen_log_spawn/1, gen_log_start/1]).
 -export([load_trace/1]).
--export([is_dead/1]).
--export([is_conc_item/1]).
-
--elvis([{elvis_style, god_modules, disable}]).
 
 -include("cauder.hrl").
 -include("cauder_message.hrl").
--include("cauder_process.hrl").
--include("cauder_history.hrl").
 -include("cauder_tracer.hrl").
 
 %%------------------------------------------------------------------------------
@@ -91,18 +84,6 @@ string_to_expressions(String) ->
         _ ->
             error
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a new list containing only the options whose pid, matches the
-%% given pid.
-
--spec filter_options(Pid, Options1) -> Options2 when
-    Pid :: cauder_process:id(),
-    Options1 :: [cauder_types:option()],
-    Options2 :: [cauder_types:option()].
-
-filter_options(Pid, Options) ->
-    lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, Options).
 
 %%------------------------------------------------------------------------------
 %% @doc Returns a new and unique number to use as a variable suffix.
@@ -186,7 +167,7 @@ gen_log_start(Node) ->
 
 -spec gen_log_send(Pid, Message) -> [Log] when
     Pid :: cauder_process:id(),
-    Message :: cauder_mailbox:message(),
+    Message :: cauder_message:message(),
     Log :: [string()].
 
 gen_log_send(Pid, #message{uid = Uid, dst = Dst, val = Val}) ->
@@ -270,25 +251,3 @@ find_last_message_uid(Terms) ->
             true = ets:insert(?APP_DB, {last_uid, lists:max(AllUids)}),
             ok
     end.
-
-%%------------------------------------------------------------------------------
-%% @doc Checks whether a process has finished execution or not.
-
--spec is_dead(Process) -> IsDead when
-    Process :: cauder_process:process(),
-    IsDead :: boolean().
-
-is_dead(#process{expr = [{value, _, _}], stack = Stk}) -> cauder_stack:is_empty(Stk);
-is_dead(#process{}) -> false.
-
--spec is_conc_item(Entry) -> boolean() when
-    Entry :: cauder_history:entry().
-
-is_conc_item(#hist_tau{}) -> false;
-is_conc_item(#hist_self{}) -> false;
-is_conc_item(#hist_node{}) -> false;
-is_conc_item(#hist_nodes{}) -> true;
-is_conc_item(#hist_start{}) -> true;
-is_conc_item(#hist_spawn{}) -> true;
-is_conc_item(#hist_send{}) -> true;
-is_conc_item(#hist_receive{}) -> true.

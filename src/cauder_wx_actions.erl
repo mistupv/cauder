@@ -4,7 +4,6 @@
 -export([create/1, update/2, update_process/2]).
 -export([selected_pid/0]).
 
--include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_message.hrl").
 -include("cauder_process.hrl").
@@ -232,10 +231,10 @@ update_manual(_, #wx_state{pid = undefined}) ->
 update_manual(_, #wx_state{system = System, pid = Pid}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
-    OptFwd = cauder_semantics_forwards:options(System, normal),
-    OptBwd = cauder_semantics_backwards:options(System),
-    CanFwd = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, OptFwd),
-    CanBwd = lists:any(fun(Opt) -> Opt#opt.pid =:= Pid end, OptBwd),
+    OptsFwd = cauder_semantics_forwards:options(System, normal),
+    OptsBwd = cauder_semantics_backwards:options(System),
+    CanFwd = maps:is_key(Pid, OptsFwd),
+    CanBwd = maps:is_key(Pid, OptsBwd),
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
     wxButton:enable(cauder_wx:find(?ACTION_Manual_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
@@ -494,7 +493,7 @@ update_rollback(_, #wx_state{system = undefined}) ->
 update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CanRollBack =
         lists:any(
-            fun(#process{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
+            fun(#process{hist = Hist}) -> lists:any(fun cauder_history:is_concurrent/1, Hist) end,
             cauder_pool:to_list(Pool)
         ),
 

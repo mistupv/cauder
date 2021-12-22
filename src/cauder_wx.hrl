@@ -51,6 +51,10 @@
 
 %% -----
 
+-define(CAUDER_GREEN, {34, 139, 34}).
+
+%% -----
+
 -define(SPACER_SMALL, 5).
 -define(SPACER_MEDIUM, 7).
 -define(SPACER_LARGE, 10).

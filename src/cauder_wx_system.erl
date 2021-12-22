@@ -3,7 +3,6 @@
 %% API
 -export([create/1, update/2]).
 
--include("cauder.hrl").
 -include("cauder_system.hrl").
 -include("cauder_message.hrl").
 -include("cauder_wx.hrl").
@@ -229,22 +228,30 @@ create_trace(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_trace(#wx_state{system = #system{x_trace = Trace}}, #wx_state{system = #system{x_trace = Trace}}) ->
+update_trace(
+    #wx_state{system = #system{trace = Trace}, pid = Pid},
+    #wx_state{system = #system{trace = Trace}, pid = Pid}
+) ->
     ok;
 update_trace(_, #wx_state{system = undefined}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #system{x_trace = []}}) ->
+update_trace(_, #wx_state{pid = undefined}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_Trace, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #system{x_trace = Trace}}) ->
-    wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
+update_trace(_, #wx_state{system = #system{trace = Trace}, pid = Pid}) ->
     TraceArea = cauder_wx:find(?SYSTEM_Trace, wxListBox),
     wxListBox:freeze(TraceArea),
     wxListBox:clear(TraceArea),
-    Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:trace_entry/1, Trace)),
-    lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries),
-    wxListBox:thaw(TraceArea).
+    case cauder_trace:get(Pid, Trace) of
+        [] ->
+            ok;
+        Actions ->
+            Entries = lists:map(fun cauder_pp:trace_action/1, Actions),
+            lists:foreach(fun(Entry) -> wxListBox:append(TraceArea, Entry) end, Entries)
+    end,
+    wxListBox:thaw(TraceArea),
+    ok.
 
 %%%=============================================================================
 

@@ -4,3 +4,6 @@
     dst :: cauder_process:id(),
     val :: term()
 }).
+
+-define(SCHEDULER_Random, random).
+-define(SCHEDULER_Manual, manual).

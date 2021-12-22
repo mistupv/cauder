@@ -5,11 +5,11 @@
     new/0,
     get/2,
     peek/2,
+    pop_nodes/2,
+    pop_start/2,
     pop_spawn/2,
     pop_send/2,
     pop_receive/2,
-    pop_nodes/2,
-    pop_start/2,
     push/3,
     is_element/2,
     is_empty/1,
@@ -18,19 +18,23 @@
 ]).
 -export([
     rdep/2,
+    group_actions/1
+]).
+-export([
+    %has_nodes/3,
+    %has_start/3,
     has_spawn/3,
     has_send/3,
-    has_receive/3,
-    %%    has_start/3,
-    %%    has_nodes/3,
+    has_receive/3
+]).
+-export([
+    find_nodes/2,
+    find_start/2,
     find_spawn/2,
     find_spawn_action/2,
     find_failed_spawns/2,
     find_send/2,
-    find_receive/2,
-    find_start/2,
-    find_nodes/2,
-    group_actions/1
+    find_receive/2
 ]).
 
 -include("cauder_log.hrl").
@@ -194,14 +198,50 @@ from_list(List) ->
 %%% Utils
 %%%=============================================================================
 
-rdep(Pid, LMap0) ->
-    LMap = remove_dependents_spawn(Pid, LMap0),
-    DropEmpty =
-        fun
-            (_, []) -> false;
-            (_, _) -> true
+-spec rdep(Pid, Log) -> NewLog when
+    Pid :: cauder_process:id(),
+    Log :: cauder_log:log(),
+    NewLog :: cauder_log:log().
+
+rdep(Pid, Log) -> remove_dependents_spawn(Pid, Log).
+
+-spec group_actions(Log) -> Map when
+    Log :: cauder_log:log(),
+    Map :: #{
+        'send' := ordsets:ordset(cauder_message:uid()),
+        'receive' := ordsets:ordset(cauder_message:uid()),
+        'spawn' := ordsets:ordset(cauder_process:id()),
+        'start' := ordsets:ordset(node())
+    }.
+
+group_actions(Log) ->
+    maps:fold(
+        fun(_, Actions, Map0) ->
+            lists:foldl(
+                fun
+                    (#log_send{uid = Uid}, Map1) ->
+                        maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
+                    (#log_receive{uid = Uid}, Map1) ->
+                        maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
+                    (#log_spawn{pid = Pid, success = 'true'}, Map1) ->
+                        maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map1);
+                    (#log_start{node = Node, success = 'true'}, Map1) ->
+                        maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map1);
+                    (_, Map1) ->
+                        Map1
+                end,
+                Map0,
+                Actions
+            )
         end,
-    maps:filter(DropEmpty, LMap).
+        #{
+            'send' => ordsets:new(),
+            'receive' => ordsets:new(),
+            'spawn' => ordsets:new(),
+            'start' => ordsets:new()
+        },
+        Log
+    ).
 
 %%%=============================================================================
 
@@ -250,35 +290,49 @@ has_receive(Pid, Uid, Log) ->
         maps:get(Pid, Log)
     ).
 
-%%-spec has_start(Pid, Node, Log) -> boolean() when
-%%    Pid :: cauder_process:id(),
-%%    Node :: node(),
-%%    Log :: cauder_log:log().
-%%
-%%has_start(Pid, Node, Log) ->
-%%    lists:any(
-%%        fun
-%%            (#log_start{node = Node1}) -> Node1 =:= Node;
-%%            (_) -> false
-%%        end,
-%%        maps:get(Pid, Log)
-%%    ).
-
-%%-spec has_nodes(Pid, Node, Log) -> boolean() when
-%%    Pid :: cauder_process:id(),
-%%    Node :: node(),
-%%    Log :: cauder_log:log().
-%%
-%%has_nodes(Pid, Node, Log) ->
-%%    lists:any(
-%%        fun
-%%            (#log_nodes{node = Node1}) -> Node1 =:= Node;
-%%            (_) -> false
-%%        end,
-%%        maps:get(Pid, Log)
-%%    ).
-
 %%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the log of each process, until it finds all the processes that
+%% called `erlang:nodes()' while the given `Node' was alive.
+
+-spec find_nodes(Node, Log) -> [Pid] when
+    Node :: node(),
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_nodes(Node, Log) ->
+    Log1 = maps:filter(
+        fun(_Pid, Actions) ->
+            lists:any(
+                fun
+                    (#log_nodes{nodes = Nodes}) -> lists:member(Node, Nodes);
+                    (_) -> 'false'
+                end,
+                Actions
+            )
+        end,
+        Log
+    ),
+    maps:keys(Log1).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the log of each process, until it finds the process that started
+%% the given `Node'.
+
+-spec find_start(Node, Log) -> {ok, Pid} | error when
+    Node :: node(),
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_start(Node, Log) ->
+    find_pid(
+        fun
+            (#log_start{node = Node1, success = 'true'}) -> Node =:= Node1;
+            (_) -> 'false'
+        end,
+        Log
+    ).
 
 %%------------------------------------------------------------------------------
 %% @doc Checks the log of each process, until it finds the process that spawned
@@ -386,86 +440,6 @@ find_receive(Uid, Log) ->
         Log
     ).
 
-%%------------------------------------------------------------------------------
-%% @doc Checks the log of each process, until it finds the process that started
-%% the given `Node'.
-
--spec find_start(Node, Log) -> {ok, Pid} | error when
-    Node :: node(),
-    Log :: cauder_log:log(),
-    Pid :: cauder_process:id().
-
-find_start(Node, Log) ->
-    find_pid(
-        fun
-            (#log_start{node = Node1, success = 'true'}) -> Node =:= Node1;
-            (_) -> 'false'
-        end,
-        Log
-    ).
-
-%%------------------------------------------------------------------------------
-%% @doc Checks the log of each process, until it finds all the processes that
-%% called `erlang:nodes()' while the given `Node' was alive.
-
--spec find_nodes(Node, Log) -> [Pid] when
-    Node :: node(),
-    Log :: cauder_log:log(),
-    Pid :: cauder_process:id().
-
-find_nodes(Node, Log) ->
-    Log1 = maps:filter(
-        fun(_Pid, Actions) ->
-            lists:any(
-                fun
-                    (#log_nodes{nodes = Nodes}) -> lists:member(Node, Nodes);
-                    (_) -> 'false'
-                end,
-                Actions
-            )
-        end,
-        Log
-    ),
-    maps:keys(Log1).
-
--spec group_actions(Log) -> Map when
-    Log :: cauder_log:log(),
-    Map :: #{
-        'send' := ordsets:ordset(cauder_message:uid()),
-        'receive' := ordsets:ordset(cauder_message:uid()),
-        'spawn' := ordsets:ordset(cauder_process:id()),
-        'start' := ordsets:ordset(node())
-    }.
-
-group_actions(Log) ->
-    maps:fold(
-        fun(_, Actions, Map0) ->
-            lists:foldl(
-                fun
-                    (#log_send{uid = Uid}, Map1) ->
-                        maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
-                    (#log_receive{uid = Uid}, Map1) ->
-                        maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
-                    (#log_spawn{pid = Pid, success = 'true'}, Map1) ->
-                        maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map1);
-                    (#log_start{node = Node, success = 'true'}, Map1) ->
-                        maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map1);
-                    (_, Map1) ->
-                        Map1
-                end,
-                Map0,
-                Actions
-            )
-        end,
-        #{
-            'send' => ordsets:new(),
-            'receive' => ordsets:new(),
-            'spawn' => ordsets:new(),
-            'start' => ordsets:new()
-        },
-        Log
-    ).
-
 %%%=============================================================================
 %%% Internal functions
 %%%=============================================================================
@@ -481,47 +455,69 @@ update_or_remove(Pid, [], Log) ->
 update_or_remove(Pid, Actions, Log) ->
     maps:update(Pid, Actions, Log).
 
-remove_dependents_spawn(Pid0, LMap0) when is_map_key(Pid0, LMap0) ->
+-spec remove_dependents_spawn(Pid, Log) -> NewLog when
+    Pid :: cauder_process:id(),
+    Log :: cauder_log:log(),
+    NewLog :: cauder_log:log().
+
+remove_dependents_spawn(Pid, Log) when is_map_key(Pid, Log) ->
     lists:foldl(
-        fun entry_dependents/2,
-        maps:remove(Pid0, LMap0),
-        maps:get(Pid0, LMap0)
+        fun remove_dependents/2,
+        maps:remove(Pid, Log),
+        maps:get(Pid, Log)
     );
-remove_dependents_spawn(_Pid, LMap) ->
-    LMap.
+remove_dependents_spawn(_Pid, Log) ->
+    Log.
 
-remove_dependents_receive(Uid0, LMap0) ->
-    RemoveAfterReceive =
-        fun(Pid0, LMap1) ->
-            {Independent, Dependent} = lists:splitwith(
-                fun(Entry) -> Entry =/= {'receive', Uid0} end,
-                maps:get(Pid0, LMap1)
-            ),
-            case Dependent of
-                [] ->
-                    LMap1;
-                _ ->
-                    LMap = lists:foldl(
-                        fun entry_dependents/2,
-                        maps:put(Pid0, Independent, LMap1),
-                        Dependent
-                    ),
-                    throw(LMap)
-            end
-        end,
-    try
-        lists:foldl(
-            RemoveAfterReceive,
-            LMap0,
-            maps:keys(LMap0)
-        )
-    catch
-        throw:LMap -> LMap
-    end.
+-spec remove_dependents_receive(Uid, Log) -> NewLog when
+    Uid :: cauder_message:uid(),
+    Log :: cauder_log:log(),
+    NewLog :: cauder_log:log().
 
-entry_dependents({spawn, Pid}, LMap) -> remove_dependents_spawn(Pid, LMap);
-entry_dependents({send, Uid}, LMap) -> remove_dependents_receive(Uid, LMap);
-entry_dependents({'receive', _Uid}, LMap) -> LMap.
+remove_dependents_receive(Uid, Log) ->
+    Fun = fun Next(I0) ->
+        case maps:next(I0) of
+            {Pid, Actions, I1} ->
+                Split = lists:splitwith(
+                    fun(Action) ->
+                        case Action of
+                            #log_receive{uid = Uid} -> false;
+                            _ -> true
+                        end
+                    end,
+                    Actions
+                ),
+                case Split of
+                    {_, []} ->
+                        Next(I1);
+                    {[], Dependent} ->
+                        lists:foldl(
+                            fun remove_dependents/2,
+                            maps:remove(Pid, Log),
+                            Dependent
+                        );
+                    {Independent, Dependent} ->
+                        lists:foldl(
+                            fun remove_dependents/2,
+                            maps:put(Pid, Independent, Log),
+                            Dependent
+                        )
+                end;
+            'none' ->
+                Log
+        end
+    end,
+    I = maps:iterator(Log),
+    Fun(I).
+
+-spec remove_dependents(Action, Log) -> NewLog when
+    Action :: cauder_log:action(),
+    Log :: cauder_log:log(),
+    NewLog :: cauder_log:log().
+
+remove_dependents(#log_spawn{pid = Pid}, Log) -> remove_dependents_spawn(Pid, Log);
+remove_dependents(#log_send{uid = Uid}, Log) -> remove_dependents_receive(Uid, Log);
+remove_dependents(_, Log) -> Log.
 
 %%%=============================================================================
 
