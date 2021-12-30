@@ -1075,10 +1075,10 @@ task_rollback_variable(Name, Sys0) ->
     StepsDone :: non_neg_integer().
 
 step(Sem, Scheduler, Pid, Sys, Steps) ->
-    DoStep = lists:foldl(
-        fun(Step, Sys0) ->
-            case Sem of
-                ?SEM_FWD ->
+    Fun =
+        case Sem of
+            ?SEM_FWD ->
+                fun(Step, Sys0) ->
                     Opts = cauder_semantics_forwards:options(Sys0, normal),
                     case maps:is_key(Pid, Opts) of
                         false ->
@@ -1089,8 +1089,10 @@ step(Sem, Scheduler, Pid, Sys, Steps) ->
                             catch
                                 throw:cancel -> throw({cancel, Sys0, Step})
                             end
-                    end;
-                ?SEM_BWD ->
+                    end
+                end;
+            ?SEM_BWD ->
+                fun(Step, Sys0) ->
                     Opts = cauder_semantics_backwards:options(Sys0),
                     case maps:is_key(Pid, Opts) of
                         false ->
@@ -1098,12 +1100,9 @@ step(Sem, Scheduler, Pid, Sys, Steps) ->
                         true ->
                             cauder_semantics_backwards:step(Pid, Sys0)
                     end
-            end
+                end
         end,
-        Sys,
-        lists:seq(0, Steps - 1)
-    ),
-    try DoStep of
+    try lists:foldl(Fun, Sys, lists:seq(0, Steps - 1)) of
         Sys1 -> {success, Sys1, Steps}
     catch
         throw:{_, _, _} = Result -> Result
