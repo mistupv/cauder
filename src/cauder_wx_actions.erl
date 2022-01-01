@@ -512,34 +512,35 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
 
             % TODO Improve to avoid unnecessary updates
 
-            HistEntries = lists:flatmap(fun(P) -> P#process.hist end, cauder_pool:to_list(Pool)),
-            RuleMap = lists:foldl(
-                fun(Entry, Map) ->
-                    try
-                        {K, V} =
-                            case Entry of
-                                {send, _Bs, _Es, _Stk, #message{uid = Uid}} -> {send, Uid};
-                                %{deliver, _Bs, _Es, _Stk, #message{uid = Uid}} -> {deliver, Uid};
-                                {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} -> {'receive', Uid};
-                                {start, success, _Bs, _Es, _Stk, Node} -> {start, Node};
-                                {spawn, _Bs, _Es, _Stk, _Node, ChildPid} -> {spawn, ChildPid};
-                                % TODO nodes
-                                _ -> throw(skip)
-                            end,
-                        maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
-                    catch
-                        throw:skip -> Map
-                    end
+            #{
+                'send' := SendUids,
+                'receive' := ReceiveUids,
+                'start' := StartNodes,
+                'spawn' := SpawnPids
+            } = lists:foldl(
+                fun(P, Map0) ->
+                    maps:fold(
+                        fun(Key, Set0, Map1) ->
+                            maps:update_with(
+                                Key,
+                                fun(Set1) -> ordsets:union(Set0, Set1) end,
+                                Set0,
+                                Map1
+                            )
+                        end,
+                        Map0,
+                        cauder_history:group_actions(P#process.hist)
+                    )
                 end,
                 maps:new(),
-                HistEntries
+                cauder_pool:to_list(Pool)
             ),
 
-            update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, maps:get(send, RuleMap, [])),
-            %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, maps:get(deliver, RuleMap, [])),
-            update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, maps:get('receive', RuleMap, [])),
-            update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, maps:get(start, RuleMap, [])),
-            update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, maps:get(spawn, RuleMap, [])),
+            update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, SendUids),
+            %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, DeliverUids),
+            update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, ReceiveUids),
+            update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, StartNodes),
+            update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, SpawnPids),
 
             ok
     end.

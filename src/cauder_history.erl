@@ -15,7 +15,10 @@
     has_failed_start/2,
     has_spawn/2,
     has_send/2,
-    has_receive/2,
+    has_receive/2
+]).
+-export([
+    group_actions/1,
     is_concurrent/1
 ]).
 
@@ -139,6 +142,39 @@ has_receive(Uid, [#hist_receive{msg = #message{uid = Uid}} | _]) -> true;
 has_receive(Uid, [_ | H]) -> has_receive(Uid, H).
 
 %%%=============================================================================
+
+-spec group_actions(History) -> Map when
+    History :: cauder_history:history(),
+    Map :: #{
+        'send' := ordsets:ordset(cauder_message:uid()),
+        'receive' := ordsets:ordset(cauder_message:uid()),
+        'spawn' := ordsets:ordset(cauder_process:id()),
+        'start' := ordsets:ordset(node())
+    }.
+
+group_actions(History) ->
+    lists:foldl(
+        fun
+            (#hist_send{msg = #message{uid = Uid}}, Map) ->
+                maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
+            (#hist_receive{msg = #message{uid = Uid}}, Map) ->
+                maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
+            % TODO CHeck success
+            (#hist_spawn{pid = Pid}, Map) ->
+                maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map);
+            (#hist_start{node = Node, success = 'true'}, Map) ->
+                maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map);
+            (_, Map1) ->
+                Map1
+        end,
+        #{
+            'send' => ordsets:new(),
+            'receive' => ordsets:new(),
+            'spawn' => ordsets:new(),
+            'start' => ordsets:new()
+        },
+        History
+    ).
 
 % TODO Review
 -spec is_concurrent(Entry) -> boolean() when
