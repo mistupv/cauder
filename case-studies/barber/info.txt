@@ -32,25 +32,17 @@ Using the debugger
 
 * First, instrument the buggy code and get a trace:
 
->>move to the main folder of the tracer (branch: simple_inst)
->>copy the source file (barber.erl) to the examples folder
-
-$ make load
-> tracer:inst(barber,[{dir,"examples"}]).  // creates baber.erl in the current dir
-                                           // this is the instrumented version
-> tracer:trace("barber:main()",[{log_dir,"barber_results"}]).
+$ ./rebar3 shell
+> tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
 > q().
 
->>the logs can be found in the folder "barber_results"
+>>the logs can be found in the folder "trace"
 
 * Now, let's inspect the buggy execution using CauDEr:
 
->>move to cauder (branch: replay)
+$ ./_build/default/bin/cauder
 
-$ ./cauder.sh
-
->> Load in barber.erl and the logged trace in barber_results
->> (just need to point to the folder "barber_results")
+>> Load in barber.erl and the logged trace in folder trace
 
 * A typical debugging session:
 
