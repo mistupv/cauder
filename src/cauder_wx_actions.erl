@@ -348,12 +348,12 @@ update_automatic(_, #wx_state{system = System}) ->
 
     OptFwd = cauder_semantics_forwards:options(System, normal),
     OptBwd = cauder_semantics_backwards:options(System),
-    CanFwd = OptFwd =/= [],
-    CanBwd = OptBwd =/= [],
+    CanFwd = maps:size(OptFwd) =/= 0,
+    CanBwd = maps:size(OptBwd) =/= 0,
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, CanBwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxButton), [{enable, CanFwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxButton), [{enable, CanBwd}]),
     ok.
 
 %%%=============================================================================
