@@ -407,14 +407,17 @@ update_replay(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, sy
     ok;
 update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+    % TODO Clear choices
     ok;
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+    % TODO Clear choices
     ok;
 update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
     case cauder_log:is_empty(Log) of
         true ->
             wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+            % TODO Clear choices
             ok;
         false ->
             wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
@@ -486,9 +489,11 @@ update_rollback(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, 
     ok;
 update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+    % TODO Clear choices
     ok;
 update_rollback(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+    % TODO Clear choices
     ok;
 update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CanRollBack =
@@ -500,6 +505,7 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     case CanRollBack of
         false ->
             wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+            % TODO Clear choices
             ok;
         true ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
