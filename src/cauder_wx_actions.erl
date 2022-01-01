@@ -406,19 +406,13 @@ create_replay(Parent) ->
 update_replay(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    % TODO Clear choices
-    ok;
+    disable_replay();
 update_replay(_, #wx_state{system = undefined}) ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    % TODO Clear choices
-    ok;
+    disable_replay();
 update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
     case cauder_log:is_empty(Log) of
         true ->
-            wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-            % TODO Clear choices
-            ok;
+            disable_replay();
         false ->
             wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
@@ -444,6 +438,17 @@ update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
 
             ok
     end.
+
+-spec disable_replay() -> ok.
+
+disable_replay() ->
+    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+    update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, []),
+    %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, []),
+    update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, []),
+    update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, []),
+    update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, []),
+    ok.
 
 %%%=============================================================================
 
@@ -488,13 +493,9 @@ create_rollback(Parent) ->
 update_rollback(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-    % TODO Clear choices
-    ok;
+    disable_rollback();
 update_rollback(_, #wx_state{system = undefined}) ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-    % TODO Clear choices
-    ok;
+    disable_rollback();
 update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CanRollBack =
         lists:any(
@@ -504,9 +505,7 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
 
     case CanRollBack of
         false ->
-            wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-            % TODO Clear choices
-            ok;
+            disable_rollback();
         true ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
@@ -550,6 +549,17 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
 
             ok
     end.
+
+-spec disable_rollback() -> ok.
+
+disable_rollback() ->
+    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+    update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, []),
+    %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, []),
+    update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, []),
+    update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, []),
+    update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, []),
+    ok.
 
 %%%=============================================================================
 
