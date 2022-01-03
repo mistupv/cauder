@@ -467,7 +467,7 @@ write_trace(Dir, TraceResult) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
     [trace_info | Values] = tuple_to_list(TraceResult),
     Fields = record_info(fields, trace_info),
-    {Traces, ResultInfo} = maps:take(traces, maps:from_list(lists:zip(Fields, Values))),
+    {Traces, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),
     case filelib:is_dir(Dir) of
