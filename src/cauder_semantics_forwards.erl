@@ -525,9 +525,9 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
                 {'case', _, E, _} ->
                     check_reducibility([E], Pid, Sys, Mode, 'case');
                 {'receive', _, Cs} ->
-                    check_reducibility([Cs], Pid, Sys, Mode, 'receive');
+                    check_reducibility(Cs, Pid, Sys, Mode, 'receive');
                 {bif, _, _, _, As} ->
-                    check_reducibility([As], Pid, Sys, Mode, bif);
+                    check_reducibility(As, Pid, Sys, Mode, bif);
                 {spawn, _, F} ->
                     check_reducibility([F], Pid, Sys, Mode, spawn);
                 {spawn, _, N, F} ->
@@ -545,9 +545,9 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
                 {send_op, _, L, R} ->
                     check_reducibility([L, R], Pid, Sys, Mode, send);
                 {local_call, _, _, As} ->
-                    check_reducibility([As], Pid, Sys, Mode, local_call);
+                    check_reducibility(As, Pid, Sys, Mode, local_call);
                 {remote_call, _, _, _, As} ->
-                    check_reducibility([As], Pid, Sys, Mode, remote_call);
+                    check_reducibility(As, Pid, Sys, Mode, remote_call);
                 {apply, _, M, F, As} ->
                     check_reducibility([M, F, As], Pid, Sys, Mode, apply);
                 {apply_fun, _, Fun, As} ->
@@ -555,7 +555,7 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
                 {match, _, Pat, E} ->
                     check_reducibility([Pat, E], Pid, Sys, Mode, match);
                 {op, _, _, Es} ->
-                    check_reducibility([Es], Pid, Sys, Mode, op);
+                    check_reducibility(Es, Pid, Sys, Mode, op);
                 {'andalso', _, L, R} ->
                     check_reducibility([L, R], Pid, Sys, Mode, 'andalso');
                 {'orelse', _, L, R} ->
@@ -596,7 +596,7 @@ check_reducibility([], Pid, Sys, _, nodes) ->
         _ ->
             {ok, ?RULE_NODES}
     end;
-check_reducibility([Cs], Pid, #system{mail = Mail, log = Log} = Sys, Mode, 'receive') ->
+check_reducibility(Cs, Pid, #system{mail = Mail, log = Log} = Sys, Mode, 'receive') ->
     #process{env = Bs} = cauder_pool:get(Pid, Sys#system.pool),
     IsMatch =
         case Mode of
