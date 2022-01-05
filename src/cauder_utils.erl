@@ -14,6 +14,7 @@
 
 -include("cauder.hrl").
 -include("cauder_message.hrl").
+-include("cauder_trace.hrl").
 -include("cauder_tracer.hrl").
 
 %%------------------------------------------------------------------------------
@@ -239,7 +240,7 @@ load_trace(Dir) ->
 find_last_message_uid(Terms) ->
     AllUids = lists:filtermap(
         fun
-            ({send, Uid}) -> {true, Uid};
+            (#trace_send{uid = Uid}) -> {true, Uid};
             (_) -> false
         end,
         Terms
