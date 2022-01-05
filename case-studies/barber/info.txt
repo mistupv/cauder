@@ -33,7 +33,7 @@ Using the debugger
 * First, instrument the buggy code and get a trace:
 
 $ ./rebar3 shell
-> tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
+> cauder_tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
 > q().
 
 >>the logs can be found in the folder "trace"
@@ -46,20 +46,20 @@ $ ./_build/default/bin/cauder
 
 * A typical debugging session:
 
->> Replay process 74 (main) 100 steps
+>> Replay process 209 (main) 20 steps
     -->some processes still have a nonempty log, but this is fine
     -->we want to see what happened with joe
->> Rollback receive of message 1
+>> Rollback receive of message 2
     -->many actions undone because of causal dependencies
->> Replay 78 (shop) 1 step
-    -->we receive new customer joe, as expected
->> Let us now look at process 78 (shop) and its log, and see if everything goes fine:
+>> Replay 213 (shop) 1 step
+    -->we receive new customer John, as expected
+>> Let us now look at process 213 (shop) and its log, and see if everything goes fine:
     --> it should first send "wakeup" to the barber (replay send 4): ok
-    --> it should now receive "ready" from the barber (replay receive 2): ok
-    --> it should now send a customer (John) to the barber (replay send 6): ok
+    --> it should now receive "ready" from the barber (replay receive 5): ok
+    --> it should now send a customer (Joe) to the barber (replay send 7): ok
     --> let us now go forward step by step till the next loop of barber_shop...
-        after 6 steps, we see that the next call is barber_shop(81, [{79, 'John'}]),
-        which is incorrect! (we sent John, but remove Joe from the waiting room)
+        after 6 steps, we see that the next call is barber_shop(216, [{215, 'Joe'}]),
+        which is incorrect! (we sent Joe, but remove John from the waiting room)
 
   * Solution: change the implementation of removeCustomer for a function that
     removes the last element instead of the first one... -> barber_fixed.erl
