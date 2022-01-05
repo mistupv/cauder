@@ -20,6 +20,7 @@
 
 -ignore_xref([trace/3, trace/4]).
 
+-include("cauder_trace.hrl").
 -include("cauder_tracer.hrl").
 
 -define(SERVER, ?MODULE).
@@ -160,26 +161,32 @@ handle_call(
     {reply, ok, State#state{return = {value, ReturnValue}}};
 %% Call to `nodes()`
 handle_call({trace, Pid, return_from, {cauder_tracer_erlang, nodes, 0}, Nodes}, _From, State) ->
-    State1 = add_to_trace(Pid, {nodes, Nodes}, State),
+    Action = #trace_nodes{nodes = Nodes},
+    State1 = add_to_trace(Pid, Action, State),
     {reply, ok, State1};
 %% ========== 'send' trace messages ========== %%
 %% Send message
-handle_call({trace, Pid, send, {{stamp, Stamp}, _Message}, _}, _From, State) ->
-    State1 = add_to_trace(Pid, send, Stamp, State),
-    {reply, ok, State1};
+handle_call({trace, Pid, send, {{stamp, Stamp}, _Message}, _}, _From, State0) ->
+    {Uid, State1} = get_uid(Stamp, State0),
+    Action = #trace_send{uid = Uid},
+    State2 = add_to_trace(Pid, Action, State1),
+    {reply, ok, State2};
 %% Receive message
-handle_call({trace, Pid, send, {receive_evaluated, Stamp}, {undefined, _}}, _From, State) ->
-    State1 = add_to_trace(Pid, 'receive', Stamp, State),
-    {reply, ok, State1};
-%% Slave started
-handle_call({trace, Pid, send, {result, {ok, Node}}, ParentPid}, _From, State) ->
+handle_call({trace, Pid, send, {receive_evaluated, Stamp}, {undefined, _}}, _From, State0) ->
+    {Uid, State1} = get_uid(Stamp, State0),
+    Action = #trace_receive{uid = Uid},
+    State2 = add_to_trace(Pid, Action, State1),
+    {reply, ok, State2};
+%% Slave started/failed
+handle_call({trace, Pid, send, {result, Result}, ParentPid}, _From, State) ->
     #{Pid := {Node, ParentPid}} = State#state.slave_starters,
-    State1 = add_to_trace(ParentPid, {start, Node, success}, State),
-    {reply, ok, State1};
-%% Slave failed to start
-handle_call({trace, Pid, send, {result, {error, _}}, ParentPid}, _From, State) ->
-    #{Pid := {Node, ParentPid}} = State#state.slave_starters,
-    State1 = add_to_trace(ParentPid, {start, Node, failure}, State),
+    Success =
+        case Result of
+            {ok, Node} -> true;
+            {error, _} -> false
+        end,
+    Action = #trace_start{node = Node, success = Success},
+    State1 = add_to_trace(ParentPid, Action, State),
     {reply, ok, State1};
 %% ========== 'spawn' trace messages ========== %%
 %% Starting a slave
@@ -189,13 +196,14 @@ handle_call({trace, Pid, spawn, SlavePid, {slave, wait_for_slave, [Pid, _, _, No
 %% Spawn failed
 handle_call({trace, Pid, spawn, ChildPid, {erts_internal, crasher, [ChildNode, _, _, _, _, _]}}, _From, State) ->
     ChildIdx = cauder_process:from_pid(ChildPid),
-    State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, failure}, State),
+    Action = #trace_spawn{node = ChildNode, pid = ChildIdx, success = false},
+    State1 = add_to_trace(Pid, Action, State),
     {reply, ok, State1};
 %% Spawn succeeded
 handle_call({trace, Pid, spawn, ChildPid, {_, _, _}}, _From, State) ->
-    ChildNode = node(ChildPid),
     ChildIdx = cauder_process:from_pid(ChildPid),
-    State1 = add_to_trace(Pid, {spawn, {ChildNode, ChildIdx}, success}, State),
+    Action = #trace_spawn{node = node(ChildPid), pid = ChildIdx, success = true},
+    State1 = add_to_trace(Pid, Action, State),
     State2 = State1#state{processes = sets:add_element(ChildPid, State1#state.processes)},
     {reply, ok, State2};
 %% ========== 'exit' trace messages ========== %%
@@ -428,35 +436,20 @@ add_to_trace(Pid, Action, #state{trace = Trace0} = State) ->
     Trace1 = cauder_trace:push(Id, Action, Trace0),
     State#state{trace = Trace1}.
 
--spec add_to_trace(Pid, Tag, Stamp, State) -> NewState when
-    Pid :: pid(),
-    Tag :: send | 'receive',
+-spec get_uid(Stamp, State) -> {Uid, NewState} when
     Stamp :: integer(),
     State :: state(),
+    Uid :: cauder_message:uid(),
     NewState :: state().
 
-add_to_trace(Pid, Tag, Stamp, #state{ets = Table, stamps = StampPool0, trace = Trace0} = State) when is_atom(Tag) ->
-    Id = cauder_process:from_pid(Pid),
-    {Uid, StampPool1} = get_uid(Stamp, StampPool0, Table),
-    Action = {Tag, Uid},
-    Trace1 = cauder_trace:push(Id, Action, Trace0),
-    State#state{stamps = StampPool1, trace = Trace1}.
-
--spec get_uid(Stamp, Map, Table) -> {Uid, NewMap} when
-    Stamp :: integer(),
-    Map :: #{integer() => non_neg_integer()},
-    Table :: ets:tid(),
-    Uid :: non_neg_integer(),
-    NewMap :: #{integer() => non_neg_integer()}.
-
-get_uid(Stamp, Map, Table) ->
+get_uid(Stamp, #state{ets = Table, stamps = Map} = State) ->
     case maps:find(Stamp, Map) of
         error ->
             Uid = ets:update_counter(Table, uid, 1, {uid, -1}),
             NewMap = maps:put(Stamp, Uid, Map),
-            {Uid, NewMap};
+            {Uid, State#state{stamps = NewMap}};
         {ok, Uid} ->
-            {Uid, Map}
+            {Uid, State}
     end.
 
 -spec write_trace(Dir, TraceInfo) -> ok when
