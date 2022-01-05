@@ -1,0 +1,4 @@
+{trace_spawn,nonode@nohost,213,true}.
+{trace_spawn,nonode@nohost,214,true}.
+{trace_spawn,nonode@nohost,215,true}.
+{trace_receive,13}.
