@@ -1,0 +1,11 @@
+{trace_send,0}.
+{trace_receive,3}.
+{trace_send,5}.
+{trace_receive,4}.
+{trace_send,6}.
+{trace_receive,7}.
+{trace_send,9}.
+{trace_send,10}.
+{trace_receive,8}.
+{trace_send,12}.
+{trace_send,14}.

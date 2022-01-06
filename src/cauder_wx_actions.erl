@@ -4,9 +4,11 @@
 -export([create/1, update/2, update_process/2]).
 -export([selected_pid/0]).
 
--include_lib("wx/include/wx.hrl").
--include("cauder.hrl").
+-include("cauder_system.hrl").
+-include("cauder_message.hrl").
+-include("cauder_process.hrl").
 -include("cauder_wx.hrl").
+-include_lib("wx/include/wx.hrl").
 
 -define(INPUT_SIZE, {size, {100, -1}}).
 -define(BUTTON_SIZE, {size, {100, -1}}).
@@ -86,16 +88,16 @@ update_process(_, #wx_state{system = undefined}) ->
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) ->
+update_process(#wx_state{pid = OldPid}, #wx_state{system = #system{pool = Pool}}) ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
     wxChoice:freeze(Choice),
     wxChoice:enable(Choice),
     wxChoice:clear(Choice),
     {_, NewIdx} =
         lists:foldl(
-            fun(Proc, {Idx, Match}) ->
-                Label = cauder_pp:process(Proc),
-                Pid = Proc#proc.pid,
+            fun(P, {Idx, Match}) ->
+                Label = cauder_pp:process(P),
+                Pid = P#process.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of
                     OldPid -> {Idx + 1, Idx};
@@ -103,7 +105,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
                 end
             end,
             {0, 0},
-            maps:values(PMap)
+            cauder_pool:to_list(Pool)
         ),
     wxChoice:setSelection(Choice, NewIdx),
     wxChoice:thaw(Choice),
@@ -116,7 +118,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
 %% dropdown.
 
 -spec selected_pid() -> Pid | undefined when
-    Pid :: cauder_types:proc_id().
+    Pid :: cauder_process:id().
 
 selected_pid() ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
@@ -229,9 +231,10 @@ update_manual(_, #wx_state{pid = undefined}) ->
 update_manual(_, #wx_state{system = System, pid = Pid}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
-    Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
-    CanFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    CanBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    OptsFwd = cauder_semantics_forwards:options(System, normal),
+    OptsBwd = cauder_semantics_backwards:options(System),
+    CanFwd = maps:is_key(Pid, OptsFwd),
+    CanBwd = maps:is_key(Pid, OptsBwd),
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
     wxButton:enable(cauder_wx:find(?ACTION_Manual_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
@@ -343,13 +346,14 @@ update_automatic(_, #wx_state{system = undefined}) ->
 update_automatic(_, #wx_state{system = System}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
 
-    Options = cauder:eval_opts(System),
-    HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    OptFwd = cauder_semantics_forwards:options(System, normal),
+    OptBwd = cauder_semantics_backwards:options(System),
+    CanFwd = maps:size(OptFwd) =/= 0,
+    CanBwd = maps:size(OptBwd) =/= 0,
 
-    wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
-    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxSpinCtrl), [{enable, HasBwd}]),
+    wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxButton), [{enable, CanFwd}]),
+    wxButton:enable(cauder_wx:find(?ACTION_Automatic_Backward_Button, wxButton), [{enable, CanBwd}]),
     ok.
 
 %%%=============================================================================
@@ -402,57 +406,49 @@ create_replay(Parent) ->
 update_replay(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    ok;
+    disable_replay();
 update_replay(_, #wx_state{system = undefined}) ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-    ok;
-update_replay(_, #wx_state{system = #sys{traces = Traces}, pid = Pid}) ->
-    case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Traces)) of
+    disable_replay();
+update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
+    case cauder_log:is_empty(Log) of
         true ->
-            wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
-            ok;
+            disable_replay();
         false ->
             wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
-            CanReplaySteps = maps:get(Pid, Traces, []) =/= [],
+            CanReplaySteps = cauder_log:is_element(Pid, Log),
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
             wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}]),
 
             % TODO Improve to avoid unnecessary updates
 
-            TraceEntries = lists:flatten(maps:values(Traces)),
-            RuleMap =
-                lists:foldl(
-                    fun(Entry, Map) ->
-                        try
-                            {K, V} =
-                                case Entry of
-                                    {send, Uid} -> {send, Uid};
-                                    %{deliver, Uid} -> {deliver, Uid};
-                                    {'receive', Uid} -> {'receive', Uid};
-                                    {start, Node, success} -> {start, Node};
-                                    {spawn, {_Node, ChildPid}, success} -> {spawn, ChildPid};
-                                    _ -> throw(skip)
-                                end,
-                            maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
-                        catch
-                            throw:skip -> Map
-                        end
-                    end,
-                    maps:new(),
-                    TraceEntries
-                ),
+            #{
+                'send' := SendUids,
+                'receive' := ReceiveUids,
+                'start' := StartNodes,
+                'spawn' := SpawnPids
+            } = cauder_log:group_actions(Log),
 
-            update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, maps:get(send, RuleMap, [])),
-            %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, maps:get(deliver, RuleMap, [])),
-            update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, maps:get('receive', RuleMap, [])),
-            update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, maps:get(start, RuleMap, [])),
-            update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, maps:get(spawn, RuleMap, [])),
+            update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, SendUids),
+            %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, DeliverUids),
+            update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, ReceiveUids),
+            update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, StartNodes),
+            update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, SpawnPids),
 
             ok
     end.
+
+-spec disable_replay() -> ok.
+
+disable_replay() ->
+    wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
+    update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, []),
+    %update_choice(?ACTION_Replay_Deliver, ?ACTION_Replay_Deliver_Button, []),
+    update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, []),
+    update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, []),
+    update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, []),
+    ok.
 
 %%%=============================================================================
 
@@ -497,64 +493,73 @@ create_rollback(Parent) ->
 update_rollback(#wx_state{task = T, system = S, pid = Pid}, #wx_state{task = T, system = S, pid = Pid}) ->
     ok;
 update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-    ok;
+    disable_rollback();
 update_rollback(_, #wx_state{system = undefined}) ->
-    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-    ok;
-update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
+    disable_rollback();
+update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
     CanRollBack =
         lists:any(
-            fun(#proc{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
-            maps:values(PMap)
+            fun(#process{hist = Hist}) -> lists:any(fun cauder_history:is_concurrent/1, Hist) end,
+            cauder_pool:to_list(Pool)
         ),
 
     case CanRollBack of
         false ->
-            wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
-            ok;
+            disable_rollback();
         true ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
-            #proc{hist = Hist} = maps:get(Pid, PMap),
-            CanRollbackSteps = Hist =/= [],
+            #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+            CanRollbackSteps = not cauder_history:is_empty(Hist),
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
             wxButton:enable(cauder_wx:find(?ACTION_Rollback_Steps_Button, wxButton), [{enable, CanRollbackSteps}]),
 
             % TODO Improve to avoid unnecessary updates
 
-            HistEntries = lists:flatmap(fun(Proc) -> Proc#proc.hist end, maps:values(PMap)),
-            RuleMap = lists:foldl(
-                fun(Entry, Map) ->
-                    try
-                        {K, V} =
-                            case Entry of
-                                {send, _Bs, _Es, _Stk, #message{uid = Uid}} -> {send, Uid};
-                                %{deliver, _Bs, _Es, _Stk, #message{uid = Uid}} -> {deliver, Uid};
-                                {rec, _Bs, _Es, _Stk, #message{uid = Uid}, _QPos} -> {'receive', Uid};
-                                {start, success, _Bs, _Es, _Stk, Node} -> {start, Node};
-                                {spawn, _Bs, _Es, _Stk, _Node, ChildPid} -> {spawn, ChildPid};
-                                % TODO nodes
-                                _ -> throw(skip)
-                            end,
-                        maps:update_with(K, fun(Vs) -> ordsets:add_element(V, Vs) end, ordsets:from_list([V]), Map)
-                    catch
-                        throw:skip -> Map
-                    end
+            #{
+                'send' := SendUids,
+                'receive' := ReceiveUids,
+                'start' := StartNodes,
+                'spawn' := SpawnPids
+            } = lists:foldl(
+                fun(P, Map0) ->
+                    maps:fold(
+                        fun(Key, Set0, Map1) ->
+                            maps:update_with(
+                                Key,
+                                fun(Set1) -> ordsets:union(Set0, Set1) end,
+                                Set0,
+                                Map1
+                            )
+                        end,
+                        Map0,
+                        cauder_history:group_actions(P#process.hist)
+                    )
                 end,
                 maps:new(),
-                HistEntries
+                cauder_pool:to_list(Pool)
             ),
 
-            update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, maps:get(send, RuleMap, [])),
-            %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, maps:get(deliver, RuleMap, [])),
-            update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, maps:get('receive', RuleMap, [])),
-            update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, maps:get(start, RuleMap, [])),
-            update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, maps:get(spawn, RuleMap, [])),
+            update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, SendUids),
+            %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, DeliverUids),
+            update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, ReceiveUids),
+            update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, StartNodes),
+            update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, SpawnPids),
 
             ok
     end.
+
+-spec disable_rollback() -> ok.
+
+disable_rollback() ->
+    wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
+    update_choice(?ACTION_Rollback_Send, ?ACTION_Rollback_Send_Button, []),
+    %update_choice(?ACTION_Rollback_Deliver, ?ACTION_Rollback_Deliver_Button, []),
+    update_choice(?ACTION_Rollback_Receive, ?ACTION_Rollback_Receive_Button, []),
+    update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, []),
+    update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, []),
+    ok.
 
 %%%=============================================================================
 

@@ -8,7 +8,13 @@
 %% API
 -export([step/2, options/1]).
 
--include("cauder.hrl").
+-include("cauder_system.hrl").
+-include("cauder_message.hrl").
+-include("cauder_process.hrl").
+-include("cauder_history.hrl").
+-include("cauder_log.hrl").
+-include("cauder_trace.hrl").
+-include("cauder_semantics.hrl").
 
 %%%=============================================================================
 %%% API
@@ -18,216 +24,333 @@
 %% @doc Performs a single backwards step in the process with the given Pid in
 %% the given System.
 
--spec step(System, Pid) -> NewSystem when
-    System :: cauder_types:system(),
-    Pid :: cauder_types:proc_id(),
-    NewSystem :: cauder_types:system().
+-spec step(Pid, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
 
-step(#sys{nodes = Nodes, mail = Mail, traces = LMap, x_trace = Trace} = Sys, Pid) ->
-    {#proc{pid = Pid, hist = [Entry | RestHist]} = P0, PMap} = maps:take(Pid, Sys#sys.procs),
+step(Pid, #system{pool = Pool} = Sys0) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+    {{value, Entry}, RestHist} = cauder_history:pop(Hist),
+    Sys = Sys0#system{
+        pool = cauder_pool:update_with(
+            Pid,
+            fun(P) -> P#process{hist = RestHist} end,
+            Pool
+        )
+    },
     case Entry of
-        {Label, Bs, Es, Stk} when Label =:= tau orelse Label =:= self orelse Label =:= node ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            Sys#sys{
-                mail = Mail,
-                procs = PMap#{Pid => P}
-            };
-        {nodes, Bs, Es, Stk, HistNodes} ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            Sys#sys{
-                mail = Mail,
-                procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [{nodes, {HistNodes}} | Log] end, [], LMap)
-            };
-        {spawn, Bs, Es, Stk, Node, Gid} ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            T = #x_trace{
-                type = ?RULE_SPAWN,
-                from = Pid,
-                to = Gid
-            },
-            Result =
-                case cauder_utils:process_node(PMap, Gid) of
-                    false -> failure;
-                    _ -> success
-                end,
-            NewLog = {spawn, {Node, Gid}, Result},
-            Sys#sys{
-                mail = Mail,
-                procs = maps:remove(Gid, PMap#{Pid => P}),
-                traces = maps:update_with(Pid, fun(Log) -> [NewLog | Log] end, [NewLog], LMap),
-                x_trace = lists:delete(T, Trace)
-            };
-        {start, success, Bs, Es, Stk, Node} ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            T = #x_trace{
-                type = ?RULE_START,
-                from = Pid,
-                res = success,
-                node = Node
-            },
-            Sys#sys{
-                nodes = Nodes -- [Node],
-                mail = Mail,
-                procs = PMap#{Pid => P},
-                x_trace = lists:delete(T, Trace),
-                traces = maps:update_with(Pid, fun(Log) -> [{start, Node, success} | Log] end, [], LMap)
-            };
-        {start, failure, Bs, Es, Stk, Node} ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            T = #x_trace{
-                type = ?RULE_START,
-                from = Pid,
-                res = failure,
-                node = Node
-            },
-            Sys#sys{
-                mail = Mail,
-                procs = PMap#{Pid => P},
-                x_trace = lists:delete(T, Trace),
-                traces = maps:update_with(Pid, fun(Log) -> [{start, Node, failure} | Log] end, [], LMap)
-            };
-        {send, Bs, Es, Stk, #message{dest = Dest, value = Val, uid = Uid} = Msg} ->
-            {_Msg, OldMsgs} = cauder_mailbox:delete(Msg, Mail),
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            T = #x_trace{
-                type = ?RULE_SEND,
-                from = Pid,
-                to = Dest,
-                val = Val,
-                time = Uid
-            },
-            Entry1 = {send, Uid},
-            Sys#sys{
-                mail = OldMsgs,
-                procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
-                x_trace = lists:delete(T, Trace)
-            };
-        {rec, Bs, Es, Stk, M = #message{uid = Uid, value = Value, dest = Pid}, QPos} ->
-            P = P0#proc{
-                hist = RestHist,
-                stack = Stk,
-                env = Bs,
-                exprs = Es
-            },
-            T = #x_trace{
-                type = ?RULE_RECEIVE,
-                from = Pid,
-                val = Value,
-                time = Uid
-            },
-            Entry1 = {'receive', Uid},
-            Sys#sys{
-                mail = cauder_mailbox:insert(M, QPos, Mail),
-                procs = PMap#{Pid => P},
-                traces = maps:update_with(Pid, fun(Log) -> [Entry1 | Log] end, [Entry1], LMap),
-                x_trace = lists:delete(T, Trace)
-            }
+        #hist_tau{} ->
+            rule_local(Pid, Entry, Sys);
+        #hist_self{} ->
+            rule_self(Pid, Entry, Sys);
+        #hist_node{} ->
+            rule_node(Pid, Entry, Sys);
+        #hist_nodes{} ->
+            rule_nodes(Pid, Entry, Sys);
+        #hist_start{} ->
+            rule_start(Pid, Entry, Sys);
+        #hist_spawn{} ->
+            rule_spawn(Pid, Entry, Sys);
+        #hist_send{} ->
+            rule_send(Pid, Entry, Sys);
+        #hist_receive{} ->
+            rule_receive(Pid, Entry, Sys)
     end.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the backwards evaluation options for the given System.
 
--spec options(System) -> Options when
-    System :: cauder_types:system(),
-    Options :: [cauder_types:option()].
+-spec options(System) -> #{Pid => Rule} when
+    System :: cauder_system:system(),
+    Pid :: cauder_process:id(),
+    Rule :: cauder_semantics:rule().
 
-options(#sys{procs = PMap} = Sys) ->
-    maps:fold(
-        fun(Pid, Proc, Opts) ->
-            case process_option(Sys#sys{procs = maps:without([Pid], PMap)}, Proc) of
-                ?NULL_OPT -> Opts;
-                Opt -> [Opt | Opts]
+options(#system{pool = Pool} = Sys) ->
+    lists:foldl(
+        fun(#process{pid = Pid}, Map) ->
+            case process_option(Pid, Sys) of
+                {'ok', Rule} ->
+                    maps:put(Pid, Rule, Map);
+                'false' ->
+                    Map
             end
         end,
-        [],
-        PMap
+        maps:new(),
+        cauder_pool:to_list(Pool)
     ).
 
 %%%=============================================================================
 %%% Internal functions
 %%%=============================================================================
 
+-spec rule_local(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_tau(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_local(Pid, #hist_tau{env = Bs, expr = Es, stack = Stk}, Sys) ->
+    rule_simple(Pid, {Bs, Es, Stk}, Sys).
+
+-spec rule_self(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_self(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_self(Pid, #hist_self{env = Bs, expr = Es, stack = Stk}, Sys) ->
+    rule_simple(Pid, {Bs, Es, Stk}, Sys).
+
+-spec rule_node(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_node(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_node(Pid, #hist_node{env = Bs, expr = Es, stack = Stk}, Sys) ->
+    rule_simple(Pid, {Bs, Es, Stk}, Sys).
+
+-spec rule_simple(Pid, {Bs, Es, Stk}, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Bs :: cauder_bindings:bindings(),
+    Es :: [cauder_syntax:abstract_expr()],
+    Stk :: cauder_stack:stack(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_simple(
+    Pid,
+    {Bs, Es, Stk},
+    #system{pool = Pool} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    P1 = P0#process{
+        env = Bs,
+        expr = Es,
+        stack = Stk
+    },
+    Sys#system{
+        pool = cauder_pool:update(P1, Pool)
+    }.
+
+-spec rule_nodes(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_nodes(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_nodes(
+    Pid,
+    #hist_nodes{} = Entry,
+    #system{pool = Pool} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    P1 = P0#process{
+        env = Entry#hist_nodes.env,
+        expr = Entry#hist_nodes.expr,
+        stack = Entry#hist_nodes.stack
+    },
+    LogAction = #log_nodes{
+        nodes = Entry#hist_nodes.nodes
+    },
+    TraceAction = #trace_nodes{
+        nodes = Entry#hist_nodes.nodes
+    },
+    Sys#system{
+        pool = cauder_pool:update(P1, Pool),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        trace = cauder_trace:pop(Pid, TraceAction, Sys#system.trace)
+    }.
+
+-spec rule_start(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_start(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_start(
+    Pid,
+    #hist_start{node = Node, success = Success} = Entry,
+    #system{pool = Pool} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    P = P0#process{
+        env = Entry#hist_start.env,
+        expr = Entry#hist_start.expr,
+        stack = Entry#hist_start.stack
+    },
+    LogAction = #log_start{
+        node = Node,
+        success = Success
+    },
+    TraceAction = #trace_start{
+        node = Node,
+        success = Success
+    },
+    Sys#system{
+        pool = cauder_pool:update(P, Pool),
+        nodes = lists:delete(Node, Sys#system.nodes),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        trace = cauder_trace:pop(Pid, TraceAction, Sys#system.trace)
+    }.
+
+-spec rule_spawn(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_spawn(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_spawn(
+    Pid,
+    #hist_spawn{pid = Gid} = Entry,
+    #system{pool = Pool} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    P1 = P0#process{
+        env = Entry#hist_spawn.env,
+        expr = Entry#hist_spawn.expr,
+        stack = Entry#hist_spawn.stack
+    },
+    LogAction = #log_spawn{
+        node = Entry#hist_spawn.node,
+        pid = Gid,
+        success = cauder_pool:is_element(Gid, Pool)
+    },
+    TraceAction = #trace_spawn{
+        node = Entry#hist_spawn.node,
+        pid = Gid,
+        success = cauder_pool:is_element(Gid, Pool)
+    },
+    Sys#system{
+        pool = cauder_pool:update(P1, cauder_pool:remove(Gid, Pool)),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        trace = cauder_trace:pop(Pid, TraceAction, Sys#system.trace)
+    }.
+
+-spec rule_send(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_send(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_send(
+    Pid,
+    #hist_send{msg = Msg} = Entry,
+    #system{mail = Mail, pool = Pool} = Sys
+) ->
+    {_, OldMail} = cauder_mailbox:remove(Msg, Mail),
+    P0 = cauder_pool:get(Pid, Pool),
+    P = P0#process{
+        env = Entry#hist_send.env,
+        expr = Entry#hist_send.expr,
+        stack = Entry#hist_send.stack
+    },
+    LogAction = #log_send{
+        uid = Msg#message.uid
+    },
+    TraceAction = #trace_send{
+        uid = Msg#message.uid
+    },
+    Sys#system{
+        mail = OldMail,
+        pool = cauder_pool:update(P, Pool),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        trace = cauder_trace:pop(Pid, TraceAction, Sys#system.trace)
+    }.
+
+-spec rule_receive(Pid, Entry, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Entry :: cauder_history:entry_receive(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_receive(
+    Pid,
+    #hist_receive{msg = Msg, q_pos = QPos} = Entry,
+    #system{mail = Mail, pool = Pool} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    P1 = P0#process{
+        env = Entry#hist_receive.env,
+        expr = Entry#hist_receive.expr,
+        stack = Entry#hist_receive.stack
+    },
+    LogAction = #log_receive{
+        uid = Msg#message.uid
+    },
+    TraceAction = #trace_receive{
+        uid = Msg#message.uid
+    },
+    Sys#system{
+        mail = cauder_mailbox:insert(Msg, QPos, Mail),
+        pool = cauder_pool:update(P1, Pool),
+        log = cauder_log:push(Pid, LogAction, Sys#system.log),
+        trace = cauder_trace:pop(Pid, TraceAction, Sys#system.trace)
+    }.
+
+%%%=============================================================================
+
 %%------------------------------------------------------------------------------
 %% @doc Returns the evaluation option for the given Process, in the given
 %% System.
 
--spec process_option(System, Process) -> Option when
-    System :: cauder_types:system(),
-    Process :: cauder_types:process(),
-    Option :: cauder_types:option() | ?NULL_OPT.
+-spec process_option(Pid, System) -> {ok, Rule} | 'false' when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    Rule :: cauder_semantics:rule().
 
-process_option(_, #proc{hist = []}) ->
-    ?NULL_OPT;
-process_option(_, #proc{pid = Pid, hist = [{tau, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
-process_option(_, #proc{pid = Pid, hist = [{self, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
-process_option(_, #proc{pid = Pid, hist = [{node, _Bs, _Es, _Stk} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
-process_option(#sys{nodes = SysNodes}, #proc{node = Node, pid = Pid, hist = [{nodes, _Bs, _Es, _Stk, Nodes} | _]}) ->
-    ProcViewOfNodes = SysNodes -- [Node],
-    case ProcViewOfNodes =:= Nodes of
-        true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
-        false -> ?NULL_OPT
-    end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, _Node, SpawnPid} | _]}) ->
-    try maps:get(SpawnPid, PMap) of
-        Proc ->
-            #proc{hist = Hist} = Proc,
-            case Hist of
-                [] -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
-                _ -> ?NULL_OPT
-            end
-    catch
-        % this case covers the scenario of a failed spawn
-        error:{badkey, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN}
-    end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{start, success, _Bs, _Es, _Stk, Node} | _]}) ->
-    ProcWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, Node),
-    ProcOnNode = cauder_utils:find_process_on_node(PMap, Node),
-    ProcWithRead = cauder_utils:find_process_with_read(PMap, Node),
-    case {ProcWithFailedStart, ProcOnNode, ProcWithRead} of
-        {false, false, false} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-        _ -> ?NULL_OPT
-    end;
-process_option(_, #proc{pid = Pid, hist = [{start, failure, _Bs, _Es, _Stk, _Node} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-process_option(#sys{mail = Mail}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{uid = Uid}} | _]}) ->
-    case cauder_mailbox:uid_member(Uid, Mail) of
-        true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
-        false -> ?NULL_OPT
-    end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
-    #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.
+process_option(Pid, Sys) ->
+    {#process{node = Node, hist = Hist}, Pool1} = cauder_pool:take(Pid, Sys#system.pool),
+    case cauder_history:peek(Hist) of
+        empty ->
+            false;
+        {value, #hist_tau{}} ->
+            {ok, ?RULE_LOCAL};
+        {value, #hist_self{}} ->
+            {ok, ?RULE_SELF};
+        {value, #hist_node{}} ->
+            {ok, ?RULE_NODE};
+        {value, #hist_nodes{nodes = Nodes}} ->
+            case lists:delete(Node, Sys#system.nodes) of
+                Nodes ->
+                    {ok, ?RULE_NODES};
+                _ ->
+                    false
+            end;
+        {value, #hist_spawn{pid = SpawnPid}} ->
+            case cauder_pool:find(SpawnPid, Pool1) of
+                error ->
+                    % this case covers the scenario of a failed spawn
+                    {ok, ?RULE_SPAWN};
+                {ok, P1} ->
+                    case cauder_history:is_empty(P1#process.hist) of
+                        true ->
+                            {ok, ?RULE_SPAWN};
+                        false ->
+                            false
+                    end
+            end;
+        {value, #hist_start{node = StartNode, success = true}} ->
+            Bool =
+                cauder_pool:find_on_node(StartNode, Pool1) =:= [] andalso
+                    cauder_pool:find_history_nodes(StartNode, Pool1) =:= error andalso
+                    cauder_pool:find_history_failed_start(StartNode, Pool1) =:= error,
+            case Bool of
+                true ->
+                    {ok, ?RULE_START};
+                false ->
+                    false
+            end;
+        {value, #hist_start{success = false}} ->
+            {ok, ?RULE_START};
+        {value, #hist_send{msg = #message{uid = Uid}}} ->
+            case cauder_mailbox:is_element(Uid, Sys#system.mail) of
+                true ->
+                    {ok, ?RULE_SEND};
+                false ->
+                    false
+            end;
+        {value, #hist_receive{}} ->
+            {ok, ?RULE_RECEIVE}
+    end.

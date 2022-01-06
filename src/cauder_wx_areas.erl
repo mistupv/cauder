@@ -3,8 +3,8 @@
 %% API
 -export([create/1]).
 
--include_lib("wx/include/wx.hrl").
 -include("cauder_wx.hrl").
+-include_lib("wx/include/wx.hrl").
 
 %%%=============================================================================
 %%% API
