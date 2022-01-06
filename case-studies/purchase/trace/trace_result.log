@@ -1,7 +1,7 @@
 {call,{purchase,main,[]}}.
-{comp,194302}.
-{exec,389}.
+{comp,1313000}.
+{exec,0}.
 {node,nonode@nohost}.
-{pid,81}.
-{return,<<131,119,4,116,114,117,101>>}.
+{pid,209}.
+{return,{value,true}}.
 {tracing,success}.

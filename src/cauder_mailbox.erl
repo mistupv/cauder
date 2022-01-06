@@ -1,41 +1,44 @@
 -module(cauder_mailbox).
 
 %% API
--export([uid/0]).
--export([new/0, add/2, insert/3, delete/2, pid_get/2, uid_member/2, uid_take/2, to_list/1]).
+-export([
+    new/0,
+    add/2,
+    insert/3,
+    remove/2,
+    is_element/2,
+    take/2,
+    to_list/1
+]).
+-export([
+    find_destination/2
+]).
 
--export_type([mailbox/0, uid/0, message/0]).
+-include("cauder_message.hrl").
 
--include("cauder.hrl").
+-export_type([mailbox/0]).
 
 -record(mailbox, {
-    index = maps:new() :: #{Uid :: uid() => {Src :: cauder_types:proc_id(), Dest :: cauder_types:proc_id()}},
+    index = maps:new() :: #{Uid :: cauder_message:uid() => {Src :: cauder_process:id(), Dest :: cauder_process:id()}},
     map = maps:new() :: #{
         Dest ::
-            cauder_types:proc_id() => orddict:orddict(Src :: cauder_types:proc_id(), MsgQueue :: queue:queue(message()))
+            cauder_process:id() => orddict:orddict(
+                Src :: cauder_process:id(),
+                MsgQueue :: queue:queue(cauder_message:message())
+            )
     }
 }).
 
 -opaque mailbox() :: #mailbox{}.
--opaque uid() :: pos_integer().
--type message() :: #message{}.
 
 %%%=============================================================================
 %%% API
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
-%% @doc Returns a new and unique message identifier.
-
--spec uid() -> uid().
-
-uid() ->
-    ets:update_counter(?APP_DB, last_uid, 1, {last_uid, -1}).
-
-%%------------------------------------------------------------------------------
 %% @doc Returns a new empty mailbox.
 
--spec new() -> mailbox().
+-spec new() -> cauder_mailbox:mailbox().
 
 new() -> #mailbox{}.
 
@@ -44,13 +47,13 @@ new() -> #mailbox{}.
 %% the rear.
 
 -spec add(Message, Mailbox1) -> Mailbox2 when
-    Message :: message(),
-    Mailbox1 :: mailbox(),
-    Mailbox2 :: mailbox().
+    Message :: cauder_message:message(),
+    Mailbox1 :: cauder_mailbox:mailbox(),
+    Mailbox2 :: cauder_mailbox:mailbox().
 
 add(#message{uid = Uid} = Message, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
     error({existing_uid, Uid}, [Message, Mailbox]);
-add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+add(#message{uid = Uid, src = Src, dst = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
     Index = maps:put(Uid, {Src, Dest}, Index0),
 
     SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
@@ -71,14 +74,14 @@ add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Inde
 %% `QueuePos'.
 
 -spec insert(Message, QueuePos, Mailbox1) -> Mailbox2 when
-    Message :: message(),
+    Message :: cauder_message:message(),
     QueuePos :: pos_integer(),
-    Mailbox1 :: mailbox(),
-    Mailbox2 :: mailbox().
+    Mailbox1 :: cauder_mailbox:mailbox(),
+    Mailbox2 :: cauder_mailbox:mailbox().
 
 insert(#message{uid = Uid} = Message, QueuePos, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
     error({existing_uid, Uid}, [Message, QueuePos, Mailbox]);
-insert(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
+insert(#message{uid = Uid, src = Src, dst = Dest} = Message, QueuePos, #mailbox{index = Index0, map = DestMap0}) ->
     Index = maps:put(Uid, {Src, Dest}, Index0),
 
     SrcMap0 = maps:get(Dest, DestMap0, orddict:new()),
@@ -97,21 +100,21 @@ insert(#message{uid = Uid, src = Src, dest = Dest} = Message, QueuePos, #mailbox
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec delete(Message, Mailbox1) -> {QueuePosition, Mailbox2} when
-    Message :: message(),
-    Mailbox1 :: mailbox(),
+-spec remove(Message, Mailbox1) -> {QueuePosition, Mailbox2} when
+    Message :: cauder_message:message(),
+    Mailbox1 :: cauder_mailbox:mailbox(),
     QueuePosition :: pos_integer(),
-    Mailbox2 :: mailbox().
+    Mailbox2 :: cauder_mailbox:mailbox().
 
-delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+remove(#message{uid = Uid, src = Src, dst = Dst} = Message, #mailbox{index = Index0, map = DestMap0}) ->
     Index = maps:remove(Uid, Index0),
 
-    SrcMap0 = maps:get(Dest, DestMap0),
+    SrcMap0 = maps:get(Dst, DestMap0),
     Queue0 = orddict:fetch(Src, SrcMap0),
 
     Queue = queue_delete(Message, Queue0),
     SrcMap = orddict:store(Src, Queue, SrcMap0),
-    DestMap = maps:put(Dest, SrcMap, DestMap0),
+    DestMap = maps:put(Dst, SrcMap, DestMap0),
 
     QueuePos = queue_index_of(Message, Queue0),
     Mailbox = #mailbox{index = Index, map = DestMap},
@@ -119,15 +122,69 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
     {QueuePos, Mailbox}.
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the a list of messages queues from `Mailbox' whose destination
-%% is the given `Destination'.
+%% @doc Returns `true' if there is a message in `Mailbox' whose uid compares
+%% equal to `Uid', otherwise `false'.
 
--spec pid_get(Destination, Mailbox) -> MessageQueues when
-    Destination :: cauder_types:proc_id(),
-    Mailbox :: mailbox(),
-    MessageQueues :: [queue:queue(message())].
+-spec is_element(Uid, Mailbox) -> boolean() when
+    Uid :: cauder_message:uid(),
+    Mailbox :: cauder_mailbox:mailbox().
 
-pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
+is_element(Uid, #mailbox{index = Index}) ->
+    maps:is_key(Uid, Index).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches the mailbox `Mailbox1' for a message whose uid compares equal
+%% to `Uid'. Returns `{value, Message, Mailbox2}' if such a message is found,
+%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
+%% been removed.
+
+-spec take(Uid, Mailbox1) -> {{Message, QueuePosition}, Mailbox2} | error when
+    Uid :: cauder_message:uid(),
+    Mailbox1 :: cauder_mailbox:mailbox(),
+    Message :: cauder_message:message(),
+    QueuePosition :: pos_integer(),
+    Mailbox2 :: cauder_mailbox:mailbox().
+
+take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
+    case maps:find(Uid, Index) of
+        error ->
+            error;
+        {ok, {Src, Dest}} ->
+            SrcMap = maps:get(Dest, DestMap),
+            Queue = orddict:fetch(Src, SrcMap),
+            {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
+            QueuePos = queue_index_of(Message, Queue),
+            {_, Mailbox} = remove(Message, Mailbox0),
+            {{Message, QueuePos}, Mailbox}
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Returns a complete list of messages, in arbitrary order, contained in
+%% `Mailbox'.
+
+-spec to_list(Mailbox) -> [Message] when
+    Mailbox :: cauder_mailbox:mailbox(),
+    Message :: cauder_message:message().
+
+to_list(#mailbox{map = DestMap}) ->
+    QueueToList = fun({_, Queue}) -> queue:to_list(Queue) end,
+    MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, orddict:to_list(SrcMap)) end,
+    lists:flatmap(MapToList, maps:values(DestMap)).
+
+%%%=============================================================================
+%%% Utils
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
+%% @doc Returns the a list of messages queues from `Mailbox' with the given
+%% `Destination'.
+
+-spec find_destination(Destination, Mailbox) -> MessageQueues when
+    Destination :: cauder_process:id(),
+    Mailbox :: cauder_mailbox:mailbox(),
+    MessageQueues :: [queue:queue(cauder_message:message())].
+
+find_destination(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
     lists:filtermap(
         fun({_, Queue}) ->
             case queue:is_empty(Queue) of
@@ -137,57 +194,8 @@ pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
         end,
         orddict:to_list(maps:get(Dest, DestMap))
     );
-pid_get(_, _) ->
+find_destination(_, _) ->
     [].
-
-%%------------------------------------------------------------------------------
-%% @doc Returns `true' if there is a message in `Mailbox' whose uid compares
-%% equal to `Uid', otherwise `false'.
-
--spec uid_member(Uid, Mailbox) -> boolean() when
-    Uid :: uid(),
-    Mailbox :: mailbox().
-
-uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
-
-%%------------------------------------------------------------------------------
-%% @doc Searches the mailbox `Mailbox1' for a message whose uid compares equal
-%% to `Uid'. Returns `{value, Message, Mailbox2}' if such a message is found,
-%% otherwise `false'. `Mailbox2' is a copy of `Mailbox1' where `Message' has
-%% been removed.
-
--spec uid_take(Uid, Mailbox1) -> {value, {Message, QueuePosition}, Mailbox2} | false when
-    Uid :: uid(),
-    Mailbox1 :: mailbox(),
-    Message :: message(),
-    QueuePosition :: pos_integer(),
-    Mailbox2 :: mailbox().
-
-uid_take(Uid, #mailbox{index = Index, map = DestMap} = Mailbox0) ->
-    case maps:find(Uid, Index) of
-        error ->
-            false;
-        {ok, {Src, Dest}} ->
-            SrcMap = maps:get(Dest, DestMap),
-            Queue = orddict:fetch(Src, SrcMap),
-            {value, Message} = lists:search(fun(M) -> M#message.uid =:= Uid end, queue:to_list(Queue)),
-            QueuePos = queue_index_of(Message, Queue),
-            {_, Mailbox} = delete(Message, Mailbox0),
-            {value, {Message, QueuePos}, Mailbox}
-    end.
-
-%%------------------------------------------------------------------------------
-%% @doc Returns a complete list of messages, in arbitrary order, contained in
-%% `Mailbox'.
-
--spec to_list(Mailbox) -> [Message] when
-    Mailbox :: mailbox(),
-    Message :: message().
-
-to_list(#mailbox{map = DestMap}) ->
-    QueueToList = fun({_, Queue}) -> queue:to_list(Queue) end,
-    MapToList = fun(SrcMap) -> lists:flatmap(QueueToList, orddict:to_list(SrcMap)) end,
-    lists:flatmap(MapToList, maps:values(DestMap)).
 
 %%%=============================================================================
 %%% Utils
@@ -233,10 +241,9 @@ list_insert(Index, Index, Item, List, Acc) -> lists:reverse([Item | Acc], List);
 list_insert(Index, CurrIdx, Item, [H | T], Acc) -> list_insert(Index, CurrIdx + 1, Item, T, [H | Acc]).
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the index of `Item' in `Queue' or `false' if there is no such
-%% item.
+%% @doc Returns the index of `Item' in `Queue'.
 
--spec queue_index_of(Item, Queue) -> Index | false when
+-spec queue_index_of(Item, Queue) -> Index when
     Item :: T,
     Queue :: queue:queue(T),
     Index :: pos_integer(),
@@ -245,10 +252,9 @@ list_insert(Index, CurrIdx, Item, [H | T], Acc) -> list_insert(Index, CurrIdx + 
 queue_index_of(Item, Queue) -> index_of(Item, queue:to_list(Queue)).
 
 %%------------------------------------------------------------------------------
-%% @doc Returns the index of `Item' in `List' or `false' if there is no such
-%% item.
+%% @doc Returns the index of `Item' in `List'.
 
--spec index_of(Item, List) -> Index | false when
+-spec index_of(Item, List) -> Index when
     Item :: T,
     List :: [T],
     Index :: pos_integer(),
@@ -256,6 +262,5 @@ queue_index_of(Item, Queue) -> index_of(Item, queue:to_list(Queue)).
 
 index_of(Item, List) -> index_of(Item, List, 1).
 
-index_of(_, [], _) -> false;
 index_of(Item, [Item | _], Index) -> Index;
 index_of(Item, [_ | Tail], Index) -> index_of(Item, Tail, Index + 1).

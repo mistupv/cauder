@@ -26,7 +26,8 @@
 
 -elvis([{elvis_style, god_modules, disable}]).
 
--include("cauder.hrl").
+-include("cauder_system.hrl").
+-include("cauder_semantics.hrl").
 -include("cauder_wx.hrl").
 -include("cauder_wx_statusbar.hrl").
 
@@ -56,8 +57,8 @@ create(Frame) ->
     NewState :: cauder_wx:state().
 
 update(
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}},
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}}
+    #wx_state{system = #system{pool = Pool}, config = #config{status_bar = Show}},
+    #wx_state{system = #system{pool = Pool}, config = #config{status_bar = Show}}
 ) ->
     ok;
 update(_, #wx_state{config = #config{status_bar = false}}) ->
@@ -67,19 +68,19 @@ update(_, #wx_state{system = undefined}) ->
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
     wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
-update(_, #wx_state{system = #sys{procs = PMap}}) ->
+update(_, #wx_state{system = #system{pool = Pool}}) ->
     set_visibility(true),
 
     {Alive, Dead} =
         lists:foldl(
             fun(Proc, {Alive, Dead}) ->
-                case cauder_utils:is_dead(Proc) of
-                    true -> {Alive, Dead + 1};
-                    false -> {Alive + 1, Dead}
+                case cauder_process:is_alive(Proc) of
+                    true -> {Alive + 1, Dead};
+                    false -> {Alive, Dead + 1}
                 end
             end,
             {0, 0},
-            maps:values(PMap)
+            cauder_pool:to_list(Pool)
         ),
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
@@ -174,7 +175,7 @@ stop_finish() -> set_text(?STOP_FINISH).
 %%%=============================================================================
 
 -spec step_start(Semantics) -> ok when
-    Semantics :: cauder_types:semantics().
+    Semantics :: cauder_semantics:semantics().
 
 step_start(Sem) ->
     SemStr = semantics_to_string(Sem),
@@ -182,7 +183,7 @@ step_start(Sem) ->
     set_text(Status).
 
 -spec step_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     StepsDone :: non_neg_integer(),
     StepsTotal :: pos_integer(),
     Time :: non_neg_integer().
@@ -198,7 +199,7 @@ step_finish(Sem, {Done, Total}, Time) ->
 %step_suspend() -> set_text(?STEP_SUSPEND).
 
 -spec step_multiple_finish(Semantics, {StepsDone, StepsTotal}, Time) -> ok when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     StepsDone :: non_neg_integer(),
     StepsTotal :: pos_integer(),
     Time :: non_neg_integer().
@@ -227,24 +228,6 @@ replay_steps_finish({Done, Total}, Time) ->
 
 %%%=============================================================================
 
--spec replay_spawn_start(Pid) -> ok when
-    Pid :: cauder_types:proc_id().
-
-replay_spawn_start(Pid) -> set_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
-
--spec replay_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_types:proc_id(),
-    Time :: non_neg_integer().
-
-replay_spawn_finish(Pid, Time) ->
-    TimeStr = time_to_string(Time),
-    Status = io_lib:format(?REPLAY_SPAWN_FINISH, [Pid, TimeStr]),
-    set_text(Status).
-
--spec replay_spawn_fail() -> ok.
-
-replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
-
 -spec replay_start_start(Node) -> ok when
     Node :: node().
 
@@ -261,13 +244,33 @@ replay_start_finish(Node, Time) ->
 
 %%%=============================================================================
 
+-spec replay_spawn_start(Pid) -> ok when
+    Pid :: cauder_process:id().
+
+replay_spawn_start(Pid) -> set_text(io_lib:format(?REPLAY_SPAWN_START, [Pid])).
+
+-spec replay_spawn_finish(Pid, Time) -> ok when
+    Pid :: cauder_process:id(),
+    Time :: non_neg_integer().
+
+replay_spawn_finish(Pid, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?REPLAY_SPAWN_FINISH, [Pid, TimeStr]),
+    set_text(Status).
+
+-spec replay_spawn_fail() -> ok.
+
+replay_spawn_fail() -> set_text(?REPLAY_SPAWN_FAIL).
+
+%%%=============================================================================
+
 -spec replay_send_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 replay_send_start(Uid) -> set_text(io_lib:format(?REPLAY_SEND_START, [Uid])).
 
 -spec replay_send_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 replay_send_finish(Uid, Time) ->
@@ -282,12 +285,12 @@ replay_send_fail() -> set_text(?REPLAY_SEND_FAIL).
 %%%=============================================================================
 
 -spec replay_receive_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 replay_receive_start(Uid) -> set_text(io_lib:format(?REPLAY_RECEIVE_START, [Uid])).
 
 -spec replay_receive_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 replay_receive_finish(Uid, Time) ->
@@ -331,33 +334,13 @@ rollback_steps_finish({Done, Total}, Time) ->
 
 %%%=============================================================================
 
--spec rollback_spawn_start(Pid) -> ok when
-    Pid :: cauder_types:proc_id().
-
-rollback_spawn_start(Pid) -> set_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
-
--spec rollback_spawn_finish(Pid, Time) -> ok when
-    Pid :: cauder_types:proc_id(),
-    Time :: non_neg_integer().
-
-rollback_spawn_finish(Pid, Time) ->
-    TimeStr = time_to_string(Time),
-    Status = io_lib:format(?ROLLBACK_SPAWN_FINISH, [Pid, TimeStr]),
-    set_text(Status).
-
--spec rollback_spawn_fail() -> ok.
-
-rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
-
-%%%=============================================================================
-
 -spec rollback_start_begin(Node) -> ok when
     Node :: node().
 
 rollback_start_begin(Node) -> set_text(io_lib:format(?ROLLBACK_START_BEGIN, [Node])).
 
 -spec rollback_start_finish(Node, Time) -> ok when
-    Node :: cauder_types:net_Node(),
+    Node :: node(),
     Time :: non_neg_integer().
 
 rollback_start_finish(Node, Time) ->
@@ -371,13 +354,33 @@ rollback_start_fail() -> set_text(?ROLLBACK_START_FAIL).
 
 %%%=============================================================================
 
+-spec rollback_spawn_start(Pid) -> ok when
+    Pid :: cauder_process:id().
+
+rollback_spawn_start(Pid) -> set_text(io_lib:format(?ROLLBACK_SPAWN_START, [Pid])).
+
+-spec rollback_spawn_finish(Pid, Time) -> ok when
+    Pid :: cauder_process:id(),
+    Time :: non_neg_integer().
+
+rollback_spawn_finish(Pid, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?ROLLBACK_SPAWN_FINISH, [Pid, TimeStr]),
+    set_text(Status).
+
+-spec rollback_spawn_fail() -> ok.
+
+rollback_spawn_fail() -> set_text(?ROLLBACK_SPAWN_FAIL).
+
+%%%=============================================================================
+
 -spec rollback_send_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 rollback_send_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SEND_START, [Uid])).
 
 -spec rollback_send_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 rollback_send_finish(Uid, Time) ->
@@ -392,12 +395,12 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 %%%=============================================================================
 
 -spec rollback_receive_start(Uid) -> ok when
-    Uid :: cauder_mailbox:uid().
+    Uid :: cauder_message:uid().
 
 rollback_receive_start(Uid) -> set_text(io_lib:format(?ROLLBACK_RECEIVE_START, [Uid])).
 
 -spec rollback_receive_finish(Uid, Time) -> ok when
-    Uid :: cauder_mailbox:uid(),
+    Uid :: cauder_message:uid(),
     Time :: non_neg_integer().
 
 rollback_receive_finish(Uid, Time) ->
@@ -442,11 +445,11 @@ set_text(Text) ->
     wxStatusBar:setStatusText(StatusBar, Text).
 
 -spec semantics_to_string(Semantics) -> String when
-    Semantics :: cauder_types:semantics(),
+    Semantics :: cauder_semantics:semantics(),
     String :: string().
 
-semantics_to_string(?FWD_SEM) -> "forward";
-semantics_to_string(?BWD_SEM) -> "backward".
+semantics_to_string(?SEM_FWD) -> "forward";
+semantics_to_string(?SEM_BWD) -> "backward".
 
 -spec time_to_string(Time) -> String when
     Time :: non_neg_integer(),

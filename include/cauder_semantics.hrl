@@ -1,0 +1,11 @@
+-define(SEM_FWD, 'forwards').
+-define(SEM_BWD, 'backwards').
+
+-define(RULE_LOCAL, 'local').
+-define(RULE_SELF, 'self').
+-define(RULE_NODE, 'node').
+-define(RULE_NODES, 'nodes').
+-define(RULE_SPAWN, 'spawn').
+-define(RULE_START, 'start').
+-define(RULE_SEND, 'send').
+-define(RULE_RECEIVE, 'receive').

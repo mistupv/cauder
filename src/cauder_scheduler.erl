@@ -7,7 +7,8 @@
 -export([scheduler_round_robin/2, scheduler_fcfs/2]).
 -endif.
 
--include("cauder.hrl").
+-include("cauder_process.hrl").
+-include("cauder_message.hrl").
 
 -type change(Item) ::
     none

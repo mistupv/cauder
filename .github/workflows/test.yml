@@ -6,11 +6,13 @@ on:
       - 'main'
       - 'dev'
       - 'release/**'
+      - 'paper/**'
   pull_request:
     branches:
       - 'main'
       - 'dev'
       - 'release/**'
+      - 'paper/**'
 
 jobs:
   skip_check:
@@ -76,7 +78,7 @@ jobs:
     name: 'Test (macOS)'
     needs: skip_check
     runs-on: macos-latest
-    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
+    if: ${{ false }} #${{ needs.skip_check.outputs.should_skip != 'true' }}
 
     steps:
       - name: 'Checkout'

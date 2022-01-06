@@ -3,7 +3,6 @@
 %%% This module defines functions that transform "parse trees" to custom syntax
 %%% trees based on the ones used by the Erlang debugger.
 %%% @see erl_parse
-%%% @see cauder_types
 %%% @end
 %%%-----------------------------------------------------------------------------
 
@@ -22,13 +21,186 @@
 -export([expr/1]).
 -endif.
 
+-export_type([
+    line/0,
+    abstract_expr/0,
+    af_args/0,
+    af_literal/0,
+    af_boolean/0,
+    af_variable/0,
+    af_remote_call/0,
+    af_clause_seq/0,
+    af_clause/0,
+    af_pattern/0,
+    af_guard_seq/0,
+    af_guard/0,
+    af_guard_test/0,
+    af_body/0
+]).
+
+-type line() :: non_neg_integer().
+
+-type abstract_expr() ::
+    af_literal()
+    | af_variable()
+    | af_variable()
+    | af_cons(abstract_expr())
+    | af_tuple(abstract_expr())
+    | af_if()
+    | af_case()
+    | af_receive()
+    | af_make_fun()
+    | af_bif_call()
+    | af_self_call()
+    | af_node_call()
+    | af_nodes_call()
+    | af_start_1_call()
+    | af_start_2_call()
+    | af_spawn_1_call()
+    | af_spawn_2_call()
+    | af_spawn_3_call()
+    | af_spawn_4_call()
+    | af_send_call()
+    | af_send_op_call()
+    | af_local_call()
+    | af_remote_call()
+    | af_apply()
+    | af_apply_fun()
+    | af_match(abstract_expr())
+    | af_op(abstract_expr())
+    | af_short_circuit_op(abstract_expr()).
+
+-type af_args() :: [abstract_expr()].
+
+-type af_literal() :: {value, line(), term()}.
+
+-type af_boolean() :: {value, line(), true | false}.
+
+-type af_variable() :: {var, line(), atom()}.
+
+-type af_cons(T) :: {cons, line(), T, T}.
+
+-type af_tuple(T) :: {tuple, line(), [T]}.
+
+-type af_if() :: {'if', line(), af_clause_seq()}.
+
+-type af_case() :: {'case', line(), abstract_expr(), af_clause_seq()}.
+
+-type af_receive() :: {'receive', line(), af_clause_seq()}.
+
+-type af_make_fun() :: {make_fun, line(), atom(), af_clause_seq()}.
+
+-type af_bif_call() :: {bif, line(), module(), atom(), af_args()}.
+
+-type af_self_call() :: {self, line()}.
+
+-type af_node_call() :: {node, line()}.
+
+-type af_nodes_call() :: {nodes, line()}.
+
+-type af_start_1_call() :: {start, line(), abstract_expr()}.
+
+-type af_start_2_call() :: {start, line(), abstract_expr(), abstract_expr()}.
+
+-type af_spawn_1_call() :: {spawn, line(), abstract_expr()}.
+
+-type af_spawn_2_call() :: {spawn, line(), abstract_expr(), abstract_expr()}.
+
+-type af_spawn_3_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr()}.
+
+-type af_spawn_4_call() :: {spawn, line(), abstract_expr(), abstract_expr(), abstract_expr(), abstract_expr()}.
+
+-type af_send_call() :: {send, line(), abstract_expr(), abstract_expr()}.
+
+-type af_send_op_call() :: {send_op, line(), abstract_expr(), abstract_expr()}.
+
+-type af_local_call() :: {local_call, line(), atom(), af_args()}.
+
+-type af_remote_call() :: {remote_call, line(), module(), atom(), af_args()}.
+
+-type af_apply() :: {apply, line(), abstract_expr(), abstract_expr(), af_args()}.
+
+-type af_apply_fun() :: {apply_fun, line(), abstract_expr(), af_args()}.
+
+-type af_match(T) :: {match, line(), af_pattern(), T}.
+
+-type af_op(T) :: {op, line(), unary_op() | binary_op(), [T]}.
+
+-type af_unary_arith_op(T) :: {op, line(), '+' | '-', [T]}.
+
+-type af_short_circuit_op(T) :: {'andalso' | 'orelse', line(), T, T}.
+
+%% Clauses
+
+-type af_clause_seq() :: [af_clause(), ...].
+
+-type af_clause() :: {'clause', line(), [af_pattern()], af_guard_seq(), af_body()}.
+
+-type af_pattern() ::
+    af_literal()
+    | af_variable()
+    | af_cons(af_pattern())
+    | af_tuple(af_pattern())
+    | af_match(af_pattern())
+    | af_unary_arith_op(af_pattern()).
+
+-type af_guard_seq() :: [af_guard()].
+
+-type af_guard() :: [af_guard_test(), ...].
+
+-type af_guard_test() ::
+    af_literal()
+    | af_variable()
+    | af_cons(af_guard_test())
+    | af_tuple(af_guard_test())
+    | af_unary_arith_op(af_guard_test())
+    | af_short_circuit_op(af_guard_test())
+    | af_guard_call()
+    | af_self_call()
+    | af_node_call()
+    | af_nodes_call().
+
+-type af_guard_call() :: {'bif', line(), erlang, atom(), [af_guard_test()]}.
+
+-type af_body() :: [abstract_expr(), ...].
+
+%% Operators
+
+-type binary_op() ::
+    '/'
+    | '*'
+    | 'div'
+    | 'rem'
+    | 'band'
+    | 'and'
+    | '+'
+    | '-'
+    | 'bor'
+    | 'bxor'
+    | 'bsl'
+    | 'bsr'
+    | 'or'
+    | 'xor'
+    | '++'
+    | '--'
+    | '=='
+    | '/='
+    | '=<'
+    | '<'
+    | '>='
+    | '>'
+    | '=:='
+    | '=/='.
+
+-type unary_op() :: '+' | '-' | 'bnot' | 'not'.
+
 %%------------------------------------------------------------------------------
 %% @doc Transforms a list of abstract clauses to the custom CauDEr
 %% representation.
 
 -spec clauses(Clauses1) -> Clauses2 when
     Clauses1 :: [erl_parse:abstract_clause()],
-    Clauses2 :: [cauder_types:af_clause()].
+    Clauses2 :: [cauder_syntax:af_clause()].
 
 clauses([C0 | Cs]) ->
     C1 = clause(C0),
@@ -38,7 +210,7 @@ clauses([]) ->
 
 -spec clause(Clause1) -> Clause2 when
     Clause1 :: erl_parse:abstract_clause(),
-    Clause2 :: cauder_types:af_clause().
+    Clause2 :: cauder_syntax:af_clause().
 
 clause({clause, Anno, H0, G0, B0}) ->
     H1 = head(H0),
@@ -337,7 +509,7 @@ expr({op, Anno, Op, L0, R0}) ->
 
 -spec expr_list(Expressions1) -> Expressions2 when
     Expressions1 :: [erl_parse:abstract_expr()],
-    Expressions2 :: [cauder_types:abstract_expr()].
+    Expressions2 :: [cauder_syntax:abstract_expr()].
 
 expr_list([E0 | Es]) ->
     E1 = expr(E0),
@@ -382,7 +554,7 @@ check_guard_op(Op, Arity, AllowedTypes) ->
 %% @doc Returns the Erlang term represented by the given `AbstractLiteral'.
 
 -spec get_value(AbstractLiteral) -> Term when
-    AbstractLiteral :: cauder_types:af_literal(),
+    AbstractLiteral :: cauder_syntax:af_literal(),
     Term :: term().
 
 get_value({value, _, V}) -> V.
@@ -404,10 +576,10 @@ exception(Class, Reason) ->
 %% `Expressions' with the given literal `Value'.
 
 -spec replace_variable(Expression | [Expression], Variable, Value) -> NewExpression | [NewExpression] when
-    Expression :: cauder_types:abstract_expr(),
-    Variable :: cauder_types:af_variable(),
+    Expression :: cauder_syntax:abstract_expr(),
+    Variable :: cauder_syntax:af_variable(),
     Value :: term(),
-    NewExpression :: cauder_types:abstract_expr().
+    NewExpression :: cauder_syntax:abstract_expr().
 
 replace_variable([E0 | Es], Var = {var, _, _}, Val) ->
     E = replace_variable(E0, Var, Val),
@@ -535,10 +707,10 @@ replace_variable({Op, Line, L0, R0}, Var, Val) when Op =:= 'andalso'; Op =:= 'or
 
 -spec to_abstract_expr
     (Expression) -> NewExpression when
-        Expression :: cauder_types:abstract_expr(),
+        Expression :: cauder_syntax:abstract_expr(),
         NewExpression :: erl_syntax:syntaxTree();
     (Expressions) -> NewExpressions when
-        Expressions :: [cauder_types:abstract_expr()],
+        Expressions :: [cauder_syntax:abstract_expr()],
         NewExpressions :: [erl_syntax:syntaxTree()].
 
 to_abstract_expr(Es) when is_list(Es) -> lists:map(fun to_abstract_expr/1, Es);
@@ -668,11 +840,11 @@ set_line(Node, Line) -> erl_syntax:set_pos(Node, erl_anno:new(Line)).
 -spec remote_call(Module, Function, Arguments) -> RemoteCall when
     Module :: module(),
     Function :: atom(),
-    Arguments :: [cauder_types:af_literal()],
-    RemoteCall :: cauder_types:af_remote_call().
+    Arguments :: [cauder_syntax:af_literal()],
+    RemoteCall :: cauder_syntax:af_remote_call().
 
 remote_call(M, F, As) ->
     A = length(As),
     {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
-    Line = cauder_eval:clause_line(#{}, Cs, As),
+    Line = cauder_eval:clause_line(cauder_bindings:new(), Cs, As),
     {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, As)}.
