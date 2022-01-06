@@ -15,7 +15,7 @@
 -export([
     replay_step/2,
     replay_start/2,
-    replay_spawn/3,
+    replay_spawn/2,
     replay_send/2,
     replay_receive/2
 ]).
@@ -109,8 +109,8 @@ replay_step(Pid, #system{log = Log} = Sys) ->
                     replay_receive(Uid, Sys);
                 {value, #log_start{node = Node, success = 'true'}} ->
                     replay_start(Node, Sys);
-                {value, #log_spawn{node = Node, pid = ChildPid, success = 'true'}} ->
-                    replay_spawn('_', Sys, {spawn, {Node, ChildPid}, success})
+                {value, #log_spawn{pid = ChildPid, success = 'true'}} ->
+                    replay_spawn(ChildPid, Sys)
             end
     end.
 
@@ -148,31 +148,24 @@ replay_start(Node, #system{nodes = Nodes, log = Log} = Sys) ->
 %% @doc Replays the spawning of the process with the given pid, in the given
 %% system.
 
--spec replay_spawn(Pid, System, SpawnInfo) -> NewSystem when
-    Pid :: cauder_process:id() | '_',
+-spec replay_spawn(Pid, System) -> NewSystem when
+    Pid :: cauder_process:id(),
     System :: cauder_system:system(),
-    SpawnInfo :: cauder_log:action_spawn() | '_',
     NewSystem :: cauder_system:system().
 
-replay_spawn(Pid, #system{pool = Pool, log = Log} = Sys, _) when Pid =/= '_' ->
-    case cauder_pool:is_element(Pid, Pool) of
+replay_spawn(ChildPid, #system{pool = Pool, log = Log} = Sys0) ->
+    case cauder_pool:is_element(ChildPid, Pool) of
         true ->
-            Sys;
+            Sys0;
         false ->
-            {ok, Action} = cauder_log:find_spawn_action(Pid, Log),
-            replay_spawn('_', Sys, Action)
-    end;
-replay_spawn(_, #system{log = Log} = Sys, {spawn, {_, Pid}, failure}) ->
-    case cauder_log:find_spawn(Pid, Log) of
-        {ok, ParentPid} ->
-            replay_until_spawn(ParentPid, Sys, Pid);
-        error ->
-            Sys
-    end;
-replay_spawn(_, Sys0, #log_spawn{node = Node, pid = Pid, success = 'true'}) ->
-    #system{log = Log} = Sys = replay_start(Node, Sys0),
-    {ok, ProcParent} = cauder_log:find_spawn(Pid, Log),
-    replay_until_spawn(ProcParent, Sys, Pid).
+            case cauder_log:find_spawn_action(ChildPid, Log) of
+                {ok, {Pid, ChildNode}} ->
+                    Sys1 = replay_start(ChildNode, Sys0),
+                    replay_until_spawn(Pid, Sys1, ChildPid);
+                error ->
+                    Sys0
+            end
+    end.
 
 %%------------------------------------------------------------------------------
 %% @doc Replays the sending of the message with the given uid, in the given
@@ -221,7 +214,7 @@ replay_receive(Uid, #system{log = Log} = Sys) ->
     NewSystem :: cauder_system:system().
 
 replay_until_start(Pid, Sys0, Node) ->
-    #system{log = Log} = Sys1 = replay_spawn(Pid, Sys0, '_'),
+    #system{log = Log} = Sys1 = replay_spawn(Pid, Sys0),
     case cauder_log:find_start(Node, Log) of
         {ok, _} -> replay_until_start1(Pid, Sys1, Node);
         error -> Sys1
@@ -247,7 +240,7 @@ replay_until_start1(Pid, Sys0, Node) ->
     NewSystem :: cauder_system:system().
 
 replay_until_spawn(ParentPid, Sys0, Pid) ->
-    #system{pool = Pool} = Sys1 = replay_spawn(ParentPid, Sys0, '_'),
+    #system{pool = Pool} = Sys1 = replay_spawn(ParentPid, Sys0),
     case cauder_pool:is_element(Pid, Pool) of
         true -> Sys1;
         false -> replay_until_spawn1(ParentPid, Sys1, Pid)
@@ -273,7 +266,7 @@ replay_until_spawn1(Pid, Sys0, ChildPid) ->
     NewSystem :: cauder_system:system().
 
 replay_until_send(Pid, Sys0, Uid) ->
-    #system{log = Log} = Sys1 = replay_spawn(Pid, Sys0, '_'),
+    #system{log = Log} = Sys1 = replay_spawn(Pid, Sys0),
     case cauder_log:has_send(Pid, Uid, Log) of
         true -> replay_until_send1(Pid, Sys1, Uid);
         false -> Sys1
@@ -299,7 +292,7 @@ replay_until_send1(Pid, Sys0, Uid) ->
     NewSystem :: cauder_system:system().
 
 replay_until_receive(Pid, Sys0, Uid) ->
-    Sys1 = replay_spawn(Pid, Sys0, '_'),
+    Sys1 = replay_spawn(Pid, Sys0),
     #system{log = Log} = Sys2 = replay_send(Uid, Sys1),
     case cauder_log:has_receive(Pid, Uid, Log) of
         true -> replay_until_receive1(Pid, Sys2, Uid);

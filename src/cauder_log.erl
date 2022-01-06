@@ -356,24 +356,25 @@ find_spawn(ChildPid, Log) ->
 %% @doc Checks the log of each process, until it finds the process that spawned
 %% the process with the given `Pid'.
 
--spec find_spawn_action(ChildPid, Log) -> {ok, Action} | error when
+-spec find_spawn_action(ChildPid, Log) -> {ok, {Pid, ChildNode}} | error when
     ChildPid :: cauder_process:id(),
     Log :: cauder_log:log(),
-    Action :: cauder_log:action_spawn().
+    Pid :: cauder_process:id(),
+    ChildNode :: node().
 
 find_spawn_action(ChildPid, Log) ->
     I0 = maps:iterator(Log),
-    Pred = fun
-        (#log_spawn{pid = Pid}) -> Pid =:= ChildPid;
+    FindAction = fun
+        (#log_spawn{pid = Pid, success = 'true'}) -> Pid =:= ChildPid;
         (_) -> 'false'
     end,
     Fun = fun Search(I) ->
         case maps:next(I) of
             'none' ->
                 error;
-            {_Pid, Actions, I1} ->
-                case lists:search(Pred, Actions) of
-                    {value, Action} -> {ok, Action};
+            {Pid, Actions, I1} ->
+                case lists:search(FindAction, Actions) of
+                    {value, #log_spawn{node = Node}} -> {ok, {Pid, Node}};
                     false -> Search(I1)
                 end
         end

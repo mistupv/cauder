@@ -915,7 +915,7 @@ task_replay_spawn(Pid, Sys0) ->
             fun() ->
                 case cauder_replay:can_replay_spawn(Pid, Sys0) of
                     false -> error(no_replay);
-                    true -> cauder_replay:replay_spawn(Pid, Sys0, '_')
+                    true -> cauder_replay:replay_spawn(Pid, Sys0)
                 end
             end
         ),
