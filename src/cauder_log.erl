@@ -523,7 +523,7 @@ remove_dependents(_, Log) -> Log.
 %%%=============================================================================
 
 -spec find_pid(Pred, Log) -> {ok, Pid} | error when
-    Pred :: fun(([Action]) -> boolean()),
+    Pred :: fun((Action) -> boolean()),
     Log :: cauder_log:log(),
     Pid :: cauder_process:id(),
     Action :: cauder_log:action().
