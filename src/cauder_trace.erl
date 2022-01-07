@@ -6,8 +6,11 @@
     push/3,
     pop/3,
     get/2,
-    peek/2,
-    reverse_actions/1,
+    peek/2
+]).
+-export([
+    reverse/1,
+    map_pids/1,
     to_log/1
 ]).
 
@@ -86,12 +89,36 @@ peek(Pid, Trace) ->
             error
     end.
 
--spec reverse_actions(Trace) -> NewTrace when
+%%%=============================================================================
+
+-spec reverse(Trace) -> NewTrace when
     Trace :: cauder_trace:trace(),
     NewTrace :: cauder_trace:trace().
 
-reverse_actions(Trace) ->
-    maps:map(fun(_, Actions) -> lists:reverse(Actions) end, Trace).
+reverse(Trace) ->
+    maps:map(fun(_, Actions) -> lists:reverse(map_pids(Actions)) end, Trace).
+
+-spec map_pids(term()) -> term().
+
+map_pids(List) when is_list(List) ->
+    lists:map(fun map_pids/1, List);
+map_pids(Tuple) when is_tuple(Tuple) ->
+    list_to_tuple(lists:map(fun map_pids/1, tuple_to_list(Tuple)));
+map_pids(Map) when is_map(Map) ->
+    maps:fold(
+        fun(K, V, Acc) ->
+            K1 = map_pids(K),
+            V1 = map_pids(V),
+            false = maps:is_key(K1, Acc),
+            Acc#{K1 => V1}
+        end,
+        #{},
+        Map
+    );
+map_pids(Pid) when is_pid(Pid) ->
+    cauder_process:from_pid(Pid);
+map_pids(Term) ->
+    Term.
 
 -spec to_log(Trace) -> Log when
     Trace :: cauder_trace:trace(),

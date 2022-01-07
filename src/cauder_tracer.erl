@@ -142,10 +142,10 @@ init({MainPid, TracedPid}) ->
     NewState :: state().
 
 handle_call(get_traces, _From, #state{trace = Trace0} = State) ->
-    Trace1 = cauder_trace:reverse_actions(Trace0),
+    Trace1 = cauder_trace:reverse(Trace0),
     {reply, {ok, Trace1}, State};
 handle_call(get_return_value, _From, #state{return = ReturnValue} = State) ->
-    {reply, ReturnValue, State};
+    {reply, cauder_trace:map_pids(ReturnValue), State};
 %% ========== 'call' trace messages ========== %%
 %% Generate message stamp
 handle_call({trace, Pid, call, {cauder_tracer_erlang, send_centralized, [_, _]}}, _From, State) ->
@@ -367,7 +367,7 @@ do_trace(Module, Function, Args, Opts) ->
         pid = cauder_process:from_pid(TracedPid),
         call = {Module, Function, Args},
         tracing = Tracing,
-        return = value_to_binary(ReturnValue),
+        return = ReturnValue,
         comp = CompTime,
         exec = ExecTime,
         trace = Traces
@@ -454,13 +454,13 @@ get_uid(Stamp, #state{ets = Table, stamps = Map} = State) ->
 
 -spec write_trace(Dir, TraceInfo) -> ok when
     Dir :: file:filename(),
-    TraceInfo :: cauder_tracer:trace_info().
+    TraceInfo :: cauder_types:trace_info().
 
-write_trace(Dir, TraceResult) ->
+write_trace(Dir, TraceInfo) ->
     % This not compile time safe but there is no other way to keep it human-friendly and simple
-    [trace_info | Values] = tuple_to_list(TraceResult),
     Fields = record_info(fields, trace_info),
-    {Traces, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
+    [trace_info | Values] = tuple_to_list(TraceInfo),
+    {Trace, ResultInfo} = maps:take(trace, maps:from_list(lists:zip(Fields, Values))),
 
     ok = filelib:ensure_dir(Dir),
     case filelib:is_dir(Dir) of
@@ -468,18 +468,23 @@ write_trace(Dir, TraceResult) ->
         false -> ok = file:make_dir(Dir)
     end,
 
-    ResultFile = filename:join(Dir, "trace_result.log"),
-    ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~w.", [T]) end, maps:to_list(ResultInfo))),
-    ok = file:write_file(ResultFile, ResultContent),
+    ResultFilename = filename:join(Dir, "trace_result.log"),
+    write_terms(ResultFilename, maps:to_list(ResultInfo)),
 
     lists:foreach(
-        fun({Index, List}) ->
-            File = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~w.", [T]) end, List)),
-            ok = file:write_file(File, Content)
+        fun({Index, Terms}) ->
+            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
+            write_terms(Filename, Terms)
         end,
-        maps:to_list(Traces)
+        maps:to_list(Trace)
     ).
 
-value_to_binary(none) -> none;
-value_to_binary({value, Value}) -> erlang:term_to_binary(Value, [compressed, {minor_version, 2}]).
+-spec write_terms(Filename, Terms) -> ok when
+    Filename :: file:name_all(),
+    Terms :: [term()].
+
+write_terms(Filename, Terms) ->
+    Lines = lists:map(fun(Term) -> io_lib:format("~w.", [Term]) end, Terms),
+    Joined = lists:join($\n, Lines),
+    Text = unicode:characters_to_binary(Joined),
+    file:write_file(Filename, Text).
