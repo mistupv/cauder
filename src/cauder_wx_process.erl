@@ -132,13 +132,13 @@ update_bindings(_, #wx_state{pid = undefined}) ->
     wxListCtrl:deleteAllItems(cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl)),
     ets:delete(?GUI_DB, ?BINDINGS_IDX_TO_KEY),
     ok;
-update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{bindings_mode = all}}) ->
+update_bindings(_, #wx_state{system = #system{pool = PMap}, pid = Pid, config = #config{bindings_mode = all}}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
 
     BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
     wxListCtrl:freeze(BindingsControl),
     wxListCtrl:deleteAllItems(BindingsControl),
-    #proc{env = Bs} = maps:get(Pid, PMap),
+    #process{env = Bs} = maps:get(Pid, PMap),
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     IdxToKey =
         maps:fold(
@@ -154,13 +154,13 @@ update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #c
         ),
     ets:insert(?GUI_DB, {?BINDINGS_IDX_TO_KEY, IdxToKey}),
     wxListCtrl:thaw(BindingsControl);
-update_bindings(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{bindings_mode = relevant}}) ->
+update_bindings(_, #wx_state{system = #system{pool = PMap}, pid = Pid, config = #config{bindings_mode = relevant}}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Bindings_Panel, wxPanel), true),
 
     BindingsControl = cauder_wx:find(?PROCESS_Bindings_Control, wxListCtrl),
     wxListCtrl:freeze(BindingsControl),
     wxListCtrl:deleteAllItems(BindingsControl),
-    #proc{env = Bs0, exprs = Es} = maps:get(Pid, PMap),
+    #process{env = Bs0, expr = Es} = maps:get(Pid, PMap),
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     Es1 = cauder_syntax:to_abstract_expr(Es),
     Keys = sets:union(lists:map(fun erl_syntax_lib:variables/1, Es1)),
@@ -220,13 +220,13 @@ update_stack(_, #wx_state{pid = undefined}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), true),
     wxListBox:clear(cauder_wx:find(?PROCESS_Stack_Control, wxListBox)),
     ok;
-update_stack(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
+update_stack(_, #wx_state{system = #system{pool = PMap}, pid = Pid}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Stack_Panel, wxPanel), true),
 
     StackControl = cauder_wx:find(?PROCESS_Stack_Control, wxListBox),
     wxListBox:freeze(StackControl),
     wxListBox:clear(StackControl),
-    #proc{stack = Stk} = maps:get(Pid, PMap),
+    #process{stack = Stk} = maps:get(Pid, PMap),
     Entries = lists:map(fun lists:flatten/1, lists:map(fun cauder_pp:stack_entry/1, Stk)),
     lists:foreach(fun(Entry) -> wxListBox:append(StackControl, Entry) end, Entries),
     wxListBox:thaw(StackControl).
@@ -271,7 +271,7 @@ update_log(_, #wx_state{pid = undefined}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
     wxTextCtrl:clear(cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl)),
     ok;
-update_log(_, #wx_state{system = #sys{log = LMap}, pid = Pid}) ->
+update_log(_, #wx_state{system = #system{log = LMap}, pid = Pid}) ->
     show_and_resize(cauder_wx:find(?PROCESS_Log_Panel, wxPanel), true),
 
     LogControl = cauder_wx:find(?PROCESS_Log_Control, wxTextCtrl),
@@ -328,23 +328,23 @@ update_history(_, #wx_state{pid = undefined}) ->
     show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
     wxTextCtrl:clear(cauder_wx:find(?PROCESS_History_Control, wxTextCtrl)),
     ok;
-update_history(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{history_mode = full}}) ->
+update_history(_, #wx_state{system = #system{pool = PMap}, pid = Pid, config = #config{history_mode = full}}) ->
     show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
 
     HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
     wxTextCtrl:freeze(HistoryControl),
     wxTextCtrl:clear(HistoryControl),
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+    #process{hist = Hist} = maps:get(Pid, PMap),
     Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist))),
     pp_marked_text(HistoryControl, Entries),
     wxTextCtrl:thaw(HistoryControl);
-update_history(_, #wx_state{system = #sys{procs = PMap}, pid = Pid, config = #config{history_mode = concurrent}}) ->
+update_history(_, #wx_state{system = #system{pool = PMap}, pid = Pid, config = #config{history_mode = concurrent}}) ->
     show_and_resize(cauder_wx:find(?PROCESS_History_Panel, wxPanel), true),
 
     HistoryControl = cauder_wx:find(?PROCESS_History_Control, wxTextCtrl),
     wxTextCtrl:freeze(HistoryControl),
     wxTextCtrl:clear(HistoryControl),
-    #proc{hist = Hist} = maps:get(Pid, PMap),
+    #process{hist = Hist} = maps:get(Pid, PMap),
     Hist1 = lists:filter(fun cauder_utils:is_conc_item/1, Hist),
     Entries = lists:flatten(lists:join("\n", lists:map(fun cauder_pp:history_entry/1, Hist1))),
     pp_marked_text(HistoryControl, Entries),

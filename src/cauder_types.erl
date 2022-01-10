@@ -65,7 +65,7 @@
 
 %% Record types
 
--type system() :: #sys{}.
+-type system() :: #system{}.
 
 -type trace_action_spawn() :: {spawn, {node(), proc_id()}, success | failure}.
 -type trace_action_send() :: {send, cauder_mailbox:uid(), proc_id()}.
@@ -112,7 +112,7 @@
 % Not empty
 -type process_map() :: #{proc_id() := process()}.
 -type proc_id() :: pos_integer().
--type process() :: #proc{}.
+-type process() :: #process{}.
 
 -type history() :: [history_entry()].
 -type history_entry() ::
@@ -136,7 +136,7 @@
 
 -type option() :: #opt{}.
 -type fwd_opts() :: #{atom() => term()}.
--type semantics() :: ?FWD_SEM | ?BWD_SEM.
+-type semantics() :: ?SEM_FWD | ?SEM_BWD.
 
 -type process_scheduler() :: ?SCHEDULER_RoundRobin | ?SCHEDULER_FCFS.
 -type message_scheduler() :: ?SCHEDULER_Random | ?SCHEDULER_Manual.

@@ -2,9 +2,19 @@
 
 %% API
 -export([uid/0]).
--export([new/0, add/2, delete/2, pid_get/2, pid_take/2, uid_member/2, uid_take/2, to_list/1]).
+-export([
+    new/0,
+    add/2,
+    remove/2,
+    pid_get/2,
+    pid_take/2,
+    is_element/2,
+    take/2,
+    uid_take_oldest/2,
+    to_list/1
+]).
 
--export_type([mailbox/0, uid/0, message/0]).
+-export_type([mailbox/0, message/0, uid/0]).
 
 -include("cauder.hrl").
 
@@ -40,51 +50,50 @@ new() -> #mailbox{}.
 %% the rear.
 
 -spec add(Message, Mailbox1) -> Mailbox2 when
-    Message :: message(),
-    Mailbox1 :: mailbox(),
-    Mailbox2 :: mailbox().
+    Message :: cauder_mailbox:message(),
+    Mailbox1 :: cauder_mailbox:mailbox(),
+    Mailbox2 :: cauder_mailbox:mailbox().
 
 add(#message{uid = Uid} = Message, #mailbox{index = Index0} = Mailbox) when is_map_key(Uid, Index0) ->
     error({existing_uid, Uid}, [Message, Mailbox]);
-add(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
-    Index1 = maps:put(Uid, {Src, Dest}, Index0),
+add(#message{uid = Uid, src = Src, dst = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+    Index = maps:put(Uid, {Src, Dest}, Index0),
 
     SrcMap0 = maps:get(Dest, DestMap0, maps:new()),
     Queue0 = maps:get(Src, SrcMap0, queue:new()),
 
-    Queue1 = queue:in(Message, Queue0),
+    Queue = queue:in(Message, Queue0),
+    SrcMap = maps:put(Src, Queue, SrcMap0),
+    DestMap = maps:put(Dest, SrcMap, DestMap0),
 
-    SrcMap1 = maps:put(Src, Queue1, SrcMap0),
-    DestMap1 = maps:put(Dest, SrcMap1, DestMap0),
-
-    #mailbox{index = Index1, map = DestMap1}.
+    #mailbox{index = Index, map = DestMap}.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns `Mailbox1', but with `Message' removed.
 
--spec delete(Message, Mailbox1) -> Mailbox2 when
-    Message :: message(),
-    Mailbox1 :: mailbox(),
-    Mailbox2 :: mailbox().
+-spec remove(Message, Mailbox1) -> Mailbox2 when
+    Message :: cauder_mailbox:message(),
+    Mailbox1 :: cauder_mailbox:mailbox(),
+    Mailbox2 :: cauder_mailbox:mailbox().
 
-delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
-    Index1 = maps:remove(Uid, Index0),
+remove(#message{uid = Uid, src = Src, dst = Dest} = Message, #mailbox{index = Index0, map = DestMap0}) ->
+    Index = maps:remove(Uid, Index0),
 
     SrcMap0 = maps:get(Dest, DestMap0),
     Queue0 = maps:get(Src, SrcMap0),
-    Queue1 = queue_delete(Message, Queue0),
-    SrcMap1 =
-        case queue:is_empty(Queue1) of
+    Queue = queue_delete(Message, Queue0),
+    SrcMap =
+        case queue:is_empty(Queue) of
             true -> maps:remove(Src, SrcMap0);
-            false -> maps:put(Src, Queue1, SrcMap0)
+            false -> maps:put(Src, Queue, SrcMap0)
         end,
-    DestMap1 =
-        case maps:size(SrcMap1) of
+    DestMap =
+        case maps:size(SrcMap) of
             0 -> maps:remove(Dest, DestMap0);
-            _ -> maps:put(Dest, SrcMap1, DestMap0)
+            _ -> maps:put(Dest, SrcMap, DestMap0)
         end,
 
-    #mailbox{index = Index1, map = DestMap1}.
+    #mailbox{index = Index, map = DestMap}.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the a list of messages queues from `Mailbox' whose destination
@@ -92,7 +101,7 @@ delete(#message{uid = Uid, src = Src, dest = Dest} = Message, #mailbox{index = I
 
 -spec pid_get(Destination, Mailbox) -> MessageQueues when
     Destination :: cauder_types:proc_id(),
-    Mailbox :: mailbox(),
+    Mailbox :: cauder_mailbox:mailbox(),
     MessageQueues :: [queue:queue(message())].
 
 pid_get(Dest, #mailbox{map = DestMap}) when is_map_key(Dest, DestMap) ->
@@ -118,15 +127,15 @@ pid_get(_, _) ->
 
 -spec pid_take(Destination, Mailbox) -> {Message, NewMailbox} | error when
     Destination :: cauder_types:proc_id(),
-    Mailbox :: mailbox(),
-    Message :: message(),
-    NewMailbox :: mailbox().
+    Mailbox :: cauder_mailbox:mailbox(),
+    Message :: cauder_mailbox:message(),
+    NewMailbox :: cauder_mailbox:mailbox().
 
 pid_take(Dest, #mailbox{map = DestMap} = Mailbox) when is_map_key(Dest, DestMap) ->
     SrcMap = maps:get(Dest, DestMap),
     [Queue | _] = maps:values(SrcMap),
-    {value, #message{uid = Uid, dest = Dest}} = queue:peek(Queue),
-    uid_take(Uid, Mailbox);
+    {value, #message{uid = Uid, dst = Dest}} = queue:peek(Queue),
+    take(Uid, Mailbox);
 pid_take(_, _) ->
     error.
 
@@ -134,11 +143,11 @@ pid_take(_, _) ->
 %% @doc Returns `true' if there is a message in `Mailbox' whose uid compares
 %% equal to `Uid', otherwise `false'.
 
--spec uid_member(Uid, Mailbox) -> boolean() when
+-spec is_element(Uid, Mailbox) -> boolean() when
     Uid :: uid(),
-    Mailbox :: mailbox().
+    Mailbox :: cauder_mailbox:mailbox().
 
-uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
+is_element(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches the mailbox `Mailbox' for a message whose uid compares equal to
@@ -146,13 +155,13 @@ uid_member(Uid, #mailbox{index = Index}) -> maps:is_key(Uid, Index).
 %% otherwise `error'. `NewMailbox' is a copy of `Mailbox' where `Message' has
 %% been removed.
 
--spec uid_take(Uid, Mailbox) -> {Message, NewMailbox} | error when
+-spec take(Uid, Mailbox) -> {Message, NewMailbox} | error when
     Uid :: uid(),
-    Mailbox :: mailbox(),
-    Message :: message(),
-    NewMailbox :: mailbox().
+    Mailbox :: cauder_mailbox:mailbox(),
+    Message :: cauder_mailbox:message(),
+    NewMailbox :: cauder_mailbox:mailbox().
 
-uid_take(Uid, #mailbox{index = Index0, map = DestMap0} = Mailbox0) ->
+take(Uid, #mailbox{index = Index0, map = DestMap0} = Mailbox0) ->
     case maps:find(Uid, Index0) of
         error ->
             error;
@@ -184,8 +193,8 @@ uid_take(Uid, #mailbox{index = Index0, map = DestMap0} = Mailbox0) ->
 %% `Mailbox'.
 
 -spec to_list(Mailbox) -> [Message] when
-    Mailbox :: mailbox(),
-    Message :: message().
+    Mailbox :: cauder_mailbox:mailbox(),
+    Message :: cauder_mailbox:message().
 
 to_list(#mailbox{map = DestMap}) ->
     maps:fold(

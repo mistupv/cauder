@@ -91,7 +91,7 @@ update_process(_, #wx_state{system = undefined}) ->
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) ->
+update_process(#wx_state{pid = OldPid}, #wx_state{system = #system{pool = PMap}}) ->
     Choice = cauder_wx:find(?ACTION_Process, wxChoice),
     wxChoice:freeze(Choice),
     wxChoice:enable(Choice),
@@ -100,7 +100,7 @@ update_process(#wx_state{pid = OldPid}, #wx_state{system = #sys{procs = PMap}}) 
         lists:foldl(
             fun(Proc, {Idx, Match}) ->
                 Label = cauder_pp:process(Proc, [{icon, true}, {node, true}, {pid, true}, {mfa, true}]),
-                Pid = Proc#proc.pid,
+                Pid = Proc#process.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of
                     OldPid -> {Idx + 1, Idx};
@@ -235,8 +235,8 @@ update_manual(_, #wx_state{system = System, pid = Pid}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Manual, wxPanel)),
 
     Options = lists:filter(fun(Opt) -> Opt#opt.pid =:= Pid end, cauder:eval_opts(System)),
-    CanFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    CanBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    CanFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?SEM_FWD end, Options),
+    CanBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?SEM_BWD end, Options),
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Manual_Steps, wxSpinCtrl), [{enable, CanFwd orelse CanBwd}]),
     wxButton:enable(cauder_wx:find(?ACTION_Manual_Forward_Button, wxSpinCtrl), [{enable, CanFwd}]),
@@ -349,8 +349,8 @@ update_automatic(_, #wx_state{system = System}) ->
     wxPanel:enable(cauder_wx:find(?ACTION_Automatic, wxPanel)),
 
     Options = cauder:eval_opts(System),
-    HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?FWD_SEM end, Options),
-    HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?BWD_SEM end, Options),
+    HasFwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?SEM_FWD end, Options),
+    HasBwd = lists:any(fun(Opt) -> Opt#opt.sem =:= ?SEM_BWD end, Options),
 
     wxSpinCtrl:enable(cauder_wx:find(?ACTION_Automatic_Steps, wxSpinCtrl), [{enable, HasFwd orelse HasBwd}]),
     wxButton:enable(cauder_wx:find(?ACTION_Automatic_Forward_Button, wxSpinCtrl), [{enable, HasFwd}]),
@@ -412,22 +412,22 @@ update_replay(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_replay(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
     ok;
-update_replay(_, #wx_state{system = #sys{log = Traces}, pid = Pid}) ->
-    case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Traces)) of
+update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
+    case lists:all(fun(Trace) -> Trace =:= [] end, maps:values(Log)) of
         true ->
             wxPanel:disable(cauder_wx:find(?ACTION_Replay, wxPanel)),
             ok;
         false ->
             wxPanel:enable(cauder_wx:find(?ACTION_Replay, wxPanel)),
 
-            CanReplaySteps = maps:get(Pid, Traces, []) =/= [],
+            CanReplaySteps = maps:get(Pid, Log, []) =/= [],
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Replay_Steps, wxSpinCtrl), [{enable, CanReplaySteps}]),
             wxButton:enable(cauder_wx:find(?ACTION_Replay_Steps_Button, wxButton), [{enable, CanReplaySteps}]),
 
             % TODO Improve to avoid unnecessary updates
 
-            TraceEntries = lists:flatten(maps:values(Traces)),
+            LogEntries = lists:flatten(maps:values(Log)),
             RuleMap =
                 lists:foldl(
                     fun(Entry, Map) ->
@@ -447,7 +447,7 @@ update_replay(_, #wx_state{system = #sys{log = Traces}, pid = Pid}) ->
                         end
                     end,
                     maps:new(),
-                    TraceEntries
+                    LogEntries
                 ),
 
             update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, maps:get(send, RuleMap, [])),
@@ -507,10 +507,10 @@ update_rollback(_, #wx_state{task = Action}) when Action =/= undefined ->
 update_rollback(_, #wx_state{system = undefined}) ->
     wxPanel:disable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
     ok;
-update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
+update_rollback(_, #wx_state{system = #system{pool = PMap}, pid = Pid}) ->
     CanRollBack =
         lists:any(
-            fun(#proc{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
+            fun(#process{hist = Hist}) -> lists:any(fun cauder_utils:is_conc_item/1, Hist) end,
             maps:values(PMap)
         ),
 
@@ -521,7 +521,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
         true ->
             wxPanel:enable(cauder_wx:find(?ACTION_Rollback, wxPanel)),
 
-            #proc{hist = Hist} = maps:get(Pid, PMap),
+            #process{hist = Hist} = maps:get(Pid, PMap),
             CanRollbackSteps = Hist =/= [],
 
             wxSpinCtrl:enable(cauder_wx:find(?ACTION_Rollback_Steps, wxSpinCtrl), [{enable, CanRollbackSteps}]),
@@ -529,7 +529,7 @@ update_rollback(_, #wx_state{system = #sys{procs = PMap}, pid = Pid}) ->
 
             % TODO Improve to avoid unnecessary updates
 
-            HistEntries = lists:flatmap(fun(Proc) -> Proc#proc.hist end, maps:values(PMap)),
+            HistEntries = lists:flatmap(fun(Proc) -> Proc#process.hist end, maps:values(PMap)),
             RuleMap = lists:foldl(
                 fun(Entry, Map) ->
                     try

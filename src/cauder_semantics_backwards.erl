@@ -26,7 +26,7 @@
     NewSystem :: cauder_types:system().
 
 step(Sys0, Pid) ->
-    #proc{pid = Pid, hist = [Entry | _]} = P0 = maps:get(Pid, Sys0#sys.procs),
+    #process{pid = Pid, hist = [Entry | _]} = P0 = maps:get(Pid, Sys0#system.pool),
     case Entry of
         {tau, _Bs, _Es, _Stk} ->
             rule_local(Sys0, P0);
@@ -40,9 +40,9 @@ step(Sys0, Pid) ->
             rule_spawn(Sys0, P0);
         {start, _Result, _Bs, _Es, _Stk, _Node} ->
             rule_start(Sys0, P0);
-        {send, _Bs, _Es, _Stk, #message{uid = Uid, dest = Dest}} ->
-            Sys1 = rule_deliver(Sys0, maps:get(Dest, Sys0#sys.procs), Uid),
-            rule_send(Sys1, maps:get(Pid, Sys1#sys.procs));
+        {send, _Bs, _Es, _Stk, #message{uid = Uid, dst = Dest}} ->
+            Sys1 = rule_deliver(Sys0, maps:get(Dest, Sys0#system.pool), Uid),
+            rule_send(Sys1, maps:get(Pid, Sys1#system.pool));
         {rec, _Bs, _Es, _Stk, _Msg, _QPos} ->
             rule_receive(Sys0, P0)
     end.
@@ -53,17 +53,17 @@ step(Sys0, Pid) ->
     NewSystem :: cauder_types:system().
 
 rule_local(
-    #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{tau, Bs0, Es0, Stk0} | Hist0]} = P0
+    #system{pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{tau, Bs0, Es0, Stk0} | Hist0]} = P0
 ) ->
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1}
+    Sys#system{
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_self(System, Process) -> NewSystem when
@@ -72,17 +72,17 @@ rule_local(
     NewSystem :: cauder_types:system().
 
 rule_self(
-    #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{self, Bs0, Es0, Stk0} | Hist0]} = P0
+    #system{pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{self, Bs0, Es0, Stk0} | Hist0]} = P0
 ) ->
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1}
+    Sys#system{
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_node(System, Process) -> NewSystem when
@@ -91,17 +91,17 @@ rule_self(
     NewSystem :: cauder_types:system().
 
 rule_node(
-    #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{node, Bs0, Es0, Stk0} | Hist0]} = P0
+    #system{pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{node, Bs0, Es0, Stk0} | Hist0]} = P0
 ) ->
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1}
+    Sys#system{
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_nodes(System, Process) -> NewSystem when
@@ -110,19 +110,19 @@ rule_node(
     NewSystem :: cauder_types:system().
 
 rule_nodes(
-    #sys{log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{nodes, Bs0, Es0, Stk0, Nodes0} | Hist0]} = P0
+    #system{log = Log0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{nodes, Bs0, Es0, Stk0, Nodes0} | Hist0]} = P0
 ) ->
     Log1 = log_prepend(Pid, Log0, {nodes, Nodes0}),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1},
+    Sys#system{
+        pool = PMap#{Pid := P1},
         log = Log1
     }.
 
@@ -132,8 +132,8 @@ rule_nodes(
     NewSystem :: cauder_types:system().
 
 rule_spawn(
-    #sys{log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0]} = P0
+    #system{log = Log0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0]} = P0
 ) ->
     Result =
         case cauder_utils:process_node(PMap, SpawnPid) of
@@ -142,19 +142,19 @@ rule_spawn(
         end,
     Log1 = log_prepend(Pid, Log0, {spawn, {SpawnNode, SpawnPid}, Result}),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
     %%    T = #x_trace{
     %%        type = ?RULE_SPAWN,
     %%        from = Pid,
     %%        to = SpawnPid
     %%    },
-    Sys#sys{
-        procs = maps:remove(SpawnPid, PMap#{Pid := P1}),
+    Sys#system{
+        pool = maps:remove(SpawnPid, PMap#{Pid := P1}),
         log = Log1
     }.
 
@@ -164,8 +164,8 @@ rule_spawn(
     NewSystem :: cauder_types:system().
 
 rule_start(
-    #sys{nodes = Nodes0, log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{start, Result, Bs0, Es0, Stk0, Node0} | Hist0]} = P0
+    #system{nodes = Nodes0, log = Log0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{start, Result, Bs0, Es0, Stk0, Node0} | Hist0]} = P0
 ) ->
     Nodes1 =
         case Result of
@@ -174,11 +174,11 @@ rule_start(
         end,
     Log1 = log_prepend(Pid, Log0, {start, Node0, Result}),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
     %%    T = #x_trace{
     %%        type = ?RULE_START,
@@ -186,9 +186,9 @@ rule_start(
     %%        res = Result,
     %%        node = Node0
     %%    },
-    Sys#sys{
+    Sys#system{
         nodes = Nodes1,
-        procs = PMap#{Pid := P1},
+        pool = PMap#{Pid := P1},
         log = Log1
     }.
 
@@ -198,17 +198,17 @@ rule_start(
     NewSystem :: cauder_types:system().
 
 rule_send(
-    #sys{mail = Mail0, log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{send, Bs0, Es0, Stk0, #message{dest = Dest, value = Val, uid = Uid} = Msg} | Hist0]} = P0
+    #system{mail = Mail0, log = Log0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{send, Bs0, Es0, Stk0, #message{dst = Dest, val = Val, uid = Uid} = Msg} | Hist0]} = P0
 ) ->
-    Mail1 = cauder_mailbox:delete(Msg, Mail0),
+    Mail1 = cauder_mailbox:remove(Msg, Mail0),
     Log1 = log_prepend(Pid, Log0, {send, Uid}),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0
+        expr = Es0
     },
     %%    T = #x_trace{
     %%        type = ?RULE_SEND,
@@ -217,9 +217,9 @@ rule_send(
     %%        val = Val,
     %%        time = Uid
     %%    },
-    Sys#sys{
+    Sys#system{
         mail = Mail1,
-        procs = PMap#{Pid := P1},
+        pool = PMap#{Pid := P1},
         log = Log1
     }.
 
@@ -230,19 +230,19 @@ rule_send(
     NewSystem :: cauder_types:system().
 
 rule_deliver(
-    #sys{mail = Mail0, procs = PMap} = Sys,
-    #proc{pid = Pid, mail = LocalMail0} = P0,
+    #system{mail = Mail0, pool = PMap} = Sys,
+    #process{pid = Pid, mail = LocalMail0} = P0,
     Uid
 ) ->
     {{Msg, _}, LocalMail1} = cauder_utils:queue_take(Uid, LocalMail0),
     Mail1 = cauder_mailbox:add(Msg, Mail0),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         mail = LocalMail1
     },
-    Sys#sys{
+    Sys#system{
         mail = Mail1,
-        procs = PMap#{Pid := P1}
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_receive(System, Process) -> NewSystem when
@@ -251,19 +251,19 @@ rule_deliver(
     NewSystem :: cauder_types:system().
 
 rule_receive(
-    #sys{log = Log0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = [{rec, Bs0, Es0, Stk0, Msg, _QPos} | Hist0], mail = LocalMail0} = P0
+    #system{log = Log0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = [{rec, Bs0, Es0, Stk0, Msg, _QPos} | Hist0], mail = LocalMail0} = P0
 ) ->
     % TODO Is QPos necessary??
-    #message{uid = Uid, value = Value, dest = Pid} = Msg,
+    #message{uid = Uid, val = Value, dst = Pid} = Msg,
     Log1 = log_prepend(Pid, Log0, {'receive', Uid}),
     LocalMail1 = queue:in_r(Msg, LocalMail0),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = Hist0,
         stack = Stk0,
         env = Bs0,
-        exprs = Es0,
+        expr = Es0,
         mail = LocalMail1
     },
     %%    T = #x_trace{
@@ -272,8 +272,8 @@ rule_receive(
     %%        val = Value,
     %%        time = Uid
     %%    },
-    Sys#sys{
-        procs = PMap#{Pid := P1},
+    Sys#system{
+        pool = PMap#{Pid := P1},
         log = Log1
     }.
 
@@ -293,10 +293,10 @@ log_prepend(Pid, Log, Action) ->
     System :: cauder_types:system(),
     Options :: [cauder_types:option()].
 
-options(#sys{procs = PMap} = Sys) ->
+options(#system{pool = PMap} = Sys) ->
     maps:fold(
         fun(Pid, Proc, Opts) ->
-            case process_option(Sys#sys{procs = maps:without([Pid], PMap)}, Proc) of
+            case process_option(Sys#system{pool = maps:without([Pid], PMap)}, Proc) of
                 ?NULL_OPT -> Opts;
                 Opt -> [Opt | Opts]
             end
@@ -318,24 +318,24 @@ options(#sys{procs = PMap} = Sys) ->
     Process :: cauder_types:process(),
     Option :: cauder_types:option() | ?NULL_OPT.
 
-process_option(_, #proc{hist = []}) ->
+process_option(_, #process{hist = []}) ->
     ?NULL_OPT;
-process_option(_, #proc{pid = Pid, hist = [{tau, _Bs, _Es, _Stk} | _]}) ->
+process_option(_, #process{pid = Pid, hist = [{tau, _Bs, _Es, _Stk} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEQ};
-process_option(_, #proc{pid = Pid, hist = [{self, _Bs, _Es, _Stk} | _]}) ->
+process_option(_, #process{pid = Pid, hist = [{self, _Bs, _Es, _Stk} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SELF};
-process_option(_, #proc{pid = Pid, hist = [{node, _Bs, _Es, _Stk} | _]}) ->
+process_option(_, #process{pid = Pid, hist = [{node, _Bs, _Es, _Stk} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODE};
-process_option(#sys{nodes = SysNodes}, #proc{node = Node, pid = Pid, hist = [{nodes, _Bs, _Es, _Stk, Nodes} | _]}) ->
+process_option(#system{nodes = SysNodes}, #process{node = Node, pid = Pid, hist = [{nodes, _Bs, _Es, _Stk, Nodes} | _]}) ->
     ProcViewOfNodes = SysNodes -- [Node],
     case ProcViewOfNodes =:= Nodes of
         true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_NODES};
         false -> ?NULL_OPT
     end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, _Node, SpawnPid} | _]}) ->
+process_option(#system{pool = PMap}, #process{pid = Pid, hist = [{spawn, _Bs, _Es, _Stk, _Node, SpawnPid} | _]}) ->
     try maps:get(SpawnPid, PMap) of
         Proc ->
-            #proc{hist = Hist} = Proc,
+            #process{hist = Hist} = Proc,
             case Hist of
                 [] -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN};
                 _ -> ?NULL_OPT
@@ -344,7 +344,7 @@ process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{spawn, _Bs, _Es, _S
         % this case covers the scenario of a failed spawn
         error:{badkey, _} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SPAWN}
     end;
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{start, success, _Bs, _Es, _Stk, Node} | _]}) ->
+process_option(#system{pool = PMap}, #process{pid = Pid, hist = [{start, success, _Bs, _Es, _Stk, Node} | _]}) ->
     ProcWithFailedStart = cauder_utils:find_process_with_failed_start(PMap, Node),
     ProcOnNode = cauder_utils:find_process_on_node(PMap, Node),
     ProcWithRead = cauder_utils:find_process_with_read(PMap, Node),
@@ -352,13 +352,16 @@ process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{start, success, _Bs
         {false, false, false} -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
         _ -> ?NULL_OPT
     end;
-process_option(_, #proc{pid = Pid, hist = [{start, failure, _Bs, _Es, _Stk, _Node} | _]}) ->
+process_option(_, #process{pid = Pid, hist = [{start, failure, _Bs, _Es, _Stk, _Node} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_START};
-process_option(#sys{procs = PMap}, #proc{pid = Pid, hist = [{send, _Bs, _Es, _Stk, #message{dest = Dest} = Msg} | _]}) ->
-    #proc{mail = LocalMail} = maps:get(Dest, PMap),
+process_option(#system{pool = PMap}, #process{
+    pid = Pid,
+    hist = [{send, _Bs, _Es, _Stk, #message{dst = Dest} = Msg} | _]
+}) ->
+    #process{mail = LocalMail} = maps:get(Dest, PMap),
     case queue:member(Msg, LocalMail) of
         true -> #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_SEND};
         false -> ?NULL_OPT
     end;
-process_option(_, #proc{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
+process_option(_, #process{pid = Pid, hist = [{rec, _Bs, _Es, _Stk, _Msg, _QPos} | _]}) ->
     #opt{sem = ?MODULE, pid = Pid, rule = ?RULE_RECEIVE}.

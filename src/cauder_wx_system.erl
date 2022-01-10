@@ -62,8 +62,8 @@ update(OldState, NewState) ->
     NewState :: cauder_wx:state().
 
 update_trace_process(
-    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid},
-    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}
+    #wx_state{system = #system{trace = Trace}, trace_pid = Pid},
+    #wx_state{system = #system{trace = Trace}, trace_pid = Pid}
 ) ->
     ok;
 update_trace_process(_, #wx_state{system = undefined}) ->
@@ -71,12 +71,12 @@ update_trace_process(_, #wx_state{system = undefined}) ->
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_trace_process(_, #wx_state{system = #sys{trace = Trace}}) when map_size(Trace) =:= 0 ->
+update_trace_process(_, #wx_state{system = #system{trace = Trace}}) when map_size(Trace) =:= 0 ->
     Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
     wxChoice:disable(Choice),
     wxChoice:clear(Choice),
     ok;
-update_trace_process(#wx_state{trace_pid = OldPid}, #wx_state{system = #sys{procs = PMap, trace = Trace}}) ->
+update_trace_process(#wx_state{trace_pid = OldPid}, #wx_state{system = #system{pool = PMap, trace = Trace}}) ->
     Choice = cauder_wx:find(?SYSTEM_Trace_Process, wxChoice),
     wxChoice:freeze(Choice),
     wxChoice:enable(Choice),
@@ -85,7 +85,7 @@ update_trace_process(#wx_state{trace_pid = OldPid}, #wx_state{system = #sys{proc
         lists:foldl(
             fun(Proc, {Idx, Match}) ->
                 Label = cauder_pp:process(Proc, [{icon, false}, {node, auto}, {pid, true}, {mfa, true}]),
-                Pid = Proc#proc.pid,
+                Pid = Proc#process.pid,
                 wxChoice:append(Choice, Label, Pid),
                 case Pid of
                     OldPid -> {Idx + 1, Idx};
@@ -184,11 +184,11 @@ create_nodes(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_nodes(#wx_state{system = #sys{nodes = Nodes}}, #wx_state{system = #sys{nodes = Nodes}}) ->
+update_nodes(#wx_state{system = #system{nodes = Nodes}}, #wx_state{system = #system{nodes = Nodes}}) ->
     ok;
 update_nodes(_, #wx_state{system = undefined}) ->
     ok;
-update_nodes(_, #wx_state{system = #sys{nodes = Nodes}}) ->
+update_nodes(_, #wx_state{system = #system{nodes = Nodes}}) ->
     wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_NodesAndMail, wxNotebook), ?SYSTEM_Notebook_Tab_Nodes),
     NodesArea = cauder_wx:find(?SYSTEM_Nodes, wxTextCtrl),
     wxTextCtrl:freeze(NodesArea),
@@ -205,25 +205,25 @@ update_nodes(_, #wx_state{system = #sys{nodes = Nodes}}) ->
     NewState :: cauder_wx:state().
 
 update_mail(
-    #wx_state{system = #sys{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}},
-    #wx_state{system = #sys{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}}
+    #wx_state{system = #system{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}},
+    #wx_state{system = #system{mail = Mail}, config = #config{mailbox = Show, mailbox_mode = all}}
 ) ->
     ok;
 update_mail(
-    #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}},
-    #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}
+    #wx_state{system = #system{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}},
+    #wx_state{system = #system{mail = Mail}, pid = Pid, config = #config{mailbox = Show, mailbox_mode = process}}
 ) ->
     ok;
 update_mail(_, #wx_state{system = undefined}) ->
     wxListCtrl:deleteAllItems(cauder_wx:find(?SYSTEM_Mail, wxListCtrl)),
     ok;
-update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mode = all}}) ->
+update_mail(_, #wx_state{system = #system{mail = Mail}, config = #config{mailbox_mode = all}}) ->
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
     wxListCtrl:freeze(MailArea),
     wxListCtrl:deleteAllItems(MailArea),
     lists:foldl(
-        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+        fun(#message{uid = Uid, val = Value, src = Src, dst = Dest}, Row) ->
             wxListCtrl:insertItem(MailArea, Row, ""),
             wxListCtrl:setItemFont(MailArea, Row, Font),
             wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
@@ -237,7 +237,7 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, config = #config{mailbox_mo
     ),
     wxListCtrl:thaw(MailArea),
     ok;
-update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config{mailbox_mode = process}}) ->
+update_mail(_, #wx_state{system = #system{mail = Mail}, pid = Pid, config = #config{mailbox_mode = process}}) ->
     Font = wxFont:new(9, ?wxTELETYPE, ?wxNORMAL, ?wxNORMAL),
     MailArea = cauder_wx:find(?SYSTEM_Mail, wxListCtrl),
     wxListCtrl:freeze(MailArea),
@@ -248,7 +248,7 @@ update_mail(_, #wx_state{system = #sys{mail = Mail}, pid = Pid, config = #config
         Pid ->
             Messages = lists:flatmap(fun queue:to_list/1, cauder_mailbox:pid_get(Pid, Mail)),
             lists:foldl(
-                fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+                fun(#message{uid = Uid, val = Value, src = Src, dst = Dest}, Row) ->
                     wxListCtrl:insertItem(MailArea, Row, ""),
                     wxListCtrl:setItemFont(MailArea, Row, Font),
                     wxListCtrl:setItem(MailArea, Row, 0, cauder_pp:to_string(Uid)),
@@ -313,8 +313,8 @@ create_trace(Parent) ->
     NewState :: cauder_wx:state().
 
 update_trace(
-    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid},
-    #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}
+    #wx_state{system = #system{trace = Trace}, trace_pid = Pid},
+    #wx_state{system = #system{trace = Trace}, trace_pid = Pid}
 ) ->
     ok;
 update_trace(_, #wx_state{system = undefined}) ->
@@ -323,7 +323,7 @@ update_trace(_, #wx_state{system = undefined}) ->
 update_trace(_, #wx_state{trace_pid = undefined}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_Trace_Content, wxListBox)),
     ok;
-update_trace(_, #wx_state{system = #sys{trace = Trace}, trace_pid = Pid}) ->
+update_trace(_, #wx_state{system = #system{trace = Trace}, trace_pid = Pid}) ->
     wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_Trace),
 
     TraceControl = cauder_wx:find(?SYSTEM_Trace_Content, wxListBox),
@@ -362,15 +362,15 @@ create_roll_log(Parent) ->
     OldState :: cauder_wx:state(),
     NewState :: cauder_wx:state().
 
-update_roll_log(#wx_state{system = #sys{roll = RollLog}}, #wx_state{system = #sys{roll = RollLog}}) ->
+update_roll_log(#wx_state{system = #system{roll = RollLog}}, #wx_state{system = #system{roll = RollLog}}) ->
     ok;
 update_roll_log(_, #wx_state{system = undefined}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
     ok;
-update_roll_log(_, #wx_state{system = #sys{roll = []}}) ->
+update_roll_log(_, #wx_state{system = #system{roll = []}}) ->
     wxListBox:clear(cauder_wx:find(?SYSTEM_RollLog, wxListBox)),
     ok;
-update_roll_log(_, #wx_state{system = #sys{roll = RollLog}}) ->
+update_roll_log(_, #wx_state{system = #system{roll = RollLog}}) ->
     wxNotebook:setSelection(cauder_wx:find(?SYSTEM_Notebook_TraceAndRollLog, wxNotebook), ?SYSTEM_Notebook_Tab_RollLog),
     RollLogArea = cauder_wx:find(?SYSTEM_RollLog, wxListBox),
     wxListBox:freeze(RollLogArea),
