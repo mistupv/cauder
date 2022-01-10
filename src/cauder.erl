@@ -625,8 +625,8 @@ handle_call({user, _}, _From, #state{task = {_, _, _}} = State) ->
 %%%=============================================================================
 
 handle_call({user, {set, {binding, Pid}, {Key, NewValue}}}, _From, #state{system = Sys0} = State) ->
-    #sys{procs = #{Pid := #proc{env = Bs} = P} = Ps} = Sys0,
-    Sys1 = Sys0#sys{procs = Ps#{Pid := P#proc{env = Bs#{Key => NewValue}}}},
+    #system{pool = #{Pid := #process{env = Bs} = P} = Ps} = Sys0,
+    Sys1 = Sys0#system{pool = Ps#{Pid := P#process{env = Bs#{Key => NewValue}}}},
     {reply, ok, State#state{system = Sys1}};
 %%%=============================================================================
 
@@ -785,14 +785,14 @@ task_start_manual({Node, {Mod, Fun, Args}}, undefined) ->
         timer:tc(
             fun() ->
                 Pid = cauder_utils:fresh_pid(),
-                Proc = #proc{
+                Proc = #process{
                     node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(Mod, Fun, Args)],
-                    entry_point = {Mod, Fun, length(Args)}
+                    expr = [cauder_syntax:remote_call(Mod, Fun, Args)],
+                    mfa = {Mod, Fun, length(Args)}
                 },
-                #sys{
-                    procs = #{Pid => Proc},
+                #system{
+                    pool = #{Pid => Proc},
                     nodes = [Node]
                 }
             end
@@ -814,14 +814,14 @@ task_start_replay(TracePath, undefined) ->
                     trace = Trace
                 } = cauder_utils:load_trace(TracePath),
                 AbstractArgs = cauder_syntax:expr_list(lists:map(fun erl_parse:abstract/1, Args)),
-                Proc = #proc{
+                Proc = #process{
                     node = Node,
                     pid = Pid,
-                    exprs = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
-                    entry_point = {Mod, Fun, length(Args)}
+                    expr = [cauder_syntax:remote_call(Mod, Fun, AbstractArgs)],
+                    mfa = {Mod, Fun, length(Args)}
                 },
-                #sys{
-                    procs = #{Pid => Proc},
+                #system{
+                    pool = #{Pid => Proc},
                     log = cauder_utils:trace_to_log(Trace),
                     race_sets = cauder_race_sets:race_sets(Trace),
                     nodes = [Node]
@@ -1065,7 +1065,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
     DoStep =
         fun(Step, {Sys0}) ->
             case Sem of
-                ?FWD_SEM ->
+                ?SEM_FWD ->
                     Opts = cauder_semantics_forwards:options(Sys0, normal),
                     case CanStep(Opts) of
                         false ->
@@ -1078,7 +1078,7 @@ step(Sem, Scheduler, Sys, Pid, Steps) ->
                                 throw:cancel -> throw({cancel, Sys0, Step})
                             end
                     end;
-                ?BWD_SEM ->
+                ?SEM_BWD ->
                     Opts = cauder_semantics_backwards:options(Sys0),
                     case CanStep(Opts) of
                         false ->
@@ -1109,8 +1109,8 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
         fun(Step, {Sys0, PidSet0, PidQueue0}) ->
             Opts =
                 case Sem of
-                    ?FWD_SEM -> cauder_semantics_forwards:options(Sys0, normal);
-                    ?BWD_SEM -> cauder_semantics_backwards:options(Sys0)
+                    ?SEM_FWD -> cauder_semantics_forwards:options(Sys0, normal);
+                    ?SEM_BWD -> cauder_semantics_backwards:options(Sys0)
                 end,
             PidSet1 = lists:foldl(fun(Opt, Set) -> sets:add_element(Opt#opt.pid, Set) end, sets:new(), Opts),
             case sets:is_empty(PidSet1) of
@@ -1141,8 +1141,8 @@ step_multiple(Sem, Scheduler, Sys, Steps) ->
                     {Pid, PidQueue1} = SchedFun(PidQueue0, Change),
                     Sys1 =
                         case Sem of
-                            ?FWD_SEM -> cauder_semantics_forwards:step(Sys0, Pid);
-                            ?BWD_SEM -> cauder_semantics_backwards:step(Sys0, Pid)
+                            ?SEM_FWD -> cauder_semantics_forwards:step(Sys0, Pid);
+                            ?SEM_BWD -> cauder_semantics_backwards:step(Sys0, Pid)
                         end,
                     {Sys1, PidSet1, PidQueue1}
             end
@@ -1176,7 +1176,7 @@ replay_steps(Sys0, Pid, Steps, StepsDone) ->
     System :: cauder_types:system(),
     NewSystem :: cauder_types:system().
 
-replay_full_log(Sys = #sys{log = Log}) ->
+replay_full_log(Sys = #system{log = Log}) ->
     case lists:search(fun({_Pid, Actions}) -> Actions /= [] end, maps:to_list(Log)) of
         false ->
             Sys;

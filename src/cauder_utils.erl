@@ -185,7 +185,7 @@ find_msg_receiver(LMap, Uid) ->
     Process :: cauder_types:process().
 
 find_process_with_spawn(PMap, Pid) ->
-    lists:search(fun(#proc{hist = H}) -> has_spawn(H, Pid) end, maps:values(PMap)).
+    lists:search(fun(#process{hist = H}) -> has_spawn(H, Pid) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that started the node with the given name, by
@@ -197,7 +197,7 @@ find_process_with_spawn(PMap, Pid) ->
     Process :: cauder_types:process().
 
 find_process_with_start(PMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_start(H, Node) end, maps:values(PMap)).
+    lists:search(fun(#process{hist = H}) -> has_start(H, Node) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that tried to start `Node' and failed because
@@ -209,7 +209,7 @@ find_process_with_start(PMap, Node) ->
     Process :: cauder_types:process().
 
 find_process_with_failed_start(ProcessMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_failed_start(H, Node) end, maps:values(ProcessMap)).
+    lists:search(fun(#process{hist = H}) -> has_failed_start(H, Node) end, maps:values(ProcessMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process(es) that will fail to spawn `Node' and failed because
@@ -249,7 +249,7 @@ find_process_with_future_reads(LMap, Node) ->
     Process :: cauder_types:process().
 
 find_process_on_node(ProcessMap, Node) ->
-    lists:search(fun(#proc{node = ProcNode}) -> ProcNode =:= Node end, maps:values(ProcessMap)).
+    lists:search(fun(#process{node = ProcNode}) -> ProcNode =:= Node end, maps:values(ProcessMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for process(es) that have performed a read of `Node' by means
@@ -261,7 +261,7 @@ find_process_on_node(ProcessMap, Node) ->
     Process :: cauder_types:process().
 
 find_process_with_read(ProcessMap, Node) ->
-    lists:search(fun(#proc{hist = H}) -> has_read(H, Node) end, maps:values(ProcessMap)).
+    lists:search(fun(#process{hist = H}) -> has_read(H, Node) end, maps:values(ProcessMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that sent the message with the given uid, by
@@ -273,7 +273,7 @@ find_process_with_read(ProcessMap, Node) ->
     Process :: cauder_types:process().
 
 find_process_with_send(PMap, Uid) ->
-    lists:search(fun(#proc{hist = H}) -> has_send(H, Uid) end, maps:values(PMap)).
+    lists:search(fun(#process{hist = H}) -> has_send(H, Uid) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that received the message with the given uid,
@@ -285,7 +285,7 @@ find_process_with_send(PMap, Uid) ->
     Process :: cauder_types:process().
 
 find_process_with_receive(PMap, Uid) ->
-    lists:search(fun(#proc{hist = H}) -> has_rec(H, Uid) end, maps:values(PMap)).
+    lists:search(fun(#process{hist = H}) -> has_rec(H, Uid) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Searches for the process that defined the variable with the given name,
@@ -297,7 +297,7 @@ find_process_with_receive(PMap, Uid) ->
     Process :: cauder_types:process().
 
 find_process_with_variable(PMap, Name) ->
-    lists:search(fun(#proc{env = Bs}) -> maps:is_key(Name, Bs) end, maps:values(PMap)).
+    lists:search(fun(#process{env = Bs}) -> maps:is_key(Name, Bs) end, maps:values(PMap)).
 
 %%------------------------------------------------------------------------------
 %% @doc Merges the given collections of bindings into a new one.
@@ -558,7 +558,7 @@ gen_log_start(Node) ->
     Message :: cauder_mailbox:message(cauder_types:proc_id()),
     Log :: [string()].
 
-gen_log_send(Pid, #message{uid = Uid, value = Value, dest = Dest}) ->
+gen_log_send(Pid, #message{uid = Uid, val = Value, dst = Dest}) ->
     [
         [
             "Roll send from ",
@@ -671,8 +671,8 @@ find_last_message_uid(Terms) ->
     Process :: cauder_types:process(),
     IsDead :: boolean().
 
-is_dead(#proc{exprs = [{value, _, _}], stack = []}) -> true;
-is_dead(#proc{}) -> false.
+is_dead(#process{expr = [{value, _, _}], stack = []}) -> true;
+is_dead(#process{}) -> false.
 
 %%------------------------------------------------------------------------------
 %% @doc Returns the process node
@@ -687,7 +687,7 @@ process_node(PMap, Pid) ->
         false ->
             false;
         Proc ->
-            #proc{node = Node} = Proc,
+            #process{node = Node} = Proc,
             Node
     end.
 

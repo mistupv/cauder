@@ -48,7 +48,7 @@ step(Sys, Pid) -> step(Sys, Pid, ?SCHEDULER_Random, normal).
     NewSystem :: cauder_types:system().
 
 step(Sys0, Pid, Sched, Mode) ->
-    #proc{node = Node, pid = Pid, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys0#sys.procs),
+    #process{node = Node, pid = Pid, stack = Stk0, env = Bs0, expr = Es0} = P0 = maps:get(Pid, Sys0#system.pool),
     Result = cauder_eval:seq(Bs0, Es0, Stk0),
     case Result#result.label of
         tau ->
@@ -56,8 +56,8 @@ step(Sys0, Pid, Sched, Mode) ->
         {send, Dest, _Val} ->
             Sys1 = rule_send(Sys0, P0, Result),
             % Instant-deliver
-            rule_deliver(Sys1, maps:get(Dest, Sys1#sys.procs));
-        {rec, VarBody, _Cs} when Result#result.exprs =:= [VarBody] ->
+            rule_deliver(Sys1, maps:get(Dest, Sys1#system.pool));
+        {rec, VarBody, _Cs} when Result#result.expr =:= [VarBody] ->
             rule_receive(Sys0, P0, Result, Sched, Mode);
         {self, _TmpVar} ->
             rule_self(Sys0, P0, Result);
@@ -97,9 +97,9 @@ step(Sys0, Pid, Sched, Mode) ->
     Mode :: normal | replay,
     Options :: [cauder_types:option()].
 
-options(#sys{procs = PMap} = Sys, Mode) ->
+options(#system{pool = PMap} = Sys, Mode) ->
     lists:foldl(
-        fun(#proc{exprs = E, pid = Pid} = P, Opts) ->
+        fun(#process{expr = E, pid = Pid} = P, Opts) ->
             case expression_option(E, P, Mode, Sys) of
                 ?NOT_EXP ->
                     Opts;
@@ -134,7 +134,7 @@ options(#sys{procs = PMap} = Sys, Mode) ->
 
 expression_option(E, P, Mode, Sys) when not is_list(E) ->
     expression_option([E], P, Mode, Sys);
-expression_option([E0 | Es0], #proc{env = Bs, stack = Stk} = Proc, Mode, Sys) ->
+expression_option([E0 | Es0], #process{env = Bs, stack = Stk} = Proc, Mode, Sys) ->
     case is_reducible(E0, Bs) of
         false ->
             case {Es0, Stk} of
@@ -197,14 +197,14 @@ check_reducibility([], _, _, _, 'case') ->
     ?RULE_SEQ;
 check_reducibility([], _, _, _, bif) ->
     ?RULE_SEQ;
-check_reducibility([], #proc{node = Node, pid = Pid}, _, #sys{log = Log, nodes = Nodes}, nodes) ->
+check_reducibility([], #process{node = Node, pid = Pid}, _, #system{log = Log, nodes = Nodes}, nodes) ->
     SNodes = Nodes -- [Node],
     case log_consume_nodes(Pid, Log) of
         {'_', Log} -> ?RULE_NODES;
         {SNodes, _} -> ?RULE_NODES;
         _ -> ?NOT_EXP
     end;
-check_reducibility([Cs], #proc{pid = Pid, env = Bs, mail = LocalMail}, _, #sys{log = Log}, {'receive', Mode}) ->
+check_reducibility([Cs], #process{pid = Pid, env = Bs, mail = LocalMail}, _, #system{log = Log}, {'receive', Mode}) ->
     IsMatch =
         case Mode of
             normal ->
@@ -212,7 +212,7 @@ check_reducibility([Cs], #proc{pid = Pid, env = Bs, mail = LocalMail}, _, #sys{l
                     {'_', Log} ->
                         cauder_eval:matchrec(Cs, Bs, LocalMail) =/= nomatch;
                     {Uid, _} ->
-                        cauder_eval:matchrec_uid(Cs, Bs, Uid, LocalMail) =/= nomatch
+                        cauder_eval:match_rec_uid(Cs, Bs, Uid, LocalMail) =/= nomatch
                 end;
             replay ->
                 case log_consume_receive(Pid, Log) of
@@ -229,7 +229,7 @@ check_reducibility([Cs], #proc{pid = Pid, env = Bs, mail = LocalMail}, _, #sys{l
         true -> ?RULE_RECEIVE;
         false -> ?NOT_EXP
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, spawn) ->
+check_reducibility([], #process{pid = Pid}, _, #system{log = Log, nodes = Nodes}, spawn) ->
     case log_consume_spawn(Pid, Log) of
         {{{'_', _}, _}, Log} ->
             ?RULE_START;
@@ -239,7 +239,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, spaw
                 {_, _} -> ?RULE_START
             end
     end;
-check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, start) ->
+check_reducibility([], #process{pid = Pid}, _, #system{log = Log, nodes = Nodes}, start) ->
     case log_consume_start(Pid, Log) of
         {{'_', _}, Log} ->
             ?RULE_START;
@@ -255,7 +255,7 @@ check_reducibility([], #proc{pid = Pid}, _, #sys{log = Log, nodes = Nodes}, star
                 _ -> ?RULE_START
             end
     end;
-check_reducibility([H | T], #proc{env = Bs} = P, Mode, Sys, ExprType) ->
+check_reducibility([H | T], #process{env = Bs} = P, Mode, Sys, ExprType) ->
     case is_reducible(H, Bs) of
         true -> expression_option(H, P, Mode, Sys);
         false -> check_reducibility(T, P, Mode, Sys, ExprType)
@@ -359,18 +359,18 @@ admissible(Actions, LocalMail) ->
     NewSystem :: cauder_types:system().
 
 rule_local(
-    #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1}
+    #system{pool = PMap} = Sys,
+    #process{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1}
 ) ->
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{tau, Bs0, Es0, Stk0} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = Es1
+        expr = Es1
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1}
+    Sys#system{
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_send(System, Process, Result) -> NewSystem when
@@ -380,29 +380,29 @@ rule_local(
     NewSystem :: cauder_types:system().
 
 rule_send(
-    #sys{mail = Mail0, log = Log0, trace = Trace0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {send, Dest, Val}}
+    #system{mail = Mail0, log = Log0, trace = Trace0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = {send, Dest, Val}}
 ) ->
     {Uid, Log1} = log_consume_send(Pid, Log0),
 
     M = #message{
         uid = Uid,
         src = Pid,
-        dest = Dest,
-        value = Val
+        dst = Dest,
+        val = Val
     },
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{send, Bs0, Es0, Stk0, M} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = Es1
+        expr = Es1
     },
     Trace1 = add_to_trace(Pid, {send, Uid, Dest}, Trace0),
 
-    Sys#sys{
+    Sys#system{
         mail = cauder_mailbox:add(M, Mail0),
-        procs = PMap#{Pid := P1},
+        pool = PMap#{Pid := P1},
         log = Log1,
         trace = Trace1
     }.
@@ -413,8 +413,8 @@ rule_send(
     NewSystem :: cauder_types:system().
 
 rule_deliver(
-    #sys{mail = Mail0, log = Log, trace = Trace0, procs = PMap} = Sys,
-    #proc{pid = Pid, mail = LocalMail} = P0
+    #system{mail = Mail0, log = Log, trace = Trace0, pool = PMap} = Sys,
+    #process{pid = Pid, mail = LocalMail} = P0
 ) ->
     Delivered =
         case maps:get(Pid, Log, []) of
@@ -423,21 +423,21 @@ rule_deliver(
             Actions ->
                 case admissible(Actions, LocalMail) of
                     false -> false;
-                    Uid -> cauder_mailbox:uid_take(Uid, Mail0)
+                    Uid -> cauder_mailbox:take(Uid, Mail0)
                 end
         end,
     case Delivered of
         false ->
             Sys;
         {Message, Mail1} ->
-            P1 = P0#proc{
+            P1 = P0#process{
                 mail = queue:in(Message, LocalMail)
             },
             Trace1 = add_to_trace(Pid, {deliver, Message#message.uid}, Trace0),
 
-            Sys#sys{
+            Sys#system{
                 mail = Mail1,
-                procs = PMap#{Pid := P1},
+                pool = PMap#{Pid := P1},
                 trace = Trace1
             }
     end.
@@ -451,13 +451,13 @@ rule_deliver(
     NewSystem :: cauder_types:system().
 
 rule_receive(
-    #sys{log = Log0, trace = Trace0} = Sys0,
-    #proc{pid = Pid, mail = LocalMail0},
-    #result{env = Bs1, stack = Stk1, exprs = [TmpVar], label = {rec, TmpVar, Cs}},
+    #system{log = Log0, trace = Trace0} = Sys0,
+    #process{pid = Pid, mail = LocalMail0},
+    #result{env = Bs1, stack = Stk1, expr = [TmpVar], label = {rec, TmpVar, Cs}},
     Sched,
     Mode
 ) ->
-    {{Es2, Bs2, Msg, LocalMail1, QPos}, #sys{procs = PMap} = Sys1} =
+    {{Es2, Bs2, Msg, LocalMail1, QPos}, #system{pool = PMap} = Sys1} =
         case Mode of
             normal ->
                 case log_consume_receive(Pid, Log0) of
@@ -467,7 +467,7 @@ rule_receive(
                             Match -> {Match, Sys0}
                         end;
                     {Uid, NewLog} ->
-                        case cauder_eval:matchrec_race(Cs, Bs1, Uid, Pid, Sys0#sys{log = NewLog}) of
+                        case cauder_eval:matchrec_race(Cs, Bs1, Uid, Pid, Sys0#system{log = NewLog}) of
                             nomatch -> throw(nomatch);
                             {Match, NewSys} -> {Match, NewSys}
                         end
@@ -481,24 +481,24 @@ rule_receive(
                     {Uid, NewLog} ->
                         case cauder_eval:matchrec(Cs, Bs1, LocalMail0) of
                             nomatch -> throw(nomatch);
-                            {_, _, #message{uid = Uid}, _, _} = Match -> {Match, Sys0#sys{log = NewLog}}
+                            {_, _, #message{uid = Uid}, _, _} = Match -> {Match, Sys0#system{log = NewLog}}
                         end
                 end
         end,
 
-    #proc{hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0 = maps:get(Pid, Sys1#sys.procs),
+    #process{hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0 = maps:get(Pid, Sys1#system.pool),
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{rec, Bs0, Es0, Stk0, Msg, QPos} | Hist0],
         stack = Stk1,
         env = cauder_utils:merge_bindings(Bs1, Bs2),
-        exprs = Es2,
+        expr = Es2,
         mail = LocalMail1
     },
     Trace1 = add_to_trace(Pid, {'receive', Msg#message.uid}, Trace0),
 
-    Sys1#sys{
-        procs = PMap#{Pid := P1},
+    Sys1#system{
+        pool = PMap#{Pid := P1},
         trace = Trace1
     }.
 
@@ -509,18 +509,18 @@ rule_receive(
     NewSystem :: cauder_types:system().
 
 rule_self(
-    #sys{procs = PMap} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {self, VarPid}}
+    #system{pool = PMap} = Sys,
+    #process{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = {self, VarPid}}
 ) ->
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{self, Bs0, Es0, Stk0} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = cauder_syntax:replace_variable(Es1, VarPid, Pid)
+        expr = cauder_syntax:replace_variable(Es1, VarPid, Pid)
     },
-    Sys#sys{
-        procs = PMap#{Pid := P1}
+    Sys#system{
+        pool = PMap#{Pid := P1}
     }.
 
 -spec rule_node(System, Process, Result) -> NewSystem when
@@ -530,18 +530,18 @@ rule_self(
     NewSystem :: cauder_types:system().
 
 rule_node(
-    #sys{procs = PMap} = Sys,
-    #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {node, VarNode}}
+    #system{pool = PMap} = Sys,
+    #process{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = {node, VarNode}}
 ) ->
-    P0 = P0#proc{
+    P0 = P0#process{
         hist = [{node, Bs0, Es0, Stk0} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = cauder_syntax:replace_variable(Es1, VarNode, Node)
+        expr = cauder_syntax:replace_variable(Es1, VarNode, Node)
     },
-    Sys#sys{
-        procs = PMap#{Pid => P0}
+    Sys#system{
+        pool = PMap#{Pid => P0}
     }.
 
 -spec rule_nodes(System, Process, Result) -> NewSystem when
@@ -551,9 +551,9 @@ rule_node(
     NewSystem :: cauder_types:system().
 
 rule_nodes(
-    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
-    #proc{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {nodes, VarNodes}}
+    #system{nodes = Nodes, log = Log0, trace = Trace0, pool = PMap} = Sys,
+    #process{node = Node, pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = {nodes, VarNodes}}
 ) ->
     {Nodes, Log1} =
         case log_consume_nodes(Pid, Log0) of
@@ -563,16 +563,16 @@ rule_nodes(
 
     OtherNodes = Nodes -- [Node],
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{nodes, Bs0, Es0, Stk0, OtherNodes} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
+        expr = cauder_syntax:replace_variable(Es1, VarNodes, OtherNodes)
     },
     Trace1 = add_to_trace(Pid, {nodes, OtherNodes}, Trace0),
 
-    Sys#sys{
-        procs = PMap#{Pid := P1},
+    Sys#system{
+        pool = PMap#{Pid := P1},
         log = Log1,
         trace = Trace1
     }.
@@ -584,9 +584,9 @@ rule_nodes(
     NewSystem :: cauder_types:system().
 
 rule_spawn(
-    #sys{procs = PMap0, log = Log0, trace = Trace0, nodes = Nodes} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = Label}
+    #system{pool = PMap0, log = Log0, trace = Trace0, nodes = Nodes} = Sys,
+    #process{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = Label}
 ) ->
     VarPid = element(2, Label),
     Node = element(3, Label),
@@ -607,29 +607,29 @@ rule_spawn(
                 {{{SNode, SPid}, SResult}, NewLog}
         end,
 
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{spawn, Bs0, Es0, Stk0, SpawnNode, SpawnPid} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = cauder_syntax:replace_variable(Es1, VarPid, SpawnPid)
+        expr = cauder_syntax:replace_variable(Es1, VarPid, SpawnPid)
     },
     P2 =
         case Label of
             {spawn, VarPid, Node, {value, Line, Fun} = FunLiteral} ->
                 {env, [{{M, F}, _, _}]} = erlang:fun_info(Fun, env),
                 {arity, A} = erlang:fun_info(Fun, arity),
-                #proc{
+                #process{
                     node = SpawnNode,
                     pid = SpawnPid,
-                    exprs = [{apply_fun, Line, FunLiteral, []}],
-                    entry_point = {M, F, A}
+                    expr = [{apply_fun, Line, FunLiteral, []}],
+                    mfa = {M, F, A}
                 };
             {spawn, VarPid, Node, M, F, As} ->
-                #proc{
+                #process{
                     node = SpawnNode,
                     pid = SpawnPid,
-                    exprs = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
-                    entry_point = {M, F, length(As)}
+                    expr = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))],
+                    mfa = {M, F, length(As)}
                 }
         end,
     PMap1 =
@@ -639,8 +639,8 @@ rule_spawn(
         end,
     Trace1 = add_to_trace(Pid, {spawn, {SpawnNode, SpawnPid}, SpawnResult}, Trace0),
 
-    Sys#sys{
-        procs = PMap1,
+    Sys#system{
+        pool = PMap1,
         log = Log1,
         trace = Trace1
     }.
@@ -652,9 +652,9 @@ rule_spawn(
     NewSystem :: cauder_types:system().
 
 rule_start(
-    #sys{nodes = Nodes, log = Log0, trace = Trace0, procs = PMap} = Sys,
-    #proc{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, exprs = Es0} = P0,
-    #result{env = Bs1, exprs = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
+    #system{nodes = Nodes, log = Log0, trace = Trace0, pool = PMap} = Sys,
+    #process{pid = Pid, hist = Hist0, stack = Stk0, env = Bs0, expr = Es0} = P0,
+    #result{env = Bs1, expr = Es1, stack = Stk1, label = {start, VarNode, Host, Name}}
 ) ->
     Node = list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)),
 
@@ -678,16 +678,16 @@ rule_start(
             success -> {ok, StartNode};
             failure -> {error, {already_running, StartNode}}
         end,
-    P1 = P0#proc{
+    P1 = P0#process{
         hist = [{start, StartResult, Bs0, Es0, Stk0, StartNode} | Hist0],
         stack = Stk1,
         env = Bs1,
-        exprs = cauder_syntax:replace_variable(Es1, VarNode, Return)
+        expr = cauder_syntax:replace_variable(Es1, VarNode, Return)
     },
     Trace1 = add_to_trace(Pid, {start, StartNode, StartResult}, Trace0),
 
-    Sys#sys{
-        procs = PMap#{Pid := P1},
+    Sys#system{
+        pool = PMap#{Pid := P1},
         nodes = [StartNode | Nodes],
         log = Log1,
         trace = Trace1

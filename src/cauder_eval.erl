@@ -2,7 +2,7 @@
 
 %% API
 -export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([matchrec/3, matchrec_race/5, matchrec_uid/4]).
+-export([matchrec/3, matchrec_race/5, match_rec_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder.hrl").
@@ -29,11 +29,11 @@
 eval_list(Bs, [E | Es], Stk) ->
     case is_reducible(E, Bs) of
         true ->
-            R = #result{exprs = Es1} = expr(Bs, E, Stk),
-            R#result{exprs = Es1 ++ Es};
+            R = #result{expr = Es1} = expr(Bs, E, Stk),
+            R#result{expr = Es1 ++ Es};
         false ->
-            R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
-            R#result{exprs = [E | Es1]}
+            R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+            R#result{expr = [E | Es1]}
     end.
 
 %%------------------------------------------------------------------------------
@@ -65,24 +65,24 @@ seq(Bs, [E | Es], Stk) ->
                         % Call entry
                         [{{_M, _F, _A}, Bs1, Es1, Var} | Stk1] ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
-                            #result{env = Bs1, exprs = Es2, stack = Stk1};
+                            #result{env = Bs1, expr = Es2, stack = Stk1};
                         % Block entry
                         [{_Type, Es1, Var} | Stk1] ->
                             Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
-                            #result{env = Bs, exprs = Es2, stack = Stk1}
+                            #result{env = Bs, expr = Es2, stack = Stk1}
                     end;
                 _ ->
-                    #result{env = Bs, exprs = Es, stack = Stk}
+                    #result{env = Bs, expr = Es, stack = Stk}
             end;
         true ->
-            #result{env = Bs1, exprs = Es1, stack = Stk1, label = L} = expr(Bs, E, Stk),
+            #result{env = Bs1, expr = Es1, stack = Stk1, label = L} = expr(Bs, E, Stk),
             case Stk1 of
                 [{{M, F, A}, Bs2, Es2, Var} | Stk] ->
-                    #result{env = Bs2, exprs = Es2, stack = [{{M, F, A}, Bs1, Es1 ++ Es, Var} | Stk], label = L};
+                    #result{env = Bs2, expr = Es2, stack = [{{M, F, A}, Bs1, Es1 ++ Es, Var} | Stk], label = L};
                 [{Type, Es2, Var} | Stk] ->
-                    #result{env = Bs1, exprs = Es2, stack = [{Type, Es1 ++ Es, Var} | Stk], label = L};
+                    #result{env = Bs1, expr = Es2, stack = [{Type, Es1 ++ Es, Var} | Stk], label = L};
                 _ ->
-                    #result{env = Bs1, exprs = Es1 ++ Es, stack = Stk1, label = L}
+                    #result{env = Bs1, expr = Es1 ++ Es, stack = Stk1, label = L}
             end
     end.
 
@@ -98,42 +98,42 @@ seq(Bs, [E | Es], Stk) ->
 
 expr(Bs, {var, Line, Name}, Stk) ->
     Value = maps:get(Name, Bs),
-    #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk};
+    #result{env = Bs, expr = [{value, Line, Value}], stack = Stk};
 expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
     case is_reducible(H0, Bs) of
         true ->
-            R = #result{exprs = [H]} = expr(Bs, H0, Stk),
+            R = #result{expr = [H]} = expr(Bs, H0, Stk),
             case is_value(H) andalso is_value(T0) of
-                true -> R#result{exprs = [{value, Line, [concrete(H) | concrete(T0)]}]};
-                false -> R#result{exprs = [setelement(3, E, H)]}
+                true -> R#result{expr = [{value, Line, [concrete(H) | concrete(T0)]}]};
+                false -> R#result{expr = [setelement(3, E, H)]}
             end;
         false ->
             case is_reducible(T0, Bs) of
                 true ->
-                    R = #result{exprs = [T]} = expr(Bs, T0, Stk),
+                    R = #result{expr = [T]} = expr(Bs, T0, Stk),
                     case is_value(H0) andalso is_value(T) of
-                        true -> R#result{exprs = [{value, Line, [concrete(H0) | concrete(T)]}]};
-                        false -> R#result{exprs = [setelement(4, E, T)]}
+                        true -> R#result{expr = [{value, Line, [concrete(H0) | concrete(T)]}]};
+                        false -> R#result{expr = [setelement(4, E, T)]}
                     end;
                 false ->
-                    #result{env = Bs, exprs = [{value, Line, [concrete(H0) | concrete(T0)]}], stack = Stk}
+                    #result{env = Bs, expr = [{value, Line, [concrete(H0) | concrete(T0)]}], stack = Stk}
             end
     end;
 expr(Bs, E = {tuple, Line, Es0}, Stk) ->
-    R = #result{exprs = Es} = eval_list(Bs, Es0, Stk),
+    R = #result{expr = Es} = eval_list(Bs, Es0, Stk),
     case is_value(Es) of
         true ->
             Tuple = list_to_tuple(lists:map(fun concrete/1, Es)),
-            #result{env = Bs, exprs = [{value, Line, Tuple}], stack = Stk};
+            #result{env = Bs, expr = [{value, Line, Tuple}], stack = Stk};
         false ->
-            R#result{exprs = [setelement(3, E, Es)]}
+            R#result{expr = [setelement(3, E, Es)]}
     end;
 expr(Bs, {'if', Line, Cs}, Stk0) ->
     case match_if(Bs, Cs) of
         {match, Body} ->
             Var = cauder_utils:temp_variable(Line),
             Stk = [{'if', Body, Var} | Stk0],
-            #result{env = Bs, exprs = [Var], stack = Stk};
+            #result{env = Bs, expr = [Var], stack = Stk};
         nomatch ->
             error(if_clause)
     end;
@@ -146,7 +146,7 @@ expr(Bs0, E = {'case', Line, A, Cs}, Stk0) ->
                 {match, Bs, Body} ->
                     Var = cauder_utils:temp_variable(Line),
                     Stk = [{'case', Body, Var} | Stk0],
-                    #result{env = Bs, exprs = [Var], stack = Stk};
+                    #result{env = Bs, expr = [Var], stack = Stk};
                 nomatch ->
                     error({case_clause, concrete(A)})
             end
@@ -157,7 +157,7 @@ expr(Bs, {'receive', Line, Cs}, Stk0) ->
     Var = cauder_utils:temp_variable(Line),
     VarBody = cauder_utils:temp_variable(Line),
     Stk = [{'receive', [VarBody], Var} | Stk0],
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {rec, VarBody, Cs}};
+    #result{env = Bs, expr = [Var], stack = Stk, label = {rec, VarBody, Cs}};
 % TODO Support fun() as entry point argument?
 % TODO Handle calls to interpreted fun() from uninterpreted module
 expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
@@ -175,24 +175,24 @@ expr(Bs, {'make_fun', Line, Name, Cs}, Stk0) ->
             % TODO Support more arities
             _ -> error({argument_limit, Arity})
         end,
-    #result{env = Bs, exprs = [{value, Line, Fun}], stack = Stk0};
+    #result{env = Bs, expr = [{value, Line, Fun}], stack = Stk0};
 expr(Bs, E = {bif, Line, M, F, As}, Stk) ->
     case is_reducible(As, Bs) of
         true ->
             eval_and_update({Bs, As, Stk}, {5, E});
         false ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
-            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr(Bs, {self, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {self, Var}};
+    #result{env = Bs, expr = [Var], stack = Stk, label = {self, Var}};
 expr(Bs, {node, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {node, Var}};
+    #result{env = Bs, expr = [Var], stack = Stk, label = {node, Var}};
 expr(Bs, {nodes, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
-    #result{env = Bs, exprs = [Var], stack = Stk, label = {nodes, Var}};
+    #result{env = Bs, expr = [Var], stack = Stk, label = {nodes, Var}};
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     case is_reducible(Fun, Bs) of
         true ->
@@ -200,7 +200,7 @@ expr(Bs, E = {spawn, Line, Fun}, Stk) ->
         false ->
             Var = cauder_utils:temp_variable(Line),
             Label = {spawn, Var, Fun},
-            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
     case is_reducible(N, Bs) of
@@ -213,7 +213,7 @@ expr(Bs, E = {spawn, Line, N, Fun}, Stk) ->
                 false ->
                     Var = cauder_utils:temp_variable(Line),
                     Label = {spawn, Var, concrete(N), Fun},
-                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
 expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
@@ -231,7 +231,7 @@ expr(Bs, E = {spawn, Line, M, F, As}, Stk) ->
                         false ->
                             Var = cauder_utils:temp_variable(Line),
                             Label = {spawn, Var, concrete(M), concrete(F), concrete(As)},
-                            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                     end
             end
     end;
@@ -254,7 +254,7 @@ expr(Bs, E = {spawn, Line, N, M, F, As}, Stk) ->
                                 false ->
                                     Var = cauder_utils:temp_variable(Line),
                                     Label = {spawn, Var, concrete(N), concrete(M), concrete(F), concrete(As)},
-                                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                             end
                     end
             end
@@ -266,7 +266,7 @@ expr(Bs, E = {start, Line, N}, Stk) ->
         false ->
             Var = cauder_utils:temp_variable(Line),
             Label = {start, Var, concrete(N)},
-            #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(Bs, E = {start, Line, H, N}, Stk) ->
     case is_reducible(H, Bs) of
@@ -279,7 +279,7 @@ expr(Bs, E = {start, Line, H, N}, Stk) ->
                 false ->
                     Var = cauder_utils:temp_variable(Line),
                     Label = {start, Var, concrete(H), concrete(N)},
-                    #result{env = Bs, exprs = [Var], stack = Stk, label = Label}
+                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
 expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op' ->
@@ -292,7 +292,7 @@ expr(Bs, E = {Send, _, L, R}, Stk) when Send =:= 'send' orelse Send =:= 'send_op
                     eval_and_update({Bs, R, Stk}, {4, E});
                 false ->
                     Label = {send, concrete(L), concrete(R)},
-                    #result{env = Bs, exprs = [R], stack = Stk, label = Label}
+                    #result{env = Bs, expr = [R], stack = Stk, label = Label}
             end
     end;
 expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
@@ -306,7 +306,7 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
             Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
-            #result{env = Bs0, exprs = [Var], stack = Stk}
+            #result{env = Bs0, expr = [Var], stack = Stk}
     end;
 expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
     case is_reducible(As, Bs0) of
@@ -347,7 +347,7 @@ expr(Bs0, E = {apply_fun, Line, Fun, As}, Stk0) ->
                     {match, Bs2, Body} = match_fun(Cs, As),
                     Var = cauder_utils:temp_variable(Line),
                     Stk = [{{M, F, A}, cauder_utils:merge_bindings(Bs1, Bs2), Body, Var} | Stk0],
-                    #result{env = Bs0, exprs = [Var], stack = Stk}
+                    #result{env = Bs0, expr = [Var], stack = Stk}
             end
     end;
 expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
@@ -360,7 +360,7 @@ expr(Bs0, E = {match, _, Lhs, Rhs}, Stk) ->
                     eval_and_update({Bs0, Rhs, Stk}, {4, E});
                 false ->
                     case match(Bs0, [Lhs], [Rhs]) of
-                        {match, Bs} -> #result{env = Bs, exprs = [Rhs], stack = Stk};
+                        {match, Bs} -> #result{env = Bs, expr = [Rhs], stack = Stk};
                         nomatch -> error({badmatch, concrete(Rhs)})
                     end
             end
@@ -371,7 +371,7 @@ expr(Bs, E = {op, Line, Op, As}, Stk) ->
             eval_and_update({Bs, As, Stk}, {4, E});
         false ->
             Value = apply(erlang, Op, lists:map(fun concrete/1, As)),
-            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
     case is_reducible(Lhs, Bs) of
@@ -380,14 +380,14 @@ expr(Bs, E = {'andalso', Line, Lhs, Rhs}, Stk) ->
         false ->
             case Lhs of
                 {value, _, false} ->
-                    #result{env = Bs, exprs = [Lhs], stack = Stk};
+                    #result{env = Bs, expr = [Lhs], stack = Stk};
                 {value, _, true} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
                             eval_and_update({Bs, Rhs, Stk}, {4, E});
                         false ->
                             Value = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
-                            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+                            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
     end;
@@ -398,14 +398,14 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
         false ->
             case Lhs of
                 {value, _, true} ->
-                    #result{env = Bs, exprs = [Lhs], stack = Stk};
+                    #result{env = Bs, expr = [Lhs], stack = Stk};
                 {value, _, false} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
                             eval_and_update({Bs, Rhs, Stk}, {4, E});
                         false ->
                             Value = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
-                            #result{env = Bs, exprs = [{value, Line, Value}], stack = Stk}
+                            #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
     end.
@@ -423,10 +423,10 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
             {match, Bs, Body} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
             Stk = [{{M, F, A}, Bs, Body, Var} | Stk0],
-            #result{env = Bs0, exprs = [Var], stack = Stk};
+            #result{env = Bs0, expr = [Var], stack = Stk};
         error ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
-            #result{env = Bs0, exprs = [{value, Line, Value}], stack = Stk0}
+            #result{env = Bs0, expr = [{value, Line, Value}], stack = Stk0}
     end.
 
 %%%=============================================================================
@@ -523,7 +523,7 @@ when
     QPos :: pos_integer(),
     NewSystem :: cauder_types:system().
 
-matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = Sys0) ->
+matchrec_race(Cs, Bs, InitialUid, Pid, #system{log = Log0, race_sets = RaceSets} = Sys0) ->
     RaceSet = maps:get(InitialUid, maps:get(Pid, RaceSets)),
     SendUidLog = lists:foldl(
         fun(Actions, Set0) ->
@@ -546,7 +546,7 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
         % TODO Use suspend time
         {_SuspendTime, {resume, InitialUid}} ->
             cauder:resume_task(),
-            #proc{mail = LocalMail} = maps:get(Pid, Sys0#sys.procs),
+            #process{mail = LocalMail} = maps:get(Pid, Sys0#system.pool),
             case matchrec(Cs, Bs, LocalMail) of
                 nomatch -> nomatch;
                 Match -> {Match, Sys0}
@@ -556,12 +556,12 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
 
             % Add back the 'receive' action for the initial uid
             OldRecAction = {'receive', InitialUid},
-            Sys1 = Sys0#sys{
+            Sys1 = Sys0#system{
                 log = maps:update_with(
                     Pid,
                     fun(Actions) -> [OldRecAction | Actions] end,
                     [OldRecAction],
-                    Sys0#sys.log
+                    Sys0#system.log
                 )
             },
 
@@ -570,11 +570,11 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
 
             % Add temporary 'receive' action to log to force deliver of new message
             NewRecAction = {'receive', ChosenUid},
-            Sys3 = Sys2#sys{
+            Sys3 = Sys2#system{
                 log = maps:update_with(
                     Pid,
                     fun(Actions) -> [NewRecAction | lists:delete(NewRecAction, Actions)] end,
-                    Sys2#sys.log
+                    Sys2#system.log
                 )
             },
 
@@ -582,19 +582,19 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
             Sys4 = cauder_replay:replay_send(Sys3, ChosenUid),
 
             % Remove temporary 'receive' action to log to force deliver of new message
-            Sys5 = Sys4#sys{
+            Sys5 = Sys4#system{
                 log = maps:update_with(
                     Pid,
                     fun([Action | Actions]) when Action =:= NewRecAction -> Actions end,
-                    Sys4#sys.log
+                    Sys4#system.log
                 )
             },
 
             % Remove log dependencies
-            Sys6 = Sys5#sys{log = rdep(Pid, Sys5#sys.log)},
+            Sys6 = Sys5#system{log = rdep(Pid, Sys5#system.log)},
 
             % Match the new message
-            #proc{mail = LocalMail} = maps:get(Pid, Sys6#sys.procs),
+            #process{mail = LocalMail} = maps:get(Pid, Sys6#system.pool),
             case matchrec(Cs, Bs, LocalMail) of
                 nomatch -> nomatch;
                 Match -> {Match, Sys6}
@@ -610,28 +610,28 @@ matchrec_race(Cs, Bs, InitialUid, Pid, #sys{log = Log0, race_sets = RaceSets} = 
     NewBindings :: cauder_types:environment(),
     Body :: cauder_types:af_body().
 
-match_rec(Cs, Bs0, #message{value = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
+match_rec(Cs, Bs0, #message{val = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
--spec matchrec_uid(Clauses, Bindings, Uid, LocalMail) ->
+-spec match_rec_uid(Clauses, Bindings, Uid, Mail) ->
     {Body, NewBindings, Message, NewLocalMail, QPos} | nomatch
 when
     Clauses :: cauder_types:af_clause_seq(),
     Bindings :: cauder_types:environment(),
     Uid :: cauder_mailbox:uid(),
-    LocalMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
+    Mail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     Body :: cauder_types:af_body(),
     NewBindings :: cauder_types:environment(),
     Message :: cauder_types:message(cauder_types:proc_id()),
     NewLocalMail :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     QPos :: pos_integer().
 
-matchrec_uid(Cs, Bs0, Uid, LocalMail0) ->
-    case cauder_utils:queue_take(Uid, LocalMail0) of
+match_rec_uid(Cs, Bs0, Uid, Mail0) ->
+    case cauder_utils:queue_take(Uid, Mail0) of
         error ->
             nomatch;
-        {{Msg, QPos}, LocalMail1} ->
-            case match_clause(Bs0, Cs, [abstract(Msg#message.value)]) of
-                {match, Bs, Body} -> {Body, Bs, Msg, LocalMail1, QPos};
+        {{Msg, QPos}, Mail1} ->
+            case match_clause(Bs0, Cs, [abstract(Msg#message.val)]) of
+                {match, Bs, Body} -> {Body, Bs, Msg, Mail1, QPos};
                 nomatch -> nomatch
             end
     end.
@@ -764,7 +764,7 @@ eval_guard(Bs, G) when is_list(G) ->
 eval_guard_test(Bs, Gt) ->
     case is_reducible(Gt, Bs) of
         true ->
-            #result{exprs = [Gt1]} = expr(Bs, Gt, []),
+            #result{expr = [Gt1]} = expr(Bs, Gt, []),
             eval_guard_test(Bs, Gt1);
         false ->
             Gt
@@ -844,11 +844,11 @@ current_module([]) -> error.
     Result :: cauder_types:result().
 
 eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
-    R = #result{exprs = Es1} = eval_list(Bs, Es, Stk),
-    R#result{exprs = [setelement(Index, Tuple, Es1)]};
+    R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+    R#result{expr = [setelement(Index, Tuple, Es1)]};
 eval_and_update({Bs, E, Stk}, {Index, Tuple}) ->
-    R = #result{exprs = [E1]} = expr(Bs, E, Stk),
-    R#result{exprs = [setelement(Index, Tuple, E1)]}.
+    R = #result{expr = [E1]} = expr(Bs, E, Stk),
+    R#result{expr = [setelement(Index, Tuple, E1)]}.
 
 -spec rdep(Pid, Log) -> PrunedLog when
     Pid :: cauder_types:proc_id(),

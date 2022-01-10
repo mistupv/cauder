@@ -19,9 +19,9 @@
 %%%=============================================================================
 
 % Name of the module that defines the forwards semantics.
--define(FWD_SEM, cauder_semantics_forwards).
+-define(SEM_FWD, cauder_semantics_forwards).
 % Name of the module that defines the backwards semantics.
--define(BWD_SEM, cauder_semantics_backwards).
+-define(SEM_BWD, cauder_semantics_backwards).
 
 %%%=============================================================================
 %%% Rules
@@ -59,11 +59,11 @@
 %%%=============================================================================
 
 % System
--record(sys, {
+-record(system, {
     % Global mailbox
     mail = cauder_mailbox:new() :: cauder_mailbox:mailbox(),
     % Pool of processes
-    procs :: cauder_types:process_map(),
+    pool :: cauder_types:process_map(),
     % System log
     log = maps:new() :: cauder_types:log(),
     % Trace generated as the program is executed
@@ -77,7 +77,7 @@
 }).
 
 %% Process
--record(proc, {
+-record(process, {
     % Process node
     node :: node(),
     % Process identifier
@@ -89,11 +89,11 @@
     % Environment
     env = maps:new() :: cauder_types:environment(),
     % List of expressions
-    exprs :: [cauder_types:abstract_expr()],
+    expr :: [cauder_types:abstract_expr()],
     % Local message queue
     mail = queue:new() :: queue:queue(cauder_mailbox:message(cauder_types:proc_id())),
     % The entry point function for this process
-    entry_point :: mfa()
+    mfa :: mfa()
 }).
 
 %% Message
@@ -101,11 +101,11 @@
     % UID
     uid :: cauder_mailbox:uid(),
     % Message
-    value :: term(),
+    val :: term(),
     % Sender PID
     src,
     % Receiver PID
-    dest
+    dst
 }).
 
 % Option
@@ -121,7 +121,7 @@
 % Evaluation result
 -record(result, {
     env :: cauder_types:environment(),
-    exprs :: [cauder_types:abstract_expr()],
+    expr :: [cauder_types:abstract_expr()],
     stack :: cauder_types:stack(),
     label = tau :: cauder_types:label()
 }).

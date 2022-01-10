@@ -18,7 +18,7 @@
     Option :: {icon, boolean()} | {node, boolean() | auto} | {pid, boolean()} | {mfa, boolean()},
     String :: string().
 
-process(#proc{node = Node, pid = Pid, entry_point = {M, F, A}} = Proc, Options) ->
+process(#process{node = Node, pid = Pid, mfa = {M, F, A}} = Proc, Options) ->
     IconStr =
         case proplists:get_value('icon', Options) of
             false ->
@@ -83,9 +83,9 @@ history_entry({start, success, _Bs, _Es, _Stk, Node}) ->
     "start(" ++ green(to_string(Node)) ++ ")";
 history_entry({start, failure, _Bs, _Es, _Stk, Node}) ->
     "start(" ++ red(to_string(Node)) ++ ")";
-history_entry({send, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}}) ->
+history_entry({send, _Bs, _Es, _Stk, #message{val = Val, uid = Uid}}) ->
     "send(" ++ to_string(Val) ++ "," ++ red(to_string(Uid)) ++ ")";
-history_entry({rec, _Bs, _Es, _Stk, #message{value = Val, uid = Uid}, _QPos}) ->
+history_entry({rec, _Bs, _Es, _Stk, #message{val = Val, uid = Uid}, _QPos}) ->
     "rec(" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")".
 
 %%%=============================================================================

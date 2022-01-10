@@ -453,9 +453,9 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Variable_Button), State) ->
 
 handle_event(
     #wx{id = ?PROCESS_Bindings_Control, event = #wxList{type = command_list_item_activated, itemIndex = Idx}},
-    #wx_state{frame = Frame, system = #sys{procs = PMap}, pid = Pid} = State
+    #wx_state{frame = Frame, system = #system{pool = PMap}, pid = Pid} = State
 ) ->
-    #proc{env = Bs} = maps:get(Pid, PMap),
+    #process{env = Bs} = maps:get(Pid, PMap),
     IdxToKey = ets:lookup_element(?GUI_DB, ?BINDINGS_IDX_TO_KEY, 2),
     Key = maps:get(Idx, IdxToKey),
     Value = maps:get(Key, Bs),
@@ -774,12 +774,12 @@ refresh(State0, State1) ->
         | ?ACTION_Manual_Backward_Button
         | ?ACTION_Automatic_Forward_Button
         | ?ACTION_Automatic_Backward_Button,
-    Semantics :: ?FWD_SEM | ?BWD_SEM.
+    Semantics :: ?SEM_FWD | ?SEM_BWD.
 
-button_to_semantics(?ACTION_Manual_Forward_Button) -> ?FWD_SEM;
-button_to_semantics(?ACTION_Manual_Backward_Button) -> ?BWD_SEM;
-button_to_semantics(?ACTION_Automatic_Forward_Button) -> ?FWD_SEM;
-button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?BWD_SEM.
+button_to_semantics(?ACTION_Manual_Forward_Button) -> ?SEM_FWD;
+button_to_semantics(?ACTION_Manual_Backward_Button) -> ?SEM_BWD;
+button_to_semantics(?ACTION_Automatic_Forward_Button) -> ?SEM_FWD;
+button_to_semantics(?ACTION_Automatic_Backward_Button) -> ?SEM_BWD.
 
 %%%=============================================================================
 

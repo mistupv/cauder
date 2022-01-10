@@ -56,8 +56,8 @@ create(Frame) ->
     NewState :: cauder_wx:state().
 
 update(
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}},
-    #wx_state{system = #sys{procs = PMap}, config = #config{status_bar = Show}}
+    #wx_state{system = #system{pool = PMap}, config = #config{status_bar = Show}},
+    #wx_state{system = #system{pool = PMap}, config = #config{status_bar = Show}}
 ) ->
     ok;
 update(_, #wx_state{config = #config{status_bar = false}}) ->
@@ -67,7 +67,7 @@ update(_, #wx_state{system = undefined}) ->
 
     StatusBar = wxFrame:getStatusBar(cauder_wx:find(?FRAME, wxFrame)),
     wxStatusBar:setStatusText(StatusBar, " System not started", [{number, 2}]);
-update(_, #wx_state{system = #sys{procs = PMap}}) ->
+update(_, #wx_state{system = #system{pool = PMap}}) ->
     set_visibility(true),
 
     {Alive, Dead} =
@@ -445,8 +445,8 @@ set_text(Text) ->
     Semantics :: cauder_types:semantics(),
     String :: string().
 
-semantics_to_string(?FWD_SEM) -> "forward";
-semantics_to_string(?BWD_SEM) -> "backward".
+semantics_to_string(?SEM_FWD) -> "forward";
+semantics_to_string(?SEM_BWD) -> "backward".
 
 -spec time_to_string(Time) -> String when
     Time :: non_neg_integer(),

@@ -386,7 +386,7 @@ try_deliver(P, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail
     case maps:get(R, Log0, []) of
         [{'receive', L} | _] ->
             case cauder_mailbox:uid_take_oldest(L, Mail0) of
-                {#message{uid = L, dest = P, value = Value}, Mail1} ->
+                {#message{uid = L, dst = P, val = Value}, Mail1} ->
                     P ! {L, Value},
                     Trace1 = update_trace(R, {deliver, L}, Trace0),
                     State0#state{trace = Trace1, mail = Mail1};
@@ -396,7 +396,7 @@ try_deliver(P, #state{pid_map = PidMap0, log = Log0, trace = Trace0, mail = Mail
         [{deliver, L} | Actions] ->
             State1 =
                 case cauder_mailbox:uid_take_oldest(L, Mail0) of
-                    {#message{uid = L, dest = P, value = Value}, Mail1} ->
+                    {#message{uid = L, dst = P, val = Value}, Mail1} ->
                         P ! {L, Value},
                         Log1 = Log0#{R := Actions},
                         Trace1 = update_trace(R, {deliver, L}, Trace0),
@@ -425,7 +425,7 @@ process_new_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace =
             Trace1 = update_trace(R1, {deliver, L}, Trace0),
             State0#state{trace = Trace1};
         Actions ->
-            Mail1 = cauder_mailbox:add(#message{uid = L, value = Value, src = P, dest = P1}, Mail0),
+            Mail1 = cauder_mailbox:add(#message{uid = L, val = Value, src = P, dst = P1}, Mail0),
             Log1 = Log0#{R1 => Actions ++ [{deliver, L}]},
             State0#state{log = Log1, mail = Mail1}
     end.
@@ -446,7 +446,7 @@ process_msg({P, P1, L, Value}, #state{pid_map = PidMap0, log = Log0, trace = Tra
             Trace1 = update_trace(R1, {deliver, L}, Trace0),
             State0#state{trace = Trace1};
         Actions ->
-            Mail1 = cauder_mailbox:add(#message{uid = L, value = Value, src = P, dest = P1}, Mail0),
+            Mail1 = cauder_mailbox:add(#message{uid = L, val = Value, src = P, dst = P1}, Mail0),
             Log1 =
                 case lists:member({'receive', L}, Actions) of
                     true -> Log0;
