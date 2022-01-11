@@ -1,8 +1,8 @@
 -module(cauder_eval).
 
 %% API
--export([seq/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
--export([match_rec_pid/6, match_rec_uid/4]).
+-export([exprs/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
+-export([match_receive_pid/6, match_receive_uid/4]).
 -export([clause_line/3]).
 
 -include("cauder_message.hrl").
@@ -47,19 +47,19 @@
 %%
 %% @see is_reducible/2
 
--spec eval_list(Bindings, Expressions, Stack) -> Result when
+-spec expr_list(Bindings, Expressions, Stack) -> Result when
     Bindings :: cauder_bindings:bindings(),
     Expressions :: [cauder_syntax:abstract_expr()],
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
 
-eval_list(Bs, [E | Es], Stk) ->
+expr_list(Bs, [E | Es], Stk) ->
     case is_reducible(E, Bs) of
         true ->
             R = #result{expr = Es1} = expr(Bs, E, Stk),
             R#result{expr = Es1 ++ Es};
         false ->
-            R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+            R = #result{expr = Es1} = expr_list(Bs, Es, Stk),
             R#result{expr = [E | Es1]}
     end.
 
@@ -76,13 +76,13 @@ eval_list(Bs, [E | Es], Stk) ->
 %%
 %% @see is_reducible/2
 
--spec seq(Bindings, Expressions, Stack) -> Result when
+-spec exprs(Bindings, Expressions, Stack) -> Result when
     Bindings :: cauder_bindings:bindings(),
     Expressions :: [cauder_syntax:abstract_expr()],
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
 
-seq(Bs, [E | Es], Stk) ->
+exprs(Bs, [E | Es], Stk) ->
     case is_reducible(E, Bs) of
         false ->
             case Es of
@@ -157,7 +157,7 @@ expr(Bs, E = {cons, Line, H0, T0}, Stk) ->
             end
     end;
 expr(Bs, E = {tuple, Line, Es0}, Stk) ->
-    R = #result{expr = Es} = eval_list(Bs, Es0, Stk),
+    R = #result{expr = Es} = expr_list(Bs, Es0, Stk),
     case is_value(Es) of
         true ->
             Tuple = list_to_tuple(lists:map(fun concrete/1, Es)),
@@ -367,7 +367,7 @@ expr(Bs0, E = {local_call, Line, F, As}, Stk0) ->
 expr(Bs0, E = {remote_call, Line, M, F, As}, Stk0) ->
     case is_reducible(As, Bs0) of
         true -> eval_and_update({Bs0, As, Stk0}, {5, E});
-        false -> eval_remote_call(M, F, As, Stk0, Line, Bs0)
+        false -> remote_call(M, F, As, Stk0, Line, Bs0)
     end;
 % TODO Handle calls to self/0, spawn/1, spawn/3
 expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
@@ -385,7 +385,7 @@ expr(Bs0, E = {apply, Line, M0, F0, As}, Stk0) ->
                         false ->
                             M = concrete(M0),
                             F = concrete(F0),
-                            eval_remote_call(M, F, As, Stk0, Line, Bs0)
+                            remote_call(M, F, As, Stk0, Line, Bs0)
                     end
             end
     end;
@@ -468,7 +468,7 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
             end
     end.
 
-eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
+remote_call(M, F, As, Stk0, Line, Bs0) ->
     A = length(As),
     case cauder_utils:fundef_lookup({M, F, A}) of
         {Exported, Cs} ->
@@ -498,7 +498,7 @@ eval_remote_call(M, F, As, Stk0, Line, Bs0) ->
 match_if(_, []) ->
     nomatch;
 match_if(Bs, [{'clause', _, [], G, B} | Cs]) ->
-    case concrete(eval_guard_seq(Bs, G)) of
+    case concrete(guard_seq(Bs, G)) of
         true -> {match, B};
         false -> match_if(Bs, Cs)
     end.
@@ -520,7 +520,7 @@ match_case(Bs, Cs, V) -> match_clause(Bs, Cs, [V]).
 
 match_fun(Cs, Vs) -> match_clause(cauder_bindings:new(), Cs, Vs).
 
--spec match_rec_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) ->
+-spec match_receive_pid(Clauses, Bindings, RecipientPid, Mail, Sched, Sys) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
 when
     Clauses :: cauder_syntax:af_clause_seq(),
@@ -535,7 +535,7 @@ when
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
 
-match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
+match_receive_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
     case cauder_mailbox:find_destination(Pid, Mail) of
         [] ->
             nomatch;
@@ -544,7 +544,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
                 ?SCHEDULER_Manual ->
                     FoldQueue =
                         fun(Msg, Map1) ->
-                            case match_rec(Cs, Bs, #message{uid = Uid} = Msg) of
+                            case match_receive(Cs, Bs, #message{uid = Uid} = Msg) of
                                 {match, Bs1, Body} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
                                 nomatch -> skip
                             end
@@ -572,7 +572,7 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
                     MatchingBranches = lists:filtermap(
                         fun(Queue) ->
                             {value, Msg} = queue:peek(Queue),
-                            case match_rec(Cs, Bs, Msg) of
+                            case match_receive(Cs, Bs, Msg) of
                                 {match, Bs1, Body} -> {true, {Bs1, Body, Msg}};
                                 nomatch -> false
                             end
@@ -590,16 +590,16 @@ match_rec_pid(Cs, Bs, Pid, Mail, Sched, Sys) ->
             end
     end.
 
--spec match_rec(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
+-spec match_receive(Clauses, Bindings, Message) -> {match, NewBindings, Body} | nomatch when
     Clauses :: cauder_syntax:af_clause_seq(),
     Bindings :: cauder_bindings:bindings(),
     Message :: cauder_message:message(),
     NewBindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body().
 
-match_rec(Cs, Bs0, #message{val = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
+match_receive(Cs, Bs0, #message{val = Value}) -> match_clause(Bs0, Cs, [abstract(Value)]).
 
--spec match_rec_uid(Clauses, Bindings, Uid, Mail) ->
+-spec match_receive_uid(Clauses, Bindings, Uid, Mail) ->
     {NewBindings, Body, {Message, QueuePosition}, NewMail} | nomatch
 when
     Clauses :: cauder_syntax:af_clause_seq(),
@@ -612,7 +612,7 @@ when
     QueuePosition :: pos_integer(),
     NewMail :: cauder_mailbox:mailbox().
 
-match_rec_uid(Cs, Bs0, Uid, Mail0) ->
+match_receive_uid(Cs, Bs0, Uid, Mail0) ->
     case cauder_mailbox:take(Uid, Mail0) of
         error ->
             nomatch;
@@ -635,7 +635,7 @@ match_clause(_, [], _) ->
 match_clause(Bs0, [{'clause', _, Ps, G, B} | Cs], Vs) ->
     case match(Bs0, Ps, Vs) of
         {match, Bs} ->
-            case concrete(eval_guard_seq(Bs, G)) of
+            case concrete(guard_seq(Bs, G)) of
                 true -> {match, Bs, B};
                 false -> match_clause(Bs0, Cs, Vs)
             end;
@@ -654,7 +654,7 @@ clause_line(_, [], _) ->
 clause_line(Bs0, [{'clause', Line, Ps, G, _} | Cs], Vs) ->
     case match(Bs0, Ps, Vs) of
         {match, Bs} ->
-            case concrete(eval_guard_seq(Bs, G)) of
+            case concrete(guard_seq(Bs, G)) of
                 true -> Line;
                 false -> clause_line(Bs0, Cs, Vs)
             end;
@@ -726,36 +726,38 @@ match_tuple([E | Es], Tuple, I, Bs0) ->
     {match, Bs} = match1(E, element(I, Tuple), Bs0),
     match_tuple(Es, Tuple, I + 1, Bs).
 
--spec eval_guard_seq(Bindings, Guards) -> Boolean when
+%%%=============================================================================
+
+-spec guard_seq(Bindings, Guards) -> Boolean when
     Bindings :: cauder_bindings:bindings(),
     Guards :: cauder_syntax:af_guard_seq(),
     Boolean :: cauder_syntax:af_boolean().
 
-eval_guard_seq(_, []) ->
+guard_seq(_, []) ->
     abstract(true);
-eval_guard_seq(Bs, Gs) when is_list(Gs) ->
+guard_seq(Bs, Gs) when is_list(Gs) ->
     % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
     % See: https://erlang.org/doc/reference_manual/expressions.html#guard-sequences
-    abstract(lists:any(fun(G) -> concrete(eval_guard(Bs, G)) end, Gs)).
+    abstract(lists:any(fun(G) -> concrete(guard(Bs, G)) end, Gs)).
 
--spec eval_guard(Bindings, Guard) -> Boolean when
+-spec guard(Bindings, Guard) -> Boolean when
     Bindings :: cauder_bindings:bindings(),
     Guard :: cauder_syntax:af_guard(),
     Boolean :: cauder_syntax:af_boolean().
 
-eval_guard(Bs, G) when is_list(G) ->
-    abstract(lists:all(fun(Gt) -> concrete(eval_guard_test(Bs, Gt)) end, G)).
+guard(Bs, G) when is_list(G) ->
+    abstract(lists:all(fun(Gt) -> concrete(guard_test(Bs, Gt)) end, G)).
 
--spec eval_guard_test(Bindings, GuardTest) -> GuardTest | Boolean when
+-spec guard_test(Bindings, GuardTest) -> GuardTest | Boolean when
     Bindings :: cauder_bindings:bindings(),
     GuardTest :: cauder_syntax:af_guard_test(),
     Boolean :: cauder_syntax:af_boolean().
 
-eval_guard_test(Bs, Gt) ->
+guard_test(Bs, Gt) ->
     case is_reducible(Gt, Bs) of
         true ->
             #result{expr = [Gt1]} = expr(Bs, Gt, cauder_stack:new()),
-            eval_guard_test(Bs, Gt1);
+            guard_test(Bs, Gt1);
         false ->
             Gt
     end.
@@ -831,7 +833,7 @@ is_value(E) when is_tuple(E) -> false.
     Result :: cauder_eval:result().
 
 eval_and_update({Bs, Es, Stk}, {Index, Tuple}) when is_list(Es) ->
-    R = #result{expr = Es1} = eval_list(Bs, Es, Stk),
+    R = #result{expr = Es1} = expr_list(Bs, Es, Stk),
     R#result{expr = [setelement(Index, Tuple, Es1)]};
 eval_and_update({Bs, E, Stk}, {Index, Tuple}) ->
     R = #result{expr = [E1]} = expr(Bs, E, Stk),
