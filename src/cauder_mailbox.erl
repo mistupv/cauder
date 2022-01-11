@@ -10,7 +10,6 @@
     pid_take/2,
     is_element/2,
     take/2,
-    uid_take_oldest/2,
     to_list/1
 ]).
 
