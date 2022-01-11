@@ -39,31 +39,6 @@
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
-%% @doc Evaluates the first reducible expression from the given list.
-%%
-%% Evaluates the first reducible expression from the given list of expressions,
-%% given an environment and a call stack, then returns a record with the updated
-%% information and a label indicating the type of step performed.
-%%
-%% @see is_reducible/2
-
--spec expr_list(Bindings, Expressions, Stack) -> Result when
-    Bindings :: cauder_bindings:bindings(),
-    Expressions :: [cauder_syntax:abstract_expr()],
-    Stack :: cauder_stack:stack(),
-    Result :: cauder_eval:result().
-
-expr_list(Bs, [E | Es], Stk) ->
-    case is_reducible(E, Bs) of
-        true ->
-            R = #result{expr = Es1} = expr(Bs, E, Stk),
-            R#result{expr = Es1 ++ Es};
-        false ->
-            R = #result{expr = Es1} = expr_list(Bs, Es, Stk),
-            R#result{expr = [E | Es1]}
-    end.
-
-%%------------------------------------------------------------------------------
 %% @doc Evaluates the given sequence of expression.
 %%
 %% If the first expression in the sequence is reducible, then it is evaluated,
@@ -466,6 +441,31 @@ expr(Bs, E = {'orelse', Line, Lhs, Rhs}, Stk) ->
                             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Evaluates the first reducible expression from the given list.
+%%
+%% Evaluates the first reducible expression from the given list of expressions,
+%% given an environment and a call stack, then returns a record with the updated
+%% information and a label indicating the type of step performed.
+%%
+%% @see is_reducible/2
+
+-spec expr_list(Bindings, Expressions, Stack) -> Result when
+    Bindings :: cauder_bindings:bindings(),
+    Expressions :: [cauder_syntax:abstract_expr()],
+    Stack :: cauder_stack:stack(),
+    Result :: cauder_eval:result().
+
+expr_list(Bs, [E | Es], Stk) ->
+    case is_reducible(E, Bs) of
+        true ->
+            R = #result{expr = Es1} = expr(Bs, E, Stk),
+            R#result{expr = Es1 ++ Es};
+        false ->
+            R = #result{expr = Es1} = expr_list(Bs, Es, Stk),
+            R#result{expr = [E | Es1]}
     end.
 
 remote_call(M, F, As, Stk0, Line, Bs0) ->
