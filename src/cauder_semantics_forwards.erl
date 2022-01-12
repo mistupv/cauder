@@ -39,7 +39,7 @@
 
 step(Pid, Sys, Sched, Mode) ->
     #process{stack = Stk0, env = Bs0, expr = Es0} = cauder_pool:get(Pid, Sys#system.pool),
-    Result = cauder_eval:exprs(Bs0, Es0, Stk0),
+    Result = cauder_eval:exprs(Es0, Bs0, Stk0),
     case Result#result.label of
         #label_tau{} ->
             rule_local(Pid, Result, Sys);
@@ -439,11 +439,11 @@ rule_receive(
     Sched,
     #system{mail = Mail, pool = Pool, log = Log0} = Sys
 ) ->
-    {{Bs1, Es1, {Msg, QPos}, Mail1}, Log1} =
+    {{Es1, {Msg, QPos}, Mail1, Bs1}, Log1} =
         case Mode of
             normal ->
-                Match = cauder_eval:match_receive_pid(Cs, Bs, Pid, Mail, Sched, Sys),
-                {_, _, {#message{uid = Uid}, _}, _} = Match,
+                Match = cauder_eval:match_receive_pid(Cs, Pid, Mail, Bs, Sched, Sys),
+                {_, {#message{uid = Uid}, _}, _, _} = Match,
                 %% If the chosen message is the same specified in the log don't invalidate the log
                 Log =
                     case cauder_log:pop_receive(Pid, Log0) of
@@ -453,7 +453,7 @@ rule_receive(
                 {Match, Log};
             replay ->
                 {#log_receive{uid = Uid}, Log} = cauder_log:pop_receive(Pid, Log0),
-                Match = cauder_eval:match_receive_uid(Cs, Bs, Uid, Mail),
+                Match = cauder_eval:match_receive_uid(Cs, Uid, Mail, Bs),
                 {Match, Log}
         end,
 
@@ -601,10 +601,10 @@ check_reducibility(Cs, Pid, #system{mail = Mail, log = Log} = Sys, Mode, 'receiv
     IsMatch =
         case Mode of
             normal ->
-                cauder_eval:match_receive_pid(Cs, Bs, Pid, Mail, ?SCHEDULER_Random, Sys) =/= nomatch;
+                cauder_eval:match_receive_pid(Cs, Pid, Mail, Bs, ?SCHEDULER_Random, Sys) =/= nomatch;
             replay ->
                 {value, #log_receive{uid = Uid}} = cauder_log:peek(Pid, Log),
-                cauder_eval:match_receive_uid(Cs, Bs, Uid, Mail) =/= nomatch
+                cauder_eval:match_receive_uid(Cs, Uid, Mail, Bs) =/= nomatch
         end,
     case IsMatch of
         true ->
