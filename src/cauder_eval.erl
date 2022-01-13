@@ -153,7 +153,7 @@ expr({'if', Line, Cs}, Bs, Stk0) ->
 expr(E = {'case', Line, A, Cs}, Bs0, Stk0) ->
     case is_reducible(A, Bs0) of
         true ->
-            eval_and_update({A, Bs0, Stk0}, {3, E});
+            eval_and_update(3, E, Bs0, Stk0);
         false ->
             case match_case(Cs, A, Bs0) of
                 {match, Body, Bs} ->
@@ -195,7 +195,7 @@ expr({'make_fun', Line, Name, Cs}, Bs, Stk0) ->
 expr(E = {bif, Line, M, F, As}, Bs, Stk) ->
     case is_reducible(As, Bs) of
         true ->
-            eval_and_update({As, Bs, Stk}, {5, E});
+            eval_and_update(5, E, Bs, Stk);
         false ->
             Value = apply(M, F, lists:map(fun concrete/1, As)),
             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
@@ -215,7 +215,7 @@ expr({nodes, Line}, Bs, Stk) ->
 expr(E = {spawn, Line, Fun}, Bs, Stk) ->
     case is_reducible(Fun, Bs) of
         true ->
-            eval_and_update({Fun, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             Var = cauder_utils:temp_variable(Line),
             Label = #label_spawn_fun{var = Var, function = Fun},
@@ -224,11 +224,11 @@ expr(E = {spawn, Line, Fun}, Bs, Stk) ->
 expr(E = {spawn, Line, N, Fun}, Bs, Stk) ->
     case is_reducible(N, Bs) of
         true ->
-            eval_and_update({N, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case is_reducible(Fun, Bs) of
                 true ->
-                    eval_and_update({Fun, Bs, Stk}, {4, E});
+                    eval_and_update(4, E, Bs, Stk);
                 false ->
                     Var = cauder_utils:temp_variable(Line),
                     Label = #label_spawn_fun{var = Var, node = concrete(N), function = Fun},
@@ -238,15 +238,15 @@ expr(E = {spawn, Line, N, Fun}, Bs, Stk) ->
 expr(E = {spawn, Line, M, F, As}, Bs, Stk) ->
     case is_reducible(M, Bs) of
         true ->
-            eval_and_update({M, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case is_reducible(F, Bs) of
                 true ->
-                    eval_and_update({F, Bs, Stk}, {4, E});
+                    eval_and_update(4, E, Bs, Stk);
                 false ->
                     case is_reducible(As, Bs) of
                         true ->
-                            eval_and_update({As, Bs, Stk}, {5, E});
+                            eval_and_update(5, E, Bs, Stk);
                         false ->
                             Var = cauder_utils:temp_variable(Line),
                             Label = #label_spawn_mfa{
@@ -262,19 +262,19 @@ expr(E = {spawn, Line, M, F, As}, Bs, Stk) ->
 expr(E = {spawn, Line, N, M, F, As}, Bs, Stk) ->
     case is_reducible(N, Bs) of
         true ->
-            eval_and_update({N, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case is_reducible(M, Bs) of
                 true ->
-                    eval_and_update({M, Bs, Stk}, {4, E});
+                    eval_and_update(4, E, Bs, Stk);
                 false ->
                     case is_reducible(F, Bs) of
                         true ->
-                            eval_and_update({F, Bs, Stk}, {5, E});
+                            eval_and_update(5, E, Bs, Stk);
                         false ->
                             case is_reducible(As, Bs) of
                                 true ->
-                                    eval_and_update({As, Bs, Stk}, {6, E});
+                                    eval_and_update(6, E, Bs, Stk);
                                 false ->
                                     Var = cauder_utils:temp_variable(Line),
                                     Label = #label_spawn_mfa{
@@ -292,7 +292,7 @@ expr(E = {spawn, Line, N, M, F, As}, Bs, Stk) ->
 expr(E = {start, Line, N}, Bs, Stk) ->
     case is_reducible(N, Bs) of
         true ->
-            eval_and_update({N, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             Var = cauder_utils:temp_variable(Line),
             Label = #label_start{var = Var, name = concrete(N)},
@@ -301,11 +301,11 @@ expr(E = {start, Line, N}, Bs, Stk) ->
 expr(E = {start, Line, H, N}, Bs, Stk) ->
     case is_reducible(H, Bs) of
         true ->
-            eval_and_update({H, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case is_reducible(N, Bs) of
                 true ->
-                    eval_and_update({N, Bs, Stk}, {4, E});
+                    eval_and_update(4, E, Bs, Stk);
                 false ->
                     Var = cauder_utils:temp_variable(Line),
                     Label = #label_start{var = Var, name = concrete(N), host = concrete(H)},
@@ -315,11 +315,11 @@ expr(E = {start, Line, H, N}, Bs, Stk) ->
 expr(E = {Send, _, L, R}, Bs, Stk) when Send =:= 'send' orelse Send =:= 'send_op' ->
     case is_reducible(L, Bs) of
         true ->
-            eval_and_update({L, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case is_reducible(R, Bs) of
                 true ->
-                    eval_and_update({R, Bs, Stk}, {4, E});
+                    eval_and_update(4, E, Bs, Stk);
                 false ->
                     Label = #label_send{dst = concrete(L), val = concrete(R)},
                     #result{env = Bs, expr = [R], stack = Stk, label = Label}
@@ -328,7 +328,7 @@ expr(E = {Send, _, L, R}, Bs, Stk) when Send =:= 'send' orelse Send =:= 'send_op
 expr(E = {local_call, Line, F, As}, Bs0, Stk0) ->
     case is_reducible(As, Bs0) of
         true ->
-            eval_and_update({As, Bs0, Stk0}, {4, E});
+            eval_and_update(4, E, Bs0, Stk0);
         false ->
             {ok, M} = cauder_stack:current_module(Stk0),
             A = length(As),
@@ -341,22 +341,22 @@ expr(E = {local_call, Line, F, As}, Bs0, Stk0) ->
     end;
 expr(E = {remote_call, Line, M, F, As}, Bs0, Stk0) ->
     case is_reducible(As, Bs0) of
-        true -> eval_and_update({As, Bs0, Stk0}, {5, E});
+        true -> eval_and_update(5, E, Bs0, Stk0);
         false -> remote_call(M, F, As, Stk0, Line, Bs0)
     end;
 % TODO Handle calls to self/0, spawn/1, spawn/3
 expr(E = {apply, Line, M0, F0, As}, Bs0, Stk0) ->
     case is_reducible(M0, Bs0) of
         true ->
-            eval_and_update({M0, Bs0, Stk0}, {3, E});
+            eval_and_update(3, E, Bs0, Stk0);
         false ->
             case is_reducible(F0, Bs0) of
                 true ->
-                    eval_and_update({F0, Bs0, Stk0}, {4, E});
+                    eval_and_update(4, E, Bs0, Stk0);
                 false ->
                     case is_reducible(As, Bs0) of
                         true ->
-                            eval_and_update({As, Bs0, Stk0}, {5, E});
+                            eval_and_update(5, E, Bs0, Stk0);
                         false ->
                             M = concrete(M0),
                             F = concrete(F0),
@@ -367,11 +367,11 @@ expr(E = {apply, Line, M0, F0, As}, Bs0, Stk0) ->
 expr(E = {apply_fun, Line, Fun, As}, Bs0, Stk0) ->
     case is_reducible(Fun, Bs0) of
         true ->
-            eval_and_update({Fun, Bs0, Stk0}, {3, E});
+            eval_and_update(3, E, Bs0, Stk0);
         false ->
             case is_reducible(As, Bs0) of
                 true ->
-                    eval_and_update({As, Bs0, Stk0}, {4, E});
+                    eval_and_update(4, E, Bs0, Stk0);
                 false ->
                     A = length(As),
                     {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
@@ -386,11 +386,11 @@ expr(E = {apply_fun, Line, Fun, As}, Bs0, Stk0) ->
 expr(E = {match, _, Lhs, Rhs}, Bs0, Stk) ->
     case is_reducible(Lhs, Bs0) of
         true ->
-            eval_and_update({Lhs, Bs0, Stk}, {3, E});
+            eval_and_update(3, E, Bs0, Stk);
         false ->
             case is_reducible(Rhs, Bs0) of
                 true ->
-                    eval_and_update({Rhs, Bs0, Stk}, {4, E});
+                    eval_and_update(4, E, Bs0, Stk);
                 false ->
                     case match([Lhs], [Rhs], Bs0) of
                         {match, Bs} -> #result{env = Bs, expr = [Rhs], stack = Stk};
@@ -401,7 +401,7 @@ expr(E = {match, _, Lhs, Rhs}, Bs0, Stk) ->
 expr(E = {op, Line, Op, As}, Bs, Stk) ->
     case is_reducible(As, Bs) of
         true ->
-            eval_and_update({As, Bs, Stk}, {4, E});
+            eval_and_update(4, E, Bs, Stk);
         false ->
             Value = apply(erlang, Op, lists:map(fun concrete/1, As)),
             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
@@ -409,7 +409,7 @@ expr(E = {op, Line, Op, As}, Bs, Stk) ->
 expr(E = {'andalso', Line, Lhs, Rhs}, Bs, Stk) ->
     case is_reducible(Lhs, Bs) of
         true ->
-            eval_and_update({Lhs, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case Lhs of
                 {value, _, false} ->
@@ -417,7 +417,7 @@ expr(E = {'andalso', Line, Lhs, Rhs}, Bs, Stk) ->
                 {value, _, true} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
-                            eval_and_update({Rhs, Bs, Stk}, {4, E});
+                            eval_and_update(4, E, Bs, Stk);
                         false ->
                             Value = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
                             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
@@ -427,7 +427,7 @@ expr(E = {'andalso', Line, Lhs, Rhs}, Bs, Stk) ->
 expr(E = {'orelse', Line, Lhs, Rhs}, Bs, Stk) ->
     case is_reducible(Lhs, Bs) of
         true ->
-            eval_and_update({Lhs, Bs, Stk}, {3, E});
+            eval_and_update(3, E, Bs, Stk);
         false ->
             case Lhs of
                 {value, _, true} ->
@@ -435,7 +435,7 @@ expr(E = {'orelse', Line, Lhs, Rhs}, Bs, Stk) ->
                 {value, _, false} ->
                     case is_reducible(Rhs, Bs) of
                         true ->
-                            eval_and_update({Rhs, Bs, Stk}, {4, E});
+                            eval_and_update(4, E, Bs, Stk);
                         false ->
                             Value = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
                             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
@@ -824,17 +824,19 @@ is_value({cons, _, H, T}) -> is_value(H) andalso is_value(T);
 is_value({tuple, _, Es}) -> is_value(Es);
 is_value(E) when is_tuple(E) -> false.
 
--spec eval_and_update({Expression | [Expression], Bindings, Stack}, {Index, Tuple}) -> Result when
+-spec eval_and_update(Index, Expression, Bindings, Stack) -> Result when
+    Index :: pos_integer(),
     Expression :: cauder_syntax:abstract_expr(),
     Bindings :: cauder_bindings:bindings(),
     Stack :: cauder_stack:stack(),
-    Index :: pos_integer(),
-    Tuple :: tuple(),
     Result :: cauder_eval:result().
 
-eval_and_update({Es, Bs, Stk}, {Index, Tuple}) when is_list(Es) ->
-    R = #result{expr = Es1} = expr_list(Es, Bs, Stk),
-    R#result{expr = [setelement(Index, Tuple, Es1)]};
-eval_and_update({E, Bs, Stk}, {Index, Tuple}) ->
-    R = #result{expr = [E1]} = expr(E, Bs, Stk),
-    R#result{expr = [setelement(Index, Tuple, E1)]}.
+eval_and_update(N, Expr, Bs, Stk) ->
+    case element(N, Expr) of
+        Es when is_list(Es) ->
+            R = #result{expr = Es1} = expr_list(Es, Bs, Stk),
+            R#result{expr = [setelement(N, Expr, Es1)]};
+        E ->
+            R = #result{expr = [E1]} = expr(E, Bs, Stk),
+            R#result{expr = [setelement(N, Expr, E1)]}
+    end.
