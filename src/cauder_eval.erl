@@ -1,7 +1,8 @@
 -module(cauder_eval).
 
 %% API
--export([exprs/3, abstract/1, concrete/1, is_value/1, is_reducible/2]).
+-export([exprs/3]).
+-export([abstract/1, concrete/1, is_value/1, is_reducible/2]).
 -export([match_receive_pid/6, match_receive_uid/4]).
 -export([clause_line/3]).
 
@@ -34,6 +35,11 @@
 -type label_send() :: #label_send{}.
 -type label_receive() :: #label_receive{}.
 
+-type expression() :: cauder_syntax:abstract_expr().
+-type expressions() :: [cauder_syntax:abstract_expr()].
+-type expression_list() :: [expression()].
+-type clauses() :: [cauder_syntax:af_clause()].
+
 %%%=============================================================================
 %%% API
 %%%=============================================================================
@@ -52,7 +58,7 @@
 %% @see is_reducible/2
 
 -spec exprs(Expressions, Bindings, Stack) -> Result when
-    Expressions :: [cauder_syntax:abstract_expr()],
+    Expressions :: expressions(),
     Bindings :: cauder_bindings:bindings(),
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
@@ -103,7 +109,7 @@ exprs([E | Es], Bs, Stk) ->
 %% environment, the expression that resulted from the evaluation, and a label.
 
 -spec expr(Expression, Bindings, Stack) -> Result when
-    Expression :: cauder_syntax:abstract_expr(),
+    Expression :: expression(),
     Bindings :: cauder_bindings:bindings(),
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
@@ -141,29 +147,21 @@ expr(E = {tuple, Line, Es0}, Bs, Stk) ->
             R#result{expr = [setelement(3, E, Es)]}
     end;
 expr({'if', Line, Cs}, Bs, Stk0) ->
-    case match_if(Cs, Bs) of
-        {match, Body} ->
-            Var = cauder_utils:temp_variable(Line),
-            Entry = #s_block{type = 'if', expr = Body, var = Var},
-            Stk = cauder_stack:push(Entry, Stk0),
-            #result{env = Bs, expr = [Var], stack = Stk};
-        nomatch ->
-            error(if_clause)
-    end;
+    Body = if_clauses(Cs, Bs),
+    Var = cauder_utils:temp_variable(Line),
+    Entry = #s_block{type = 'if', expr = Body, var = Var},
+    Stk = cauder_stack:push(Entry, Stk0),
+    #result{env = Bs, expr = [Var], stack = Stk};
 expr(E = {'case', Line, A, Cs}, Bs0, Stk0) ->
     case is_reducible(A, Bs0) of
         true ->
             eval_and_update(3, E, Bs0, Stk0);
         false ->
-            case match_case(Cs, A, Bs0) of
-                {match, Body, Bs} ->
-                    Var = cauder_utils:temp_variable(Line),
-                    Entry = #s_block{type = 'case', expr = Body, var = Var},
-                    Stk = cauder_stack:push(Entry, Stk0),
-                    #result{env = Bs, expr = [Var], stack = Stk};
-                nomatch ->
-                    error({case_clause, concrete(A)})
-            end
+            {Body, Bs} = case_clauses(Cs, A, Bs0),
+            Var = cauder_utils:temp_variable(Line),
+            Entry = #s_block{type = 'case', expr = Body, var = Var},
+            Stk = cauder_stack:push(Entry, Stk0),
+            #result{env = Bs, expr = [Var], stack = Stk}
     end;
 %% TODO Support receive with timeout
 expr({'receive', Line, Cs}, Bs, Stk0) ->
@@ -333,7 +331,7 @@ expr(E = {local_call, Line, F, As}, Bs0, Stk0) ->
             {ok, M} = cauder_stack:current_module(Stk0),
             A = length(As),
             {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
-            {match, Body, Bs} = match_fun(Cs, As),
+            {Body, Bs} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
             Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
@@ -375,7 +373,7 @@ expr(E = {apply_fun, Line, Fun, As}, Bs0, Stk0) ->
                 false ->
                     A = length(As),
                     {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
-                    {match, Body, Bs2} = match_fun(Cs, As),
+                    {Body, Bs2} = match_fun(Cs, As),
                     Var = cauder_utils:temp_variable(Line),
                     Bs = cauder_bindings:merge(Bs1, Bs2),
                     Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
@@ -392,9 +390,10 @@ expr(E = {match, _, Lhs, Rhs}, Bs0, Stk) ->
                 true ->
                     eval_and_update(4, E, Bs0, Stk);
                 false ->
-                    case match([Lhs], [Rhs], Bs0) of
+                    Val = concrete(Rhs),
+                    case match(Lhs, Val, Bs0) of
                         {match, Bs} -> #result{env = Bs, expr = [Rhs], stack = Stk};
-                        nomatch -> error({badmatch, concrete(Rhs)})
+                        nomatch -> error({badmatch, Val})
                     end
             end
     end;
@@ -452,8 +451,8 @@ expr(E = {'orelse', Line, Lhs, Rhs}, Bs, Stk) ->
 %%
 %% @see is_reducible/2
 
--spec expr_list(Expressions, Bindings, Stack) -> Result when
-    Expressions :: [cauder_syntax:abstract_expr()],
+-spec expr_list(ExpressionList, Bindings, Stack) -> Result when
+    ExpressionList :: expression_list(),
     Bindings :: cauder_bindings:bindings(),
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
@@ -478,7 +477,7 @@ remote_call(M, F, As, Stk0, Line, Bs0) ->
                 {ok, _} -> true = Exported;
                 error when Stk0 =:= [] -> ok
             end,
-            {match, Body, Bs} = match_fun(Cs, As),
+            {Body, Bs} = match_fun(Cs, As),
             Var = cauder_utils:temp_variable(Line),
             Entry = #s_function{mfa = {M, F, A}, env = Bs, expr = Body, var = Var},
             Stk = cauder_stack:push(Entry, Stk0),
@@ -490,40 +489,59 @@ remote_call(M, F, As, Stk0, Line, Bs0) ->
 
 %%%=============================================================================
 
--spec match_if(Clauses, Bindings) -> {match, Body} | nomatch when
-    Clauses :: cauder_syntax:af_clause_seq(),
+-spec if_clauses(Clauses, Bindings) -> Body when
+    Clauses :: clauses(),
     Bindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body().
 
-match_if([], _) ->
-    nomatch;
-match_if([{'clause', _, [], G, B} | Cs], Bs) ->
-    case concrete(guard_seq(G, Bs)) of
-        true -> {match, B};
-        false -> match_if(Cs, Bs)
-    end.
+if_clauses([{'clause', _, [], G, B} | Cs], Bs) ->
+    case guard_seq(G, Bs) of
+        true ->
+            B;
+        false ->
+            if_clauses(Cs, Bs)
+    end;
+if_clauses([], _Bs) ->
+    erlang:error('if_clause').
 
--spec match_case(Clauses, Argument, Bindings) -> {match, Body, ScopeBindings} | nomatch when
-    Clauses :: cauder_syntax:af_clause_seq(),
-    Argument :: cauder_syntax:af_literal(),
+-spec case_clauses(Clauses, Value, Bindings) -> {Body, ScopeBindings} | nomatch when
+    Clauses :: clauses(),
+    Value :: term(),
     Bindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
     ScopeBindings :: cauder_bindings:bindings().
 
-match_case(Cs, V, Bs) -> match_clause(Cs, [V], Bs).
+case_clauses(Cs, Val, Bs) ->
+    case match_clause(Cs, [Val], Bs) of
+        {B, Bs1} ->
+            {B, Bs1};
+        nomatch ->
+            erlang:error({'case_clause', Val})
+    end.
 
--spec match_fun(Clauses, Arguments) -> {match, Body, ScopeBindings} | nomatch when
-    Clauses :: cauder_syntax:af_clause_seq(),
-    Arguments :: [cauder_syntax:af_literal()],
+-spec receive_clauses(Clauses, Message, Bindings) -> {Body, NewBindings} | nomatch when
+    Clauses :: clauses(),
+    Message :: cauder_message:message(),
+    Bindings :: cauder_bindings:bindings(),
+    Body :: cauder_syntax:af_body(),
+    NewBindings :: cauder_bindings:bindings().
+
+receive_clauses(Cs, #message{val = Val}, Bs) ->
+    match_clause(Cs, [Val], Bs).
+
+-spec match_fun(Clauses, ValueList) -> {Body, ScopeBindings} | nomatch when
+    Clauses :: clauses(),
+    ValueList :: [term()],
     Body :: cauder_syntax:af_body(),
     ScopeBindings :: cauder_bindings:bindings().
 
-match_fun(Cs, Vs) -> match_clause(Cs, Vs, cauder_bindings:new()).
+match_fun(Cs, Vals) ->
+    match_clause(Cs, Vals, cauder_bindings:new()).
 
 -spec match_receive_pid(Clauses, RecipientPid, Mail, Bindings, Sched, Sys) ->
     {Body, {Message, QueuePosition}, NewMail, NewBindings} | nomatch
 when
-    Clauses :: cauder_syntax:af_clause_seq(),
+    Clauses :: clauses(),
     RecipientPid :: cauder_process:id(),
     Mail :: cauder_mailbox:mailbox(),
     Bindings :: cauder_bindings:bindings(),
@@ -544,8 +562,8 @@ match_receive_pid(Cs, Pid, Mail, Bs, Sched, Sys) ->
                 ?SCHEDULER_Manual ->
                     FoldQueue =
                         fun(Msg, Map1) ->
-                            case match_receive(Cs, #message{uid = Uid} = Msg, Bs) of
-                                {match, Body, Bs1} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
+                            case receive_clauses(Cs, #message{uid = Uid} = Msg, Bs) of
+                                {Body, Bs1} -> maps:put(Uid, {Bs1, Body, Msg}, Map1);
                                 nomatch -> skip
                             end
                         end,
@@ -572,8 +590,8 @@ match_receive_pid(Cs, Pid, Mail, Bs, Sched, Sys) ->
                     MatchingBranches = lists:filtermap(
                         fun(Queue) ->
                             {value, Msg} = queue:peek(Queue),
-                            case match_receive(Cs, Msg, Bs) of
-                                {match, Body, Bs1} -> {true, {Bs1, Body, Msg}};
+                            case receive_clauses(Cs, Msg, Bs) of
+                                {Body, Bs1} -> {true, {Bs1, Body, Msg}};
                                 nomatch -> false
                             end
                         end,
@@ -590,19 +608,10 @@ match_receive_pid(Cs, Pid, Mail, Bs, Sched, Sys) ->
             end
     end.
 
--spec match_receive(Clauses, Message, Bindings) -> {match, Body, NewBindings} | nomatch when
-    Clauses :: cauder_syntax:af_clause_seq(),
-    Message :: cauder_message:message(),
-    Bindings :: cauder_bindings:bindings(),
-    Body :: cauder_syntax:af_body(),
-    NewBindings :: cauder_bindings:bindings().
-
-match_receive(Cs, #message{val = Value}, Bs0) -> match_clause(Cs, [abstract(Value)], Bs0).
-
 -spec match_receive_uid(Clauses, Uid, Mail, Bindings) ->
     {Body, {Message, QueuePosition}, NewMail, NewBindings} | nomatch
 when
-    Clauses :: cauder_syntax:af_clause_seq(),
+    Clauses :: clauses(),
     Uid :: cauder_message:uid(),
     Mail :: cauder_mailbox:mailbox(),
     Bindings :: cauder_bindings:bindings(),
@@ -617,149 +626,167 @@ match_receive_uid(Cs, Uid, Mail0, Bs0) ->
         error ->
             nomatch;
         {{Msg, QPos}, Mail1} ->
-            case match_clause(Cs, [abstract(Msg#message.val)], Bs0) of
-                {match, Body, Bs} -> {Body, {Msg, QPos}, Mail1, Bs};
+            case match_clause(Cs, [Msg#message.val], Bs0) of
+                {Body, Bs} -> {Body, {Msg, QPos}, Mail1, Bs};
                 nomatch -> nomatch
             end
     end.
 
--spec match_clause(Clauses, Arguments, Bindings) -> {match, Body, ScopeBindings} | nomatch when
-    Clauses :: cauder_syntax:af_clause_seq(),
-    Arguments :: [cauder_syntax:af_literal()],
+-spec match_clause(Clauses, ValueList, Bindings) -> {Body, ScopeBindings} | nomatch when
+    Clauses :: clauses(),
+    ValueList :: [term()],
     Bindings :: cauder_bindings:bindings(),
     Body :: cauder_syntax:af_body(),
     ScopeBindings :: cauder_bindings:bindings().
 
-match_clause([], _, _) ->
-    nomatch;
-match_clause([{'clause', _, Ps, G, B} | Cs], Vs, Bs0) ->
-    case match(Ps, Vs, Bs0) of
-        {match, Bs} ->
-            case concrete(guard_seq(G, Bs)) of
-                true -> {match, B, Bs};
-                false -> match_clause(Cs, Vs, Bs0)
+match_clause([{'clause', _, H, G, B} | Cs], Vals, Bs) ->
+    case match_list(H, Vals, Bs) of
+        {match, Bs1} ->
+            case guard_seq(G, Bs1) of
+                true -> {B, Bs1};
+                false -> match_clause(Cs, Vals, Bs)
             end;
         nomatch ->
-            match_clause(Cs, Vs, Bs0)
-    end.
+            match_clause(Cs, Vals, Bs)
+    end;
+match_clause([], _, _) ->
+    nomatch.
 
--spec clause_line(Clauses, Arguments, Bindings) -> Line when
-    Clauses :: cauder_syntax:af_clause_seq(),
-    Arguments :: [cauder_syntax:af_literal()],
+-spec clause_line(Clauses, ValueList, Bindings) -> Line when
+    Clauses :: clauses(),
+    ValueList :: [term()],
     Bindings :: cauder_bindings:bindings(),
     Line :: non_neg_integer().
 
 clause_line([], _, _) ->
     -1;
-clause_line([{'clause', Line, Ps, G, _} | Cs], Vs, Bs0) ->
-    case match(Ps, Vs, Bs0) of
-        {match, Bs} ->
-            case concrete(guard_seq(G, Bs)) of
+clause_line([{'clause', Line, Ps, G, _} | Cs], Vals, Bs) ->
+    case match_list(Ps, Vals, Bs) of
+        {match, Bs1} ->
+            case guard_seq(G, Bs1) of
                 true -> Line;
-                false -> clause_line(Cs, Vs, Bs0)
+                false -> clause_line(Cs, Vals, Bs)
             end;
         nomatch ->
-            clause_line(Cs, Vs, Bs0)
+            clause_line(Cs, Vals, Bs)
     end.
 
 %% Tries to match a list of values against a list of patterns using the given environment.
 %% The list of values should have no variables.
 
--spec match(Patterns, Arguments, Bindings) -> {match, NewBindings} | nomatch when
-    Patterns :: [cauder_syntax:af_pattern()],
-    Arguments :: [cauder_syntax:af_literal()],
-    Bindings :: cauder_bindings:bindings(),
-    NewBindings :: cauder_bindings:bindings().
-
-match([], [], Bs) ->
-    {match, Bs};
-match([Pat | Ps0], [{value, _, Val} | Vs0], Bs0) when length(Ps0) == length(Vs0) ->
-    case catch match1(Pat, Val, Bs0) of
-        {match, Bs} -> match(Ps0, Vs0, Bs);
-        nomatch -> nomatch
-    end;
-match(_Bs, _Ps, _Vs) ->
-    nomatch.
-
-% TODO Organize arguments to be consistent
--spec match1(Pattern, Term, Bindings) -> {match, NewBindings} | no_return() when
+-spec match(Pattern, Term, Bindings) -> {match, NewBindings} | nomatch when
     Pattern :: cauder_syntax:af_pattern(),
     Term :: term(),
     Bindings :: cauder_bindings:bindings(),
     NewBindings :: cauder_bindings:bindings().
 
-match1({value, _, V}, V, Bs) ->
-    {match, Bs};
+match(Pat, Term, Bs0) ->
+    case catch match1(Pat, Term, Bs0) of
+        invalid ->
+            % TODO Convert pattern to term
+            erlang:error({illegal_pattern, Pat});
+        Other ->
+            Other
+    end.
+
+-spec match1(Pattern, Term, Bindings) -> {match, NewBindings} when
+    Pattern :: cauder_syntax:af_pattern(),
+    Term :: term(),
+    Bindings :: cauder_bindings:bindings(),
+    NewBindings :: cauder_bindings:bindings().
+
+match1({value, _, T0}, T, Bs) ->
+    case T of
+        T0 -> {match, Bs};
+        _ -> throw(nomatch)
+    end;
 match1({var, _, '_'}, _, Bs) ->
     {match, Bs};
-match1({var, _, Name}, Value, Bs0) ->
-    case cauder_bindings:find(Name, Bs0) of
-        {ok, Value} ->
-            {match, Bs0};
+match1({var, _, Name}, Term, Bs) ->
+    case cauder_bindings:find(Name, Bs) of
+        {ok, Term} ->
+            {match, Bs};
         {ok, _} ->
             throw(nomatch);
         error ->
-            Bs1 = cauder_bindings:add(Name, Value, Bs0),
-            {match, Bs1}
+            {match, cauder_bindings:add(Name, Term, Bs)}
     end;
-match1({match, _, Pat1, Pat2}, Term, Bs0) ->
-    {match, Bs1} = match1(Pat1, Term, Bs0),
+match1({match, _, Pat1, Pat2}, Term, Bs) ->
+    {match, Bs1} = match1(Pat1, Term, Bs),
     match1(Pat2, Term, Bs1);
-match1({cons, _, H, T}, [H1 | T1], Bs0) ->
-    {match, Bs} = match1(H, H1, Bs0),
-    match1(T, T1, Bs);
+match1({cons, _, H, T}, [H1 | T1], Bs) ->
+    {match, Bs1} = match1(H, H1, Bs),
+    match1(T, T1, Bs1);
+match1({cons, _, _, _}, _, _Bs) ->
+    throw(nomatch);
 match1({tuple, _, Es}, Tuple, Bs) when length(Es) =:= tuple_size(Tuple) ->
     match_tuple(Es, Tuple, 1, Bs);
 match1(_, _, _) ->
-    throw(nomatch).
+    throw(invalid).
 
--spec match_tuple(Values, Tuple, Index, Bindings) -> {match, NewBindings} | no_return() when
-    Values :: [cauder_syntax:af_literal()],
+-spec match_tuple(Elements, Tuple, Index, Bindings) -> {match, NewBindings} | no_return() when
+    Elements :: [cauder_syntax:af_pattern()],
     Tuple :: tuple(),
     Index :: pos_integer(),
     Bindings :: cauder_bindings:bindings(),
     NewBindings :: cauder_bindings:bindings().
 
-match_tuple([], _, _, Bs) ->
-    {match, Bs};
 match_tuple([E | Es], Tuple, I, Bs0) ->
     {match, Bs} = match1(E, element(I, Tuple), Bs0),
-    match_tuple(Es, Tuple, I + 1, Bs).
+    match_tuple(Es, Tuple, I + 1, Bs);
+match_tuple([], _, _, Bs) ->
+    {match, Bs}.
+
+-spec match_list(PatternList, TermList, Bindings) -> {match, NewBindings} | nomatch when
+    PatternList :: [cauder_syntax:af_pattern()],
+    TermList :: [term()],
+    Bindings :: cauder_bindings:bindings(),
+    NewBindings :: cauder_bindings:bindings().
+
+match_list([P | Ps], [T | Ts], Bs) ->
+    case match(P, T, Bs) of
+        {match, Bs1} ->
+            match_list(Ps, Ts, Bs1);
+        nomatch ->
+            nomatch
+    end;
+match_list([], [], Bs) ->
+    {match, Bs};
+match_list(_Ps, _Ts, _Bs) ->
+    nomatch.
 
 %%%=============================================================================
 
--spec guard_seq(Guards, Bindings) -> Boolean when
+-spec guard_seq(Guards, Bindings) -> boolean() when
     Guards :: cauder_syntax:af_guard_seq(),
-    Bindings :: cauder_bindings:bindings(),
-    Boolean :: cauder_syntax:af_boolean().
+    Bindings :: cauder_bindings:bindings().
 
 guard_seq([], _) ->
-    abstract(true);
+    true;
 guard_seq(Gs, Bs) when is_list(Gs) ->
     % In a guard sequence, guards are evaluated until one is true. The remaining guards, if any, are not evaluated.
     % See: https://erlang.org/doc/reference_manual/expressions.html#guard-sequences
-    abstract(lists:any(fun(G) -> concrete(guard(G, Bs)) end, Gs)).
+    lists:any(fun(G) -> guard(G, Bs) end, Gs).
 
--spec guard(Guard, Bindings) -> Boolean when
+-spec guard(Guard, Bindings) -> boolean() when
     Guard :: cauder_syntax:af_guard(),
-    Bindings :: cauder_bindings:bindings(),
-    Boolean :: cauder_syntax:af_boolean().
+    Bindings :: cauder_bindings:bindings().
 
 guard(G, Bs) when is_list(G) ->
-    abstract(lists:all(fun(Gt) -> concrete(guard_test(Gt, Bs)) end, G)).
+    lists:all(fun(Gt) -> guard_test(Gt, Bs) end, G).
 
--spec guard_test(GuardTest, Bindings) -> GuardTest | Boolean when
+-spec guard_test(GuardTest, Bindings) -> boolean() when
     GuardTest :: cauder_syntax:af_guard_test(),
-    Bindings :: cauder_bindings:bindings(),
-    Boolean :: cauder_syntax:af_boolean().
+    Bindings :: cauder_bindings:bindings().
 
 guard_test(Gt, Bs) ->
+    % TODO erl_lint:is_guard_test/1
     case is_reducible(Gt, Bs) of
         true ->
             #result{expr = [Gt1]} = expr(Gt, Bs, cauder_stack:new()),
             guard_test(Gt1, Bs);
         false ->
-            Gt
+            concrete(Gt)
     end.
 
 %%%=============================================================================
@@ -789,7 +816,7 @@ concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 %% reduced any further or not, given an environment.
 
 -spec is_reducible(Expression | [Expression], Bindings) -> IsReducible when
-    Expression :: cauder_syntax:abstract_expr(),
+    Expression :: expression(),
     Bindings :: cauder_bindings:bindings(),
     IsReducible :: boolean().
 
@@ -814,7 +841,7 @@ is_reducible(E, _) when is_tuple(E) ->
 %% @doc Checks if the given abstract expression is a literal value.
 
 -spec is_value(Expression | [Expression]) -> IsValue when
-    Expression :: cauder_syntax:abstract_expr(),
+    Expression :: expression(),
     IsValue :: boolean().
 
 is_value([]) -> true;
@@ -826,7 +853,7 @@ is_value(E) when is_tuple(E) -> false.
 
 -spec eval_and_update(Index, Expression, Bindings, Stack) -> Result when
     Index :: pos_integer(),
-    Expression :: cauder_syntax:abstract_expr(),
+    Expression :: expression(),
     Bindings :: cauder_bindings:bindings(),
     Stack :: cauder_stack:stack(),
     Result :: cauder_eval:result().
