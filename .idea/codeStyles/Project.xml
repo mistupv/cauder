@@ -12,7 +12,7 @@
       <option name="CALL_PARAMETERS_WRAP" value="5" />
       <indentOptions>
         <option name="INDENT_SIZE" value="4" />
-        <option name="TAB_SIZE" value="4" />
+        <option name="TAB_SIZE" value="8" />
       </indentOptions>
     </codeStyleSettings>
   </code_scheme>
