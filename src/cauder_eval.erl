@@ -1,3 +1,11 @@
+%%%-----------------------------------------------------------------------------
+%%% @doc The CauDEr meta interpreter.
+%%% This module provides an interpreter for Erlang expressions.
+%%% The expressions are in the abstract syntax as returned by `cauder_syntax'.
+%%% @see erl_eval
+%%% @end
+%%%-----------------------------------------------------------------------------
+
 -module(cauder_eval).
 
 %% API
@@ -824,6 +832,8 @@ is_value({value, _, _}) -> true;
 is_value({cons, _, H, T}) -> is_value(H) andalso is_value(T);
 is_value({tuple, _, Es}) -> is_value(Es);
 is_value(E) when is_tuple(E) -> false.
+
+%%%=============================================================================
 
 -spec eval_and_update(Index, Expression, Bindings, Stack) -> Result when
     Index :: pos_integer(),
