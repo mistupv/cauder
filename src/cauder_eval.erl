@@ -2,7 +2,7 @@
 
 %% API
 -export([exprs/3]).
--export([abstract/1, concrete/1, is_value/1, is_reducible/2]).
+-export([is_value/1, is_reducible/2]).
 -export([match_receive_pid/6, match_receive_uid/4]).
 -export([clause_line/3]).
 
@@ -72,10 +72,18 @@ exprs([E | Es], Bs, Stk) ->
                     {Entry, Stk1} = cauder_stack:pop(Stk),
                     case Entry of
                         {value, #s_function{env = Bs1, expr = Es1, var = Var}} ->
-                            Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
+                            Es2 = cauder_syntax:replace_variable(
+                                Es1,
+                                setelement(2, Var, Line),
+                                cauder_syntax:concrete(E)
+                            ),
                             #result{env = Bs1, expr = Es2, stack = Stk1};
                         {value, #s_block{expr = Es1, var = Var}} ->
-                            Es2 = cauder_syntax:replace_variable(Es1, setelement(2, Var, Line), concrete(E)),
+                            Es2 = cauder_syntax:replace_variable(
+                                Es1,
+                                setelement(2, Var, Line),
+                                cauder_syntax:concrete(E)
+                            ),
                             #result{env = Bs, expr = Es2, stack = Stk1}
                     end;
                 _ ->
@@ -122,7 +130,7 @@ expr(E = {cons, Line, H0, T0}, Bs, Stk) ->
         true ->
             R = #result{expr = [H]} = expr(H0, Bs, Stk),
             case is_value(H) andalso is_value(T0) of
-                true -> R#result{expr = [{value, Line, [concrete(H) | concrete(T0)]}]};
+                true -> R#result{expr = [{value, Line, [cauder_syntax:concrete(H) | cauder_syntax:concrete(T0)]}]};
                 false -> R#result{expr = [setelement(3, E, H)]}
             end;
         false ->
@@ -130,18 +138,24 @@ expr(E = {cons, Line, H0, T0}, Bs, Stk) ->
                 true ->
                     R = #result{expr = [T]} = expr(T0, Bs, Stk),
                     case is_value(H0) andalso is_value(T) of
-                        true -> R#result{expr = [{value, Line, [concrete(H0) | concrete(T)]}]};
-                        false -> R#result{expr = [setelement(4, E, T)]}
+                        true ->
+                            R#result{expr = [{value, Line, [cauder_syntax:concrete(H0) | cauder_syntax:concrete(T)]}]};
+                        false ->
+                            R#result{expr = [setelement(4, E, T)]}
                     end;
                 false ->
-                    #result{env = Bs, expr = [{value, Line, [concrete(H0) | concrete(T0)]}], stack = Stk}
+                    #result{
+                        env = Bs,
+                        expr = [{value, Line, [cauder_syntax:concrete(H0) | cauder_syntax:concrete(T0)]}],
+                        stack = Stk
+                    }
             end
     end;
 expr(E = {tuple, Line, Es0}, Bs, Stk) ->
     R = #result{expr = Es} = expr_list(Es0, Bs, Stk),
     case is_value(Es) of
         true ->
-            Tuple = list_to_tuple(lists:map(fun concrete/1, Es)),
+            Tuple = list_to_tuple(lists:map(fun cauder_syntax:concrete/1, Es)),
             #result{env = Bs, expr = [{value, Line, Tuple}], stack = Stk};
         false ->
             R#result{expr = [setelement(3, E, Es)]}
@@ -195,7 +209,7 @@ expr(E = {bif, Line, M, F, As}, Bs, Stk) ->
         true ->
             eval_and_update(5, E, Bs, Stk);
         false ->
-            Value = apply(M, F, lists:map(fun concrete/1, As)),
+            Value = apply(M, F, lists:map(fun cauder_syntax:concrete/1, As)),
             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr({self, Line}, Bs, Stk) ->
@@ -229,7 +243,7 @@ expr(E = {spawn, Line, N, Fun}, Bs, Stk) ->
                     eval_and_update(4, E, Bs, Stk);
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = #label_spawn_fun{var = Var, node = concrete(N), function = Fun},
+                    Label = #label_spawn_fun{var = Var, node = cauder_syntax:concrete(N), function = Fun},
                     #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
@@ -249,9 +263,9 @@ expr(E = {spawn, Line, M, F, As}, Bs, Stk) ->
                             Var = cauder_utils:temp_variable(Line),
                             Label = #label_spawn_mfa{
                                 var = Var,
-                                module = concrete(M),
-                                function = concrete(F),
-                                args = concrete(As)
+                                module = cauder_syntax:concrete(M),
+                                function = cauder_syntax:concrete(F),
+                                args = cauder_syntax:concrete(As)
                             },
                             #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                     end
@@ -277,10 +291,10 @@ expr(E = {spawn, Line, N, M, F, As}, Bs, Stk) ->
                                     Var = cauder_utils:temp_variable(Line),
                                     Label = #label_spawn_mfa{
                                         var = Var,
-                                        node = concrete(N),
-                                        module = concrete(M),
-                                        function = concrete(F),
-                                        args = concrete(As)
+                                        node = cauder_syntax:concrete(N),
+                                        module = cauder_syntax:concrete(M),
+                                        function = cauder_syntax:concrete(F),
+                                        args = cauder_syntax:concrete(As)
                                     },
                                     #result{env = Bs, expr = [Var], stack = Stk, label = Label}
                             end
@@ -293,7 +307,7 @@ expr(E = {start, Line, N}, Bs, Stk) ->
             eval_and_update(3, E, Bs, Stk);
         false ->
             Var = cauder_utils:temp_variable(Line),
-            Label = #label_start{var = Var, name = concrete(N)},
+            Label = #label_start{var = Var, name = cauder_syntax:concrete(N)},
             #result{env = Bs, expr = [Var], stack = Stk, label = Label}
     end;
 expr(E = {start, Line, H, N}, Bs, Stk) ->
@@ -306,7 +320,7 @@ expr(E = {start, Line, H, N}, Bs, Stk) ->
                     eval_and_update(4, E, Bs, Stk);
                 false ->
                     Var = cauder_utils:temp_variable(Line),
-                    Label = #label_start{var = Var, name = concrete(N), host = concrete(H)},
+                    Label = #label_start{var = Var, name = cauder_syntax:concrete(N), host = cauder_syntax:concrete(H)},
                     #result{env = Bs, expr = [Var], stack = Stk, label = Label}
             end
     end;
@@ -319,7 +333,7 @@ expr(E = {Send, _, L, R}, Bs, Stk) when Send =:= 'send' orelse Send =:= 'send_op
                 true ->
                     eval_and_update(4, E, Bs, Stk);
                 false ->
-                    Label = #label_send{dst = concrete(L), val = concrete(R)},
+                    Label = #label_send{dst = cauder_syntax:concrete(L), val = cauder_syntax:concrete(R)},
                     #result{env = Bs, expr = [R], stack = Stk, label = Label}
             end
     end;
@@ -356,8 +370,8 @@ expr(E = {apply, Line, M0, F0, As}, Bs0, Stk0) ->
                         true ->
                             eval_and_update(5, E, Bs0, Stk0);
                         false ->
-                            M = concrete(M0),
-                            F = concrete(F0),
+                            M = cauder_syntax:concrete(M0),
+                            F = cauder_syntax:concrete(F0),
                             remote_call(M, F, As, Stk0, Line, Bs0)
                     end
             end
@@ -372,7 +386,7 @@ expr(E = {apply_fun, Line, Fun, As}, Bs0, Stk0) ->
                     eval_and_update(4, E, Bs0, Stk0);
                 false ->
                     A = length(As),
-                    {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(concrete(Fun), env),
+                    {env, [{{M, F}, Bs1, Cs}]} = erlang:fun_info(cauder_syntax:concrete(Fun), env),
                     {Body, Bs2} = match_fun(Cs, As),
                     Var = cauder_utils:temp_variable(Line),
                     Bs = cauder_bindings:merge(Bs1, Bs2),
@@ -390,7 +404,7 @@ expr(E = {match, _, Lhs, Rhs}, Bs0, Stk) ->
                 true ->
                     eval_and_update(4, E, Bs0, Stk);
                 false ->
-                    Val = concrete(Rhs),
+                    Val = cauder_syntax:concrete(Rhs),
                     case match(Lhs, Val, Bs0) of
                         {match, Bs} -> #result{env = Bs, expr = [Rhs], stack = Stk};
                         nomatch -> error({badmatch, Val})
@@ -402,7 +416,7 @@ expr(E = {op, Line, Op, As}, Bs, Stk) ->
         true ->
             eval_and_update(4, E, Bs, Stk);
         false ->
-            Value = apply(erlang, Op, lists:map(fun concrete/1, As)),
+            Value = apply(erlang, Op, lists:map(fun cauder_syntax:concrete/1, As)),
             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
     end;
 expr(E = {'andalso', Line, Lhs, Rhs}, Bs, Stk) ->
@@ -418,7 +432,7 @@ expr(E = {'andalso', Line, Lhs, Rhs}, Bs, Stk) ->
                         true ->
                             eval_and_update(4, E, Bs, Stk);
                         false ->
-                            Value = apply(erlang, 'and', [concrete(Lhs), concrete(Rhs)]),
+                            Value = apply(erlang, 'and', [cauder_syntax:concrete(Lhs), cauder_syntax:concrete(Rhs)]),
                             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
@@ -436,7 +450,7 @@ expr(E = {'orelse', Line, Lhs, Rhs}, Bs, Stk) ->
                         true ->
                             eval_and_update(4, E, Bs, Stk);
                         false ->
-                            Value = apply(erlang, 'or', [concrete(Lhs), concrete(Rhs)]),
+                            Value = apply(erlang, 'or', [cauder_syntax:concrete(Lhs), cauder_syntax:concrete(Rhs)]),
                             #result{env = Bs, expr = [{value, Line, Value}], stack = Stk}
                     end
             end
@@ -483,7 +497,7 @@ remote_call(M, F, As, Stk0, Line, Bs0) ->
             Stk = cauder_stack:push(Entry, Stk0),
             #result{env = Bs0, expr = [Var], stack = Stk};
         error ->
-            Value = apply(M, F, lists:map(fun concrete/1, As)),
+            Value = apply(M, F, lists:map(fun cauder_syntax:concrete/1, As)),
             #result{env = Bs0, expr = [{value, Line, Value}], stack = Stk0}
     end.
 
@@ -786,30 +800,10 @@ guard_test(Gt, Bs) ->
             #result{expr = [Gt1]} = expr(Gt, Bs, cauder_stack:new()),
             guard_test(Gt1, Bs);
         false ->
-            concrete(Gt)
+            cauder_syntax:concrete(Gt)
     end.
 
 %%%=============================================================================
-
-%%------------------------------------------------------------------------------
-%% @doc Converts the given Erlang term into its abstract form.
-
--spec abstract(Term) -> Literal when
-    Term :: term(),
-    Literal :: cauder_syntax:af_literal().
-
-abstract(Value) -> {value, 0, Value}.
-
-%%------------------------------------------------------------------------------
-%% @doc Converts the given abstract literal element into the Erlang term that it
-%% represents.
-
--spec concrete(Literal) -> Term when
-    Literal :: cauder_syntax:af_literal(),
-    Term :: term().
-
-concrete({value, _, Value}) -> Value;
-concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
 
 %%------------------------------------------------------------------------------
 %% @doc Checks if the given abstract expression (or list of expressions) can be

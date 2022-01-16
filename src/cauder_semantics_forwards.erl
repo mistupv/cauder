@@ -356,7 +356,7 @@ rule_spawn(
                     node = LogEntry#log_spawn.node,
                     pid = LogEntry#log_spawn.pid,
                     mfa = {M, F, length(As)},
-                    expr = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_eval:abstract/1, As))]
+                    expr = [cauder_syntax:remote_call(M, F, lists:map(fun cauder_syntax:abstract/1, As))]
                 }
         end,
     TraceAction = #trace_spawn{
