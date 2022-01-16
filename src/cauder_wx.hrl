@@ -22,8 +22,8 @@
     module :: atom() | undefined,
     position = -1 :: integer(),
     task :: atom() | undefined,
-    system :: cauder_types:system() | undefined,
-    pid :: cauder_types:proc_id() | undefined
+    system :: cauder_system:system() | undefined,
+    pid :: cauder_process:id() | undefined
 }).
 
 -define(GUI_DB, 'cauder_wx/database').
@@ -48,6 +48,10 @@
 
 -define(ICON_ALIVE, "🏃").
 -define(ICON_DEAD, "💀").
+
+%% -----
+
+-define(CAUDER_GREEN, {34, 139, 34}).
 
 %% -----
 

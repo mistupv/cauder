@@ -3,9 +3,9 @@
 %% API
 -export([create/1, update/2]).
 
--include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
 -include("cauder_wx.hrl").
+-include_lib("wx/include/wx.hrl").
 
 -record(menu_item, {
     id :: integer(),

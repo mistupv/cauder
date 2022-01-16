@@ -10,9 +10,10 @@
 % TODO Remove
 -elvis([{elvis_style, nesting_level, #{ignore => [cauder_wx_dialog, start_session, 2]}}]).
 
--include_lib("wx/include/wx.hrl").
 -include("cauder.hrl").
+-include("cauder_message.hrl").
 -include("cauder_wx.hrl").
+-include_lib("wx/include/wx.hrl").
 
 %%------------------------------------------------------------------------------
 %% @doc Shows a dialog where the use can choose the execution mode, with the
@@ -26,7 +27,7 @@ when
     Node :: node(),
     Module :: module(),
     Function :: atom(),
-    Args :: cauder_types:af_args(),
+    Args :: cauder_syntax:af_args(),
     TracePath :: file:filename().
 
 start_session(Parent, MFAs) ->
@@ -249,8 +250,8 @@ stop_session(Parent) ->
 
 -spec edit_binding(Parent, Binding) -> NewBinding | cancel when
     Parent :: wxWindow:wxWindow(),
-    Binding :: cauder_types:binding(),
-    NewBinding :: cauder_types:binding().
+    Binding :: cauder_process:binding(),
+    NewBinding :: cauder_process:binding().
 
 edit_binding(Parent, {Key, Value}) ->
     Dialog = wxDialog:new(Parent, ?wxID_ANY, "Edit binding"),
@@ -331,9 +332,9 @@ edit_binding(Parent, {Key, Value}) ->
 
 -spec choose_message(Parent, {Receiver, Messages}) -> {ok, MessageId} | cancel when
     Parent :: wxWindow:wxWindow(),
-    Receiver :: cauder_types:proc_id(),
-    Messages :: [cauder_mailbox:message()],
-    MessageId :: cauder_mailbox:uid().
+    Receiver :: cauder_process:id(),
+    Messages :: [cauder_message:message()],
+    MessageId :: cauder_message:uid().
 
 choose_message(Parent, {Receiver, Messages}) ->
     Dialog = wxDialog:new(Parent, ?wxID_ANY, "Choose a message"),
@@ -389,13 +390,13 @@ choose_message(Parent, {Receiver, Messages}) ->
     wxListCtrl:setColumnWidth(MessageList, 3, 75),
 
     lists:foldl(
-        fun(#message{uid = Uid, value = Value, src = Src, dest = Dest}, Row) ->
+        fun(#message{uid = Uid, src = Src, dst = Dst, val = Val}, Row) ->
             wxListCtrl:insertItem(MessageList, Row, ""),
             wxListCtrl:setItemFont(MessageList, Row, Font),
             wxListCtrl:setItem(MessageList, Row, 0, cauder_pp:to_string(Uid)),
-            wxListCtrl:setItem(MessageList, Row, 1, cauder_pp:to_string(Value)),
+            wxListCtrl:setItem(MessageList, Row, 1, cauder_pp:to_string(Val)),
             wxListCtrl:setItem(MessageList, Row, 2, cauder_pp:to_string(Src)),
-            wxListCtrl:setItem(MessageList, Row, 3, cauder_pp:to_string(Dest)),
+            wxListCtrl:setItem(MessageList, Row, 3, cauder_pp:to_string(Dst)),
             Row + 1
         end,
         0,

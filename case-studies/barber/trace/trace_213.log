@@ -1,0 +1,15 @@
+{trace_spawn,nonode@nohost,216,true}.
+{trace_receive,0}.
+{trace_receive,1}.
+{trace_send,3}.
+{trace_receive,2}.
+{trace_send,4}.
+{trace_receive,5}.
+{trace_send,7}.
+{trace_receive,6}.
+{trace_send,8}.
+{trace_receive,9}.
+{trace_send,11}.
+{trace_receive,10}.
+{trace_receive,12}.
+{trace_receive,14}.
