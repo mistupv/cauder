@@ -4,7 +4,6 @@
 -export([exprs/3]).
 -export([is_value/1, is_reducible/2]).
 -export([match_receive_pid/6, match_receive_uid/4]).
--export([clause_line/3]).
 
 -include("cauder_message.hrl").
 -include("cauder_stack.hrl").
@@ -665,25 +664,6 @@ match_clause([{'clause', _, H, G, B} | Cs], Vals, Bs) ->
     end;
 match_clause([], _, _) ->
     nomatch.
-
--spec clause_line(Clauses, ValueList, Bindings) -> Line when
-    Clauses :: clauses(),
-    ValueList :: [term()],
-    Bindings :: cauder_bindings:bindings(),
-    Line :: non_neg_integer().
-
-clause_line([], _, _) ->
-    -1;
-clause_line([{'clause', Line, Ps, G, _} | Cs], Vals, Bs) ->
-    case match_list(Ps, Vals, Bs) of
-        {match, Bs1} ->
-            case guard_seq(G, Bs1) of
-                true -> Line;
-                false -> clause_line(Cs, Vals, Bs)
-            end;
-        nomatch ->
-            clause_line(Cs, Vals, Bs)
-    end.
 
 %% Tries to match a list of values against a list of patterns using the given environment.
 %% The list of values should have no variables.

@@ -868,6 +868,5 @@ set_line(Node, Line) -> erl_syntax:set_pos(Node, erl_anno:new(Line)).
 
 remote_call(M, F, As) ->
     A = length(As),
-    {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
-    Line = cauder_eval:clause_line(Cs, As, cauder_bindings:new()),
+    {_, [{'clause', Line, _Ps, _G, _B} | _]} = cauder_utils:fundef_lookup({M, F, A}),
     {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, As)}.
