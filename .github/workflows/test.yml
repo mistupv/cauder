@@ -14,9 +14,6 @@ on:
       - 'release/**'
       - 'paper/**'
 
-env:
-  OTP_VERSION: 24
-
 jobs:
   skip_check:
     name: 'Skip check'
