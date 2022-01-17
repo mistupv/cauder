@@ -23,42 +23,45 @@ jobs:
     steps:
       - name: 'Skip check'
         id: skip_check
-        uses: fkirc/skip-duplicate-actions@v3.4.0
+        uses: fkirc/skip-duplicate-actions@v3.4.1
 
   linux:
-    name: 'Test (Ubuntu)'
+    name: 'Test on Ubuntu'
     needs: skip_check
     runs-on: ubuntu-latest
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
 
     container:
-      image: erlang:23
+      image: erlang:latest
 
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v2.3.4
+        uses: actions/checkout@v2
       - name: 'Extract branch name'
         run: echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
         id: branch
+      - name: 'Extract OTP release'
+        run: echo "::set-output name=otp_release::$(erl -eval 'erlang:display(list_to_integer(erlang:system_info(otp_release))), halt().' -noshell)"
+        id: otp_release
       - name: 'Cache Dialyzer PLTs'
-        uses: actions/cache@v2.1.4
+        uses: actions/cache@v2
         with:
           path: |
             ~/.cache/rebar3/rebar3_*_plt
             _build/default/rebar3_*_plt
           key: |
-            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-plt-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-${{ steps.otp_release.outputs.otp_release }}-plt-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
           restore-keys: |
-            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-plt-
-      - name: Cache Hex packages
-        uses: actions/cache@v2.1.4
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-${{ steps.otp_release.outputs.otp_release }}-plt-
+      - name: 'Cache Hex packages'
+        uses: actions/cache@v2
         with:
           path: |
             ~/.cache/rebar3/hex/hexpm/packages
           key: |
-            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-${{ steps.otp_release.outputs.otp_release }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
           restore-keys: |
-            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-23-hex-
+            ${{ runner.os }}-${{ steps.branch.outputs.branch }}-otp-${{ steps.otp_release.outputs.otp_release }}-hex-
       - name: 'Compile'
         run: rebar3 compile
       - name: 'Dialyzer'
@@ -75,20 +78,20 @@ jobs:
         run: rebar3 ct
 
   macos:
-    name: 'Test (macOS)'
+    name: 'Test on MacOS'
     needs: skip_check
     runs-on: macos-latest
-    if: ${{ false }} #${{ needs.skip_check.outputs.should_skip != 'true' }}
+    if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
 
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v2.3.4
-      - name: Brew Version Check
+        uses: actions/checkout@v2
+      - name: 'Brew Version Check'
         run: brew --version
-      - name: Keep Brew Fresh
+      - name: 'Keep Brew Fresh'
         run: brew update
       - name: 'Install Erlang'
-        run: brew install erlang@23
+        run: brew install erlang
       - name: 'Install rebar3'
         run: brew install rebar3
       - name: 'Compile'
@@ -99,38 +102,21 @@ jobs:
         run: rebar3 ct
 
   windows:
-    name: 'Test (Windows)'
+    name: 'Test on Windows'
     needs: skip_check
     runs-on: windows-latest
     if: ${{ needs.skip_check.outputs.should_skip != 'true' }}
 
-    env:
-      OTP_VERSION: '23.3.1'
-
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v2.3.4
-      - name: 'Cache Erlang installer'
-        uses: actions/cache@v2.1.4
-        id: cache
-        with:
-          path: otp_win64_${{ env.OTP_VERSION }}.exe
-          key: ${{ runner.os }}-otp-${{ env.OTP_VERSION }}-installer
-      - name: 'Download Erlang'
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: Invoke-WebRequest "https://erlang.org/download/otp_win64_${Env:OTP_VERSION}.exe" -O "otp_win64_${Env:OTP_VERSION}.exe"
+        uses: actions/checkout@v2
       - name: 'Install Erlang'
-        run: |
-          Start-Process .\otp_win64_${Env:OTP_VERSION}.exe -ArgumentList "/S" -Wait
-          echo "C:\Program Files\erl-${Env:OTP_VERSION}\bin" | Out-File -FilePath $Env:GITHUB_PATH -Encoding utf8 -Append
-      # Latest version of Erlang available in chocolatey is 22.1
-      #- name: 'Install Erlang'
-      #  run: choco install erlang
-      #- name: 'Install rebar3'
-      #  run: choco install rebar3
+        run: choco install erlang
+      - name: 'Install rebar3'
+        run: choco install rebar3
       - name: 'Compile'
-        run: .\rebar3 compile
+        run: rebar3 compile
       - name: 'EUnit Tests'
-        run: .\rebar3 eunit
+        run: rebar3 eunit
       - name: 'Common Tests'
-        run: .\rebar3 ct
+        run: rebar3 ct
