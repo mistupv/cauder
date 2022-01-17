@@ -472,11 +472,11 @@ write_trace(Dir, TraceResult) ->
     ResultContent = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, maps:to_list(ResultInfo))),
     ok = file:write_file(ResultFile, ResultContent),
 
-    lists:foreach(
-        fun({Index, List}) ->
-            File = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, List)),
+    maps:foreach(
+        fun(Pid, Actions) ->
+            File = filename:join(Dir, io_lib:format("trace_~b.log", [Pid])),
+            Content = lists:join($\n, lists:map(fun(T) -> io_lib:format("~p.", [T]) end, Actions)),
             ok = file:write_file(File, Content)
         end,
-        maps:to_list(Traces)
+        Traces
     ).

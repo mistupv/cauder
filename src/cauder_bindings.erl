@@ -54,17 +54,13 @@ is_bound(Name, Bs) ->
     Bindings3 :: cauder_bindings:bindings().
 
 merge(Bs1, Bs2) ->
-    % TODO maps:merge_with/3
-    maps:fold(
-        fun(Name, Value, Bs) ->
-            case maps:find(Name, Bs) of
-                {ok, Value} -> Bs;
-                {ok, V1} -> erlang:error({badmatch, V1});
-                error -> maps:put(Name, Value, Bs)
-            end
+    maps:merge_with(
+        fun
+            (_K, V, V) -> V;
+            (_K, _, V) -> erlang:error({badmatch, V})
         end,
-        Bs1,
-        Bs2
+        Bs2,
+        Bs1
     ).
 
 -spec to_list(Bindings) -> [Binding] when
