@@ -10,6 +10,7 @@
 
 %% API
 -export([clauses/1, expr_list/1]).
+-export([abstract/1, concrete/1]).
 -export([replace_variable/3]).
 -export([to_abstract_expr/1]).
 -export([remote_call/3]).
@@ -572,6 +573,28 @@ exception(Class, Reason) ->
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
+%% @doc Converts the given Erlang term into its abstract form.
+
+-spec abstract(Term) -> Literal when
+    Term :: term(),
+    Literal :: cauder_syntax:af_literal().
+
+abstract(Value) -> {value, 0, Value}.
+
+%%------------------------------------------------------------------------------
+%% @doc Converts the given abstract literal element into the Erlang term that it
+%% represents.
+
+-spec concrete(Literal) -> Term when
+    Literal :: cauder_syntax:af_literal(),
+    Term :: term().
+
+concrete({value, _, Value}) -> Value;
+concrete({cons, _, {value, _, H}, {value, _, T}}) -> [H | T].
+
+%%%=============================================================================
+
+%%------------------------------------------------------------------------------
 %% @doc Replaces all occurrences of the given `Variable' in each one of the
 %% `Expressions' with the given literal `Value'.
 
@@ -601,14 +624,14 @@ replace_variable({cons, Line, H0, T0}, Var, Val) ->
     H = replace_variable(H0, Var, Val),
     T = replace_variable(T0, Var, Val),
     case cauder_eval:is_value(H) andalso cauder_eval:is_value(T) of
-        true -> {value, Line, [cauder_eval:concrete(H) | cauder_eval:concrete(T)]};
+        true -> {value, Line, [cauder_syntax:concrete(H) | cauder_syntax:concrete(T)]};
         false -> {cons, Line, H, T}
     end;
 replace_variable({tuple, Line, Es0}, Var, Val) ->
     Es = replace_variable(Es0, Var, Val),
     case cauder_eval:is_value(Es) of
         true ->
-            Tuple = list_to_tuple(lists:map(fun cauder_eval:concrete/1, Es)),
+            Tuple = list_to_tuple(lists:map(fun cauder_syntax:concrete/1, Es)),
             {value, Line, Tuple};
         false ->
             {tuple, Line, Es}
@@ -845,6 +868,5 @@ set_line(Node, Line) -> erl_syntax:set_pos(Node, erl_anno:new(Line)).
 
 remote_call(M, F, As) ->
     A = length(As),
-    {_, Cs} = cauder_utils:fundef_lookup({M, F, A}),
-    Line = cauder_eval:clause_line(cauder_bindings:new(), Cs, As),
+    {_, [{'clause', Line, _Ps, _G, _B} | _]} = cauder_utils:fundef_lookup({M, F, A}),
     {remote_call, Line, M, F, lists:map(fun(V) -> setelement(2, V, Line) end, As)}.
