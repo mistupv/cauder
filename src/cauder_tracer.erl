@@ -471,12 +471,12 @@ write_trace(Dir, TraceInfo) ->
     ResultFilename = filename:join(Dir, "trace_result.log"),
     write_terms(ResultFilename, maps:to_list(ResultInfo)),
 
-    lists:foreach(
-        fun({Index, Terms}) ->
-            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Index])),
-            write_terms(Filename, Terms)
+    maps:foreach(
+        fun(Pid, Actions) ->
+            Filename = filename:join(Dir, io_lib:format("trace_~b.log", [Pid])),
+            write_terms(Filename, Actions)
         end,
-        maps:to_list(Trace)
+        Trace
     ).
 
 -spec write_terms(Filename, Terms) -> ok when
