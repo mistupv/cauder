@@ -10,9 +10,11 @@ start() ->
 
 child(_Parent) ->
     U = nodes(),
+    register(pippo, self()),
     spawn('doesnt@exist', ?MODULE, helloWorld, []),
     slave:start('anotherCoolHost', 'coolName'),
     U.
 
 helloWorld() ->
+    register(pippo, self()),
     io:format("Hello world.~n").

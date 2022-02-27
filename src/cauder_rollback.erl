@@ -10,16 +10,22 @@
     can_rollback_start/2,
     can_rollback_spawn/2,
     can_rollback_send/2,
+    can_rollback_senda/2,
     can_rollback_receive/2,
-    can_rollback_variable/2
+    can_rollback_variable/2,
+    can_rollback_reg/2,
+    can_rollback_del/2
 ]).
 -export([
     rollback_step/2,
     rollback_start/2,
     rollback_spawn/2,
     rollback_send/2,
+    rollback_senda/2,
     rollback_receive/2,
-    rollback_variable/2
+    rollback_variable/2,
+    rollback_reg/2,
+    rollback_del/2
 ]).
 
 -include("cauder_system.hrl").
@@ -93,6 +99,21 @@ can_rollback_send(Uid, #system{pool = Pool}) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% @doc Checks whether the sending of the message with the given uid can be
+%% rolled back in the given system, or not.
+
+-spec can_rollback_senda(Uid, System) -> CanRollback when
+    Uid :: cauder_message:uid(),
+    System :: cauder_system:system(),
+    CanRollback :: boolean().
+
+can_rollback_senda(Uid, #system{pool = Pool}) ->
+    case cauder_pool:find_history_senda(Uid, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
+
+%%------------------------------------------------------------------------------
 %% @doc Checks whether the reception of the message with the given uid can be
 %% rolled back in the given system, or not.
 
@@ -103,6 +124,36 @@ can_rollback_send(Uid, #system{pool = Pool}) ->
 
 can_rollback_receive(Uid, #system{pool = Pool}) ->
     case cauder_pool:find_history_receive(Uid, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether  can be
+%% rolled back in the given system, or not.
+
+-spec can_rollback_reg(El, System) -> CanRollback when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system(),
+    CanRollback :: boolean().
+
+can_rollback_reg(El, #system{pool = Pool}) ->
+    case cauder_pool:find_history_reg(El, Pool) of
+        {ok, _} -> true;
+        error -> false
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether  can be
+%% rolled back in the given system, or not.
+
+-spec can_rollback_del(El, System) -> CanRollback when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system(),
+    CanRollback :: boolean().
+
+can_rollback_del(El, #system{pool = Pool}) ->
+    case cauder_pool:find_history_del(El, Pool) of
         {ok, _} -> true;
         error -> false
     end.
@@ -149,6 +200,15 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
         {value, #hist_send{msg = #message{uid = Uid, dst = Dst} = Msg}} ->
             Sys = Sys0#system{roll = RollLog ++ cauder_utils:gen_log_send(Pid, Msg)},
             rollback_send(Pid, Sys, Dst, Uid);
+        {value, #hist_sendA{node = Node, mapEl = El, msg = #message{uid = Uid, dst = Dst}}} ->
+            Sys = Sys0#system{},
+            rollback_senda(Pid, Sys, Dst, Uid, El, Node);
+        {value, #hist_regS{mapEl = El, node = Node}} ->
+            Sys = Sys0#system{},
+            rollback_reg(Pid, Sys, El, Node);
+        {value, #hist_del{mapEl = El, map = Map, node = Node}} ->
+            Sys = Sys0#system{},
+            rollback_del(Pid, Sys, El, Map, Node);
         {value, _} ->
             cauder_semantics_backwards:step(Pid, Sys0)
     end.
@@ -193,6 +253,19 @@ rollback_send(Uid, #system{pool = Pool} = Sys) ->
     rollback_until_send(SenderPid, Sys#system{roll = []}, Uid).
 
 %%------------------------------------------------------------------------------
+%% @doc Rolls back the sending of the message with the given uid, in the given
+%% system.
+
+-spec rollback_senda(Uid, System) -> NewSystem when
+    Uid :: cauder_message:uid(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rollback_senda(Uid, #system{pool = Pool} = Sys) ->
+    {ok, #process{pid = SenderPid}} = cauder_pool:find_history_senda(Uid, Pool),
+    rollback_until_senda(SenderPid, Sys#system{roll = []}, Uid).
+
+%%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid, in the given
 %% system.
 
@@ -204,6 +277,32 @@ rollback_send(Uid, #system{pool = Pool} = Sys) ->
 rollback_receive(Uid, #system{pool = Pool} = Sys) ->
     {ok, #process{pid = ReceiverPid}} = cauder_pool:find_history_receive(Uid, Pool),
     rollback_until_receive(ReceiverPid, Sys#system{roll = []}, Uid).
+
+%%------------------------------------------------------------------------------
+%% @doc Rolls back , in the given
+%% system.
+
+-spec rollback_reg(El, System) -> NewSystem when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rollback_reg(El, #system{pool = Pool} = Sys) ->
+    {ok, #process{pid = Pid}} = cauder_pool:find_history_reg(El, Pool),
+    rollback_until_reg(Pid, Sys#system{roll = []}, El).
+
+%%------------------------------------------------------------------------------
+%% @doc Rolls back , in the given
+%% system.
+
+-spec rollback_del(El, System) -> NewSystem when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rollback_del(El, #system{pool = Pool} = Sys) ->
+    {ok, #process{pid = Pid}} = cauder_pool:find_history_del(El, Pool),
+    rollback_until_del(Pid, Sys#system{roll = []}, El).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the binding of the variable with the given name, in the given
@@ -284,6 +383,98 @@ rollback_send(Pid, Sys0, DestPid, Uid) ->
             rollback_send(Pid, Sys1, DestPid, Uid)
     end.
 
+-spec rollback_senda(Pid, System, DestPid, Uid, El, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    DestPid :: cauder_process:id(),
+    Uid :: cauder_message:uid(),
+    El :: cauder_map:map_element(),
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_senda(Pid, Sys0, DestPid, Uid, El, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_SEND} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            %TODO CHECK IF A IS IN MAP OTHERWHISE PUT A IN MAP
+            Map = cauder_map:get_map(Sys0#system.maps, Node),
+            case cauder_map:is_in_map(Map, El) of
+                true ->
+                    Sys1 = rollback_step(DestPid, Sys0),
+                    rollback_senda(Pid, Sys1, DestPid, Uid, El, Node);
+                false ->
+                    {ok, #process{pid = DelPid}} = cauder_pool:find_history_del(El, Sys0#system.pool),
+                    Sys1 = rollback_step(DelPid, Sys0),
+                    rollback_senda(Pid, Sys1, DestPid, Uid, El, Node)
+            end
+    end.
+
+-spec rollback_reg(Pid, System, El, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: cauder_map:map_element(),
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_reg(Pid, Sys0, El, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_REG} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            Map = cauder_map:get_map(Sys0#system.maps, Node),
+            PidUndo =
+                case cauder_map:is_in_map(Map, El) of
+                    true ->
+                        {ok, #process{pid = ReadPid}} = cauder_pool:find_read_map(Sys0#system.pool, Node, El),
+                        ReadPid;
+                    false ->
+                        {ok, #process{pid = DelPid}} = cauder_pool:find_history_del(El, Sys0#system.pool),
+                        DelPid
+                end,
+            Sys1 = rollback_step(PidUndo, Sys0),
+            rollback_reg(Pid, Sys1, El, Node)
+    end.
+
+-spec rollback_del(Pid, System, El, Map, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: cauder_map:map_element(),
+    Map :: [cauder_map:map_element()],
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_del(Pid, Sys0, El = {A, P, _K}, Map, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_DEL} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            case cauder_pool:find_registered(Sys0#system.pool, Node, Map) of
+                {ok, #process{pid = PidUndo}} ->
+                    Sys1 = rollback_step(PidUndo, Sys0),
+                    rollback_del(Pid, Sys1, El, Map, Node);
+                error ->
+                    case cauder_map:find_atom(P, Map) of
+                        {Atom, Key} ->
+                            {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
+                                {Atom, P, Key}, Sys0#system.pool
+                            ),
+                            Sys1 = rollback_step(PidUndo, Sys0),
+                            rollback_del(Pid, Sys1, El, Map, Node);
+                        undefined ->
+                            {PidReg, Key} = cauder_map:find_pid(A, Map),
+                            {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
+                                {A, PidReg, Key}, Sys0#system.pool
+                            ),
+                            Sys1 = rollback_step(PidUndo, Sys0),
+                            rollback_del(Pid, Sys1, El, Map, Node)
+                    end
+            end
+    end.
+
 %%%=============================================================================
 
 -spec rollback_until_start(Pid, System, Node) -> NewSystem when
@@ -348,6 +539,22 @@ rollback_until_send(Pid, #system{pool = Pool} = Sys0, Uid) ->
             rollback_until_send(Pid, Sys1, Uid)
     end.
 
+-spec rollback_until_senda(Pid, System, Uid) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    Uid :: cauder_message:uid(),
+    NewSystem :: cauder_system:system().
+
+rollback_until_senda(Pid, #system{pool = Pool} = Sys0, Uid) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+    case cauder_history:peek(Hist) of
+        {value, #hist_sendA{msg = #message{uid = Uid}}} ->
+            rollback_step(Pid, Sys0);
+        {value, _} ->
+            Sys1 = rollback_step(Pid, Sys0),
+            rollback_until_senda(Pid, Sys1, Uid)
+    end.
+
 -spec rollback_until_receive(Pid, System, Uid) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
@@ -376,8 +583,42 @@ rollback_after_receive(Pid, Sys0, Uid) ->
     case cauder_history:peek(Hist) of
         {value, #hist_send{msg = #message{uid = Uid}}} ->
             rollback_after_receive(Pid, Sys1, Uid);
+        {value, #hist_sendA{msg = #message{uid = Uid}}} ->
+            rollback_after_receive(Pid, Sys1, Uid);
         {value, _} ->
             Sys1
+    end.
+
+-spec rollback_until_reg(Pid, System, El) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: cauder_map:map_element(),
+    NewSystem :: cauder_system:system().
+
+rollback_until_reg(Pid, #system{pool = Pool} = Sys0, El) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+    case cauder_history:peek(Hist) of
+        {value, #hist_regS{mapEl = El}} ->
+            rollback_step(Pid, Sys0);
+        {value, _} ->
+            Sys1 = rollback_step(Pid, Sys0),
+            rollback_until_reg(Pid, Sys1, El)
+    end.
+
+-spec rollback_until_del(Pid, System, El) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: cauder_map:map_element(),
+    NewSystem :: cauder_system:system().
+
+rollback_until_del(Pid, #system{pool = Pool} = Sys0, El) ->
+    #process{hist = Hist} = cauder_pool:get(Pid, Pool),
+    case cauder_history:peek(Hist) of
+        {value, #hist_del{mapEl = El}} ->
+            rollback_step(Pid, Sys0);
+        {value, _} ->
+            Sys1 = rollback_step(Pid, Sys0),
+            rollback_until_del(Pid, Sys1, El)
     end.
 
 -spec rollback_until_variable(Pid, System, Name) -> NewSystem when

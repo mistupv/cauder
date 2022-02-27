@@ -6,10 +6,12 @@ start() ->
     spawn(?MODULE, child2, []).
 
 child1() ->
+    register(pippo, self()),
     spawn('host@node', ?MODULE, greet, []).
 
 child2() ->
     slave:start(node, host).
 
 greet() ->
+    register(pippo, self()),
     io:format("Hello world!~n").

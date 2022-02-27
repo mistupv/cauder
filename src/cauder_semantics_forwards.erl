@@ -49,6 +49,14 @@ step(Pid, Sys, Sched, Mode) ->
             rule_node(Pid, Result, Sys);
         #label_nodes{} ->
             rule_nodes(Pid, Result, Sys);
+        #label_registered{} ->
+            rule_registered(Pid, Result, Sys);
+        #label_whereis{} ->
+            rule_whereis(Pid, Result, Sys);
+        #label_register{} ->
+            rule_register(Pid, Result, Sys);
+        #label_unregister{} ->
+            rule_unregister(Pid, Result, Sys);
         #label_start{} ->
             rule_start(Pid, Result, Sys);
         #label_spawn_fun{} ->
@@ -94,6 +102,70 @@ options(#system{pool = Pool} = Sys, Mode) ->
     System :: cauder_system:system(),
     NewSystem :: cauder_system:system().
 
+rule_local(
+    Pid,
+    #result{expr = [{'value', _, _}], stack = Stk, label = #label_tau{}} = Result,
+    #system{pool = Pool, maps = Maps} = Sys
+) ->
+    case cauder_stack:is_empty(Stk) of
+        true ->
+            P0 = cauder_pool:get(Pid, Pool),
+            M = cauder_map:get_map(Maps, P0#process.node),
+            case cauder_map:find_atom(Pid, M) of
+                {A, K} ->
+                    NewMaps = Maps -- [{M, P0#process.node}],
+                    NewMap = M -- [{A, Pid, K}],
+                    HistEntry = #hist_del{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        mapEl = {A, Pid, K},
+                        map = NewMap
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = Result#result.expr,
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        maps = NewMaps ++ [{NewMap, P0#process.node}],
+                        pool = cauder_pool:update(P1, Pool)
+                    };
+                undefined ->
+                    HistEntry = #hist_tau{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = Result#result.expr,
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        pool = cauder_pool:update(P1, Pool)
+                    }
+            end;
+        false ->
+            P0 = cauder_pool:get(Pid, Pool),
+            HistEntry = #hist_tau{
+                env = P0#process.env,
+                expr = P0#process.expr,
+                stack = P0#process.stack
+            },
+            P1 = P0#process{
+                env = Result#result.env,
+                expr = Result#result.expr,
+                stack = Result#result.stack,
+                hist = cauder_history:push(HistEntry, P0#process.hist)
+            },
+            Sys#system{
+                pool = cauder_pool:update(P1, Pool)
+            }
+    end;
 rule_local(
     Pid,
     #result{label = #label_tau{}} = Result,
@@ -386,43 +458,95 @@ rule_send(
     #result{label = #label_send{dst = Dst, val = Val}} = Result,
     #system{pool = Pool, log = Log0} = Sys
 ) ->
-    {Uid, Log1} =
-        case cauder_log:pop_send(Pid, Log0) of
-            {#log_send{} = Entry, Log} ->
-                {Entry#log_send.uid, Log};
-            error ->
-                {cauder_message:new_uid(), Log0}
-        end,
+    case erlang:is_atom(Dst) of
+        true ->
+            P0 = cauder_pool:get(Pid, Pool),
+            Map = cauder_map:get_map(Sys#system.maps, P0#process.node),
+            case cauder_map:find_pid(Dst, Map) of
+                undefined ->
+                    [{send_op, Line, _, _}, _] = P0#process.expr,
+                    HistEntry = #hist_readF{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        atom = Dst
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = [{value, Line, error}],
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        pool = cauder_pool:update(P1, Pool)
+                    };
+                {PidDst, Key} ->
+                    M = #message{
+                        uid = cauder_message:new_uid(),
+                        src = Pid,
+                        dst = PidDst,
+                        val = Val
+                    },
 
-    M = #message{
-        uid = Uid,
-        src = Pid,
-        dst = Dst,
-        val = Val
-    },
+                    HistEntry = #hist_sendA{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        msg = M,
+                        mapEl = {Dst, PidDst, Key}
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = Result#result.expr,
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        mail = cauder_mailbox:add(M, Sys#system.mail),
+                        pool = cauder_pool:update(P1, Pool)
+                    }
+            end;
+        false ->
+            {Uid, Log1} =
+                case cauder_log:pop_send(Pid, Log0) of
+                    {#log_send{} = Entry, Log} ->
+                        {Entry#log_send.uid, Log};
+                    error ->
+                        {cauder_message:new_uid(), Log0}
+                end,
 
-    P0 = cauder_pool:get(Pid, Pool),
-    HistEntry = #hist_send{
-        env = P0#process.env,
-        expr = P0#process.expr,
-        stack = P0#process.stack,
-        msg = M
-    },
-    P1 = P0#process{
-        env = Result#result.env,
-        expr = Result#result.expr,
-        stack = Result#result.stack,
-        hist = cauder_history:push(HistEntry, P0#process.hist)
-    },
-    TraceAction = #trace_send{
-        uid = Uid
-    },
-    Sys#system{
-        mail = cauder_mailbox:add(M, Sys#system.mail),
-        pool = cauder_pool:update(P1, Pool),
-        log = Log1,
-        trace = cauder_trace:push(Pid, TraceAction, Sys#system.trace)
-    }.
+            M = #message{
+                uid = Uid,
+                src = Pid,
+                dst = Dst,
+                val = Val
+            },
+
+            P0 = cauder_pool:get(Pid, Pool),
+            HistEntry = #hist_send{
+                env = P0#process.env,
+                expr = P0#process.expr,
+                stack = P0#process.stack,
+                msg = M
+            },
+            P1 = P0#process{
+                env = Result#result.env,
+                expr = Result#result.expr,
+                stack = Result#result.stack,
+                hist = cauder_history:push(HistEntry, P0#process.hist)
+            },
+            TraceAction = #trace_send{
+                uid = Uid
+            },
+            Sys#system{
+                mail = cauder_mailbox:add(M, Sys#system.mail),
+                pool = cauder_pool:update(P1, Pool),
+                log = Log1,
+                trace = cauder_trace:push(Pid, TraceAction, Sys#system.trace)
+            }
+    end.
 
 -spec rule_receive(Pid, Result, Mode, Scheduler, System) -> NewSystem when
     Pid :: cauder_process:id(),
@@ -481,6 +605,258 @@ rule_receive(
         trace = cauder_trace:push(Pid, TraceAction, Sys#system.trace)
     }.
 
+-spec rule_registered(Pid, Result, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Result :: cauder_eval:result(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_registered(
+    Pid,
+    #result{label = #label_registered{var = VarMap}} = Result,
+    #system{pool = Pool, maps = Maps} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    M = cauder_map:get_map(Maps, P0#process.node),
+    L = cauder_map:get_atoms_list(M, []),
+    HistEntry = #hist_registered{
+        env = P0#process.env,
+        expr = P0#process.expr,
+        stack = P0#process.stack,
+        node = P0#process.node,
+        map = M
+    },
+    P1 = P0#process{
+        env = Result#result.env,
+        expr = cauder_syntax:replace_variable(Result#result.expr, VarMap, L),
+        stack = Result#result.stack,
+        hist = cauder_history:push(HistEntry, P0#process.hist)
+    },
+    Sys#system{
+        pool = cauder_pool:update(P1, Pool)
+    }.
+
+-spec rule_whereis(Pid, Result, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Result :: cauder_eval:result(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_whereis(
+    Pid,
+    #result{label = #label_whereis{var = VarPid, atom = Atom}} = Result,
+    #system{pool = Pool, maps = Maps} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    M = cauder_map:get_map(Maps, P0#process.node),
+    P1 =
+        case cauder_map:find_pid(Atom, M) of
+            undefined ->
+                HistEntry = #hist_readF{
+                    env = P0#process.env,
+                    expr = P0#process.expr,
+                    stack = P0#process.stack,
+                    node = P0#process.node,
+                    atom = Atom
+                },
+                P0#process{
+                    env = Result#result.env,
+                    expr = cauder_syntax:replace_variable(Result#result.expr, VarPid, undefined),
+                    stack = Result#result.stack,
+                    hist = cauder_history:push(HistEntry, P0#process.hist)
+                };
+            {MyPid, K} ->
+                HistEntry = #hist_readS{
+                    env = P0#process.env,
+                    expr = P0#process.expr,
+                    stack = P0#process.stack,
+                    node = P0#process.node,
+                    mapEl = [{Atom, MyPid, K}]
+                },
+                P0#process{
+                    env = Result#result.env,
+                    expr = cauder_syntax:replace_variable(Result#result.expr, VarPid, MyPid),
+                    stack = Result#result.stack,
+                    hist = cauder_history:push(HistEntry, P0#process.hist)
+                }
+        end,
+    Sys#system{
+        pool = cauder_pool:update(P1, Pool)
+    }.
+
+-spec rule_register(Pid, Result, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Result :: cauder_eval:result(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_register(
+    Pid,
+    #result{label = #label_register{var = VarResult, atom = Atom, pid = MyPid}} = Result,
+    #system{pool = Pool, maps = Maps} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    M = cauder_map:get_map(Maps, P0#process.node),
+    case cauder_map:find_pid(Atom, M) of
+        undefined ->
+            case cauder_map:find_atom(MyPid, M) of
+                undefined ->
+                    Key = cauder_map:new_key(),
+                    HistEntry = #hist_regS{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        mapEl = {Atom, MyPid, Key}
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = cauder_syntax:replace_variable(Result#result.expr, VarResult, true),
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    NewMaps = Maps -- [{M, P0#process.node}],
+                    NewMap = M ++ [{Atom, MyPid, Key}],
+                    Sys#system{
+                        maps = NewMaps ++ [{NewMap, P0#process.node}],
+                        pool = cauder_pool:update(P1, Pool)
+                    };
+                {MapAtom, K} ->
+                    {var, Line, _} = VarResult,
+                    HistEntry = #hist_readS{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        mapEl = [{MapAtom, MyPid, K}]
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = [{value, Line, error}],
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        pool = cauder_pool:update(P1, Pool)
+                    }
+            end;
+        {MapPid, K1} ->
+            case cauder_map:find_atom(MyPid, M) of
+                undefined ->
+                    {var, Line, _} = VarResult,
+                    HistEntry = #hist_readS{
+                        env = P0#process.env,
+                        expr = P0#process.expr,
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        mapEl = [{Atom, MapPid, K1}]
+                    },
+                    P1 = P0#process{
+                        env = Result#result.env,
+                        expr = [{value, Line, error}],
+                        stack = Result#result.stack,
+                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                    },
+                    Sys#system{
+                        pool = cauder_pool:update(P1, Pool)
+                    };
+                {MapAtom, K2} ->
+                    case {MapAtom, MyPid} =:= {Atom, MapPid} of
+                        true ->
+                            {var, Line, _} = VarResult,
+                            HistEntry = #hist_readS{
+                                env = P0#process.env,
+                                expr = P0#process.expr,
+                                stack = P0#process.stack,
+                                node = P0#process.node,
+                                mapEl = [{MapAtom, MyPid, K1}]
+                            },
+                            P1 = P0#process{
+                                env = Result#result.env,
+                                expr = [{value, Line, error}],
+                                stack = Result#result.stack,
+                                hist = cauder_history:push(HistEntry, P0#process.hist)
+                            },
+                            Sys#system{
+                                pool = cauder_pool:update(P1, Pool)
+                            };
+                        false ->
+                            {var, Line, _} = VarResult,
+                            HistEntry = #hist_readS{
+                                env = P0#process.env,
+                                expr = P0#process.expr,
+                                stack = P0#process.stack,
+                                node = P0#process.node,
+                                mapEl = [{MapAtom, MyPid, K2}, {Atom, MapPid, K1}]
+                            },
+                            P1 = P0#process{
+                                env = Result#result.env,
+                                expr = [{value, Line, error}],
+                                stack = Result#result.stack,
+                                hist = cauder_history:push(HistEntry, P0#process.hist)
+                            },
+                            Sys#system{
+                                pool = cauder_pool:update(P1, Pool)
+                            }
+                    end
+            end
+    end.
+
+-spec rule_unregister(Pid, Result, System) -> NewSystem when
+    Pid :: cauder_process:id(),
+    Result :: cauder_eval:result(),
+    System :: cauder_system:system(),
+    NewSystem :: cauder_system:system().
+
+rule_unregister(
+    Pid,
+    #result{label = #label_unregister{var = VarResult, atom = Atom}} = Result,
+    #system{pool = Pool, maps = Maps} = Sys
+) ->
+    P0 = cauder_pool:get(Pid, Pool),
+    M = cauder_map:get_map(Maps, P0#process.node),
+    case cauder_map:find_pid(Atom, M) of
+        undefined ->
+            {var, Line, _} = VarResult,
+            HistEntry = #hist_readF{
+                env = P0#process.env,
+                expr = P0#process.expr,
+                stack = P0#process.stack,
+                node = P0#process.node,
+                atom = Atom
+            },
+            P1 = P0#process{
+                env = Result#result.env,
+                expr = [{value, Line, error}],
+                stack = Result#result.stack,
+                hist = cauder_history:push(HistEntry, P0#process.hist)
+            },
+            Sys#system{
+                pool = cauder_pool:update(P1, Pool)
+            };
+        {MapPid, K} ->
+            NewMaps = Maps -- [{M, P0#process.node}],
+            NewMap = M -- [{Atom, MapPid, K}],
+            HistEntry = #hist_del{
+                env = P0#process.env,
+                expr = P0#process.expr,
+                stack = P0#process.stack,
+                node = P0#process.node,
+                mapEl = {Atom, MapPid, K},
+                map = NewMap
+            },
+            P1 = P0#process{
+                env = Result#result.env,
+                expr = cauder_syntax:replace_variable(Result#result.expr, VarResult, true),
+                stack = Result#result.stack,
+                hist = cauder_history:push(HistEntry, P0#process.hist)
+            },
+            Sys#system{
+                maps = NewMaps ++ [{NewMap, P0#process.node}],
+                pool = cauder_pool:update(P1, Pool)
+            }
+    end.
+
 %%%=============================================================================
 
 %%------------------------------------------------------------------------------
@@ -516,6 +892,14 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
                     {ok, ?RULE_SELF};
                 {node, _} ->
                     {ok, ?RULE_NODE};
+                {registered, _} ->
+                    {ok, ?RULE_READ};
+                {whereis, _, _} ->
+                    {ok, ?RULE_READ};
+                {register, _, _, _} ->
+                    {ok, ?RULE_REG};
+                {unregister, _, _} ->
+                    {ok, ?RULE_DEL};
                 {tuple, _, Es} ->
                     expression_option(Es, Pid, Sys, Mode);
                 {nodes, _} ->
