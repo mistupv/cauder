@@ -223,6 +223,7 @@
 -define(SYSTEM_RollLog, 2533).
 
 -define(SYSTEM_Map, 2534).
+-define(PROCESS_Map, 2535).
 
 %% ----- Process Info Panel ----- %%
 
