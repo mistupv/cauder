@@ -71,14 +71,14 @@ update(OldState, NewState) ->
 
       Item = wxListItem:new(),
 
-      wxListItem:setText(Item, "TUPLE ID"),
+      wxListItem:setText(Item, "Atom"),
       wxListItem:setAlign(Item, ?wxLIST_FORMAT_LEFT),
       wxListCtrl:insertColumn(BindingsControl, 0, Item),
 
-      wxListItem:setText(Item, "ATOM"),
+      wxListItem:setText(Item, "PID"),
       wxListCtrl:insertColumn(BindingsControl, 1, Item),
 
-      wxListItem:setText(Item, "PID"),
+      wxListItem:setText(Item, "Tuple ID"),
       wxListCtrl:insertColumn(BindingsControl, 2, Item),
 
       wxListItem:destroy(Item),
@@ -113,9 +113,9 @@ update_map(_, #wx_state{system = #system{pool = Pool, maps = Maps}, pid = Pid}) 
           {A,P,K} = Entry,
           wxListCtrl:insertItem(MapArea, Row, ""),
           wxListCtrl:setItemFont(MapArea, Row, Font),
-          wxListCtrl:setItem(MapArea, Row, 0, cauder_pp:to_string(K)),
-          wxListCtrl:setItem(MapArea, Row, 1, cauder_pp:to_string(A)),
-          wxListCtrl:setItem(MapArea, Row, 2, cauder_pp:to_string(P)),
+          wxListCtrl:setItem(MapArea, Row, 0, cauder_pp:to_string(A)),
+          wxListCtrl:setItem(MapArea, Row, 1, cauder_pp:to_string(P)),
+          wxListCtrl:setItem(MapArea, Row, 2, cauder_pp:to_string(K)),
           Row + 1
         end, 0, Map),
     wxListCtrl:thaw(MapArea).
