@@ -17,6 +17,7 @@
     has_send/2,
     has_receive/2,
     has_read_map/2,
+    has_fail_read_map/2,
     has_registered/2,
     has_reg/2,
     has_del/2,
@@ -211,6 +212,29 @@ has_read_map([_ | H], El) ->
     has_read_map(H, El).
 
 %%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a fail read of `element' by checking
+%% the history item 'readF'
+
+-spec has_fail_read_map(History, El) -> boolean() when
+    History :: cauder_history:history(),
+    El :: cauder_map:map_element().
+
+has_fail_read_map([], _) ->
+    false;
+has_fail_read_map([#hist_readF{mapGhost = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_fail_read_map(H, El)
+    end;
+has_fail_read_map([#hist_registered{map = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_fail_read_map(H, El)
+    end;
+has_fail_read_map([_ | H], El) ->
+    has_fail_read_map(H, El).
+
+%%------------------------------------------------------------------------------
 %% @doc Checks whether the given history contains a read of `element' by checking
 %% the history items 'registered'
 
@@ -244,6 +268,8 @@ group_actions(History) ->
         fun
             (#hist_send{msg = #message{uid = Uid}}, Map) ->
                 maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
+            (#hist_sendA{msg = #message{uid = Uid}}, Map) ->
+                maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
             (#hist_receive{msg = #message{uid = Uid}}, Map) ->
                 maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
             % TODO CHeck success
@@ -251,8 +277,8 @@ group_actions(History) ->
                 maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map);
             (#hist_start{node = Node, success = 'true'}, Map) ->
                 maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map);
-            (#hist_sendA{mapEl = El, msg = #message{uid = Uid}}, Map) ->
-                maps:update_with('sendA', fun(Uids) -> ordsets:add_element({El, Uid}, Uids) end, Map);
+            %(#hist_sendA{mapEl = El, msg = #message{uid = Uid}}, Map) ->
+            %    maps:update_with('sendA', fun(Uids) -> ordsets:add_element({El, Uid}, Uids) end, Map);
             (#hist_regS{mapEl = RegEl}, Map) ->
                 maps:update_with('register', fun(El) -> ordsets:add_element(RegEl, El) end, Map);
             (#hist_del{mapEl = DelEl}, Map) ->

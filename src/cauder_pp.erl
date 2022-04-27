@@ -79,11 +79,11 @@ history_entry(#hist_readS{mapEl = Map}) ->
     "read of " ++ to_string(Map);
 history_entry(#hist_readF{atom = Atom}) ->
     "try to read " ++ to_string(Atom);
-history_entry(#hist_regS{mapEl = {A, P, K}}) ->
+history_entry(#hist_regS{mapEl = {A, P, K, _}}) ->
     "register {" ++ to_string(A) ++ ", " ++ to_string(P) ++ ", " ++ to_string(K) ++ "}";
 history_entry(#hist_del{mapEl = El}) ->
     "delete " ++ to_string(El);
-history_entry(#hist_sendA{mapEl = {A, _, _}, msg = #message{uid = Uid, val = Val}}) ->
+history_entry(#hist_sendA{mapEl = {A, _, _, _}, msg = #message{uid = Uid, val = Val}}) ->
     "send with atom " ++ to_string(A) ++ " (" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")";
 history_entry(#hist_nodes{nodes = Nodes}) ->
     "nodes(" ++ pp_nodes(Nodes) ++ ")";

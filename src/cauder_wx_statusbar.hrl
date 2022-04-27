@@ -54,9 +54,9 @@
 -define(ROLLBACK_SEND_FINISH, "Rolled back the sending of the message with UID ~p in ~s").
 -define(ROLLBACK_SEND_FAIL, "Could not rollback the sending of that message").
 
--define(ROLLBACK_SENDA_START, "Rolling back the sending of the message with UID ~p...").
--define(ROLLBACK_SENDA_FINISH, "Rolled back the sending of the message with UID ~p in ~s").
--define(ROLLBACK_SENDA_FAIL, "Could not rollback the sending of that message").
+%-define(ROLLBACK_SENDA_START, "Rolling back the sending of the message with UID ~p...").
+%-define(ROLLBACK_SENDA_FINISH, "Rolled back the sending of the message with UID ~p in ~s").
+%-define(ROLLBACK_SENDA_FAIL, "Could not rollback the sending of that message").
 
 -define(ROLLBACK_RECEIVE_START, "Rolling back the reception of the message with UID ~p...").
 -define(ROLLBACK_RECEIVE_FINISH, "Rolled back the reception of the message with UID ~p in ~s").

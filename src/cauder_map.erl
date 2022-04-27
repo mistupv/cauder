@@ -10,7 +10,9 @@
     not_in_map/2,
     find_pid/2,
     find_atom/2,
-    get_atoms_list/2
+    find_el/2,
+    get_atoms_list/2,
+    get_ghost_list/3
 ]).
 
 -include("cauder.hrl").
@@ -19,7 +21,8 @@
 -export_type([key/0, map_node/0]).
 
 -opaque key() :: pos_integer().
--type map_element() :: {atom(), cauder_process:id(), cauder_map:key()}.
+-type alive() :: top | bot.
+-type map_element() :: {atom(), cauder_process:id(), cauder_map:key(), cauder_map:alive()}.
 -type map_node() :: {[map_element()], node()}.
 
 %%%=============================================================================
@@ -72,9 +75,9 @@ in_map(M, [El | T]) ->
     El :: atom() | cauder_process:id().
 
 not_in_map([], _) -> true;
-not_in_map([{Atom, _, _} | _], Atom) -> false;
-not_in_map([{_, Pid, _} | _], Pid) -> false;
-not_in_map([{_, _, _} | M], El) -> not_in_map(M, El).
+not_in_map([{Atom, _, _, top} | _], Atom) -> false;
+not_in_map([{_, Pid, _, top} | _], Pid) -> false;
+not_in_map([{_, _, _, _} | M], El) -> not_in_map(M, El).
 
 -spec find_pid(Atom, Map) -> {Pid, Key} | undefined when
     Atom :: atom(),
@@ -83,8 +86,8 @@ not_in_map([{_, _, _} | M], El) -> not_in_map(M, El).
     Key :: cauder_map:key().
 
 find_pid(_, []) -> undefined;
-find_pid(Atom, [{Atom, Pid, K} | _]) -> {Pid, K};
-find_pid(Atom, [{_, _, _} | Map]) -> find_pid(Atom, Map).
+find_pid(Atom, [{Atom, Pid, K, top} | _]) -> {Pid, K};
+find_pid(Atom, [{_, _, _, _} | Map]) -> find_pid(Atom, Map).
 
 -spec find_atom(Pid, Map) -> {Atom, Key} | undefined when
     Pid :: cauder_process:id(),
@@ -93,8 +96,8 @@ find_pid(Atom, [{_, _, _} | Map]) -> find_pid(Atom, Map).
     Key :: cauder_map:key().
 
 find_atom(_, []) -> undefined;
-find_atom(Pid, [{Atom, Pid, K} | _]) -> {Atom, K};
-find_atom(Pid, [{_, _, _} | Map]) -> find_atom(Pid, Map).
+find_atom(Pid, [{Atom, Pid, K, top} | _]) -> {Atom, K};
+find_atom(Pid, [{_, _, _, _} | Map]) -> find_atom(Pid, Map).
 
 -spec get_atoms_list(Map, ListAtoms) -> Atoms when
     Map :: [cauder_map:map_element()],
@@ -102,4 +105,26 @@ find_atom(Pid, [{_, _, _} | Map]) -> find_atom(Pid, Map).
     Atoms :: [atom()].
 
 get_atoms_list([], R) -> R;
-get_atoms_list([{Atom, _, _} | T], R) -> get_atoms_list(T, [Atom | R]).
+get_atoms_list([{Atom, _, _, top} | T], R) -> get_atoms_list(T, [Atom | R]);
+get_atoms_list([{_, _, _, _} | T], R) -> get_atoms_list(T, R).
+
+-spec get_ghost_list(El, Map, ListGhost) -> Ghosts when
+    El :: atom() | cauder_process:id(),
+    Map :: [cauder_map:map_element()],
+    ListGhost :: [cauder_map:map_element()],
+    Ghosts :: [cauder_map:map_element()].
+
+get_ghost_list(_, [], LG) -> LG;
+get_ghost_list(Atom, [{Atom, Pid, K, bot} | Map], LG) -> get_ghost_list(Atom, Map, [{Atom, Pid, K, bot} | LG]);
+get_ghost_list(Pid, [{Atom, Pid, K, bot} | Map], LG) -> get_ghost_list(Pid, Map, [{Atom, Pid, K, bot} | LG]);
+get_ghost_list(El, [{_, _, _, _} | Map], LG) -> get_ghost_list(El, Map, LG).
+
+-spec find_el(El, Map) -> Tuple | undefined when
+    El :: atom() | cauder_process:id(),
+    Map :: [cauder_map:map_element()],
+    Tuple :: cauder_map:map_element().
+
+find_el(_, []) -> undefined;
+find_el(El, [{El, Pid, K, top} | _]) -> {El, Pid, K, top};
+find_el(El, [{Atom, El, K, top} | _]) -> {Atom, El, K, top};
+find_el(El, [{_, _, _, _} | Map]) -> find_atom(El, Map).

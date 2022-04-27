@@ -24,6 +24,7 @@
     find_history_receive/2,
     find_variable/2,
     find_read_map/3,
+    find_failed_read_map/3,
     find_registered/3,
     find_history_reg/2,
     find_history_del/2,
@@ -328,6 +329,28 @@ find_read_map(Pool, Node, El) ->
             fun(#process{node = ProcNode, hist = H}) ->
                 case ProcNode =:= Node of
                     true -> cauder_history:has_read_map(H, El);
+                    false -> error
+                end
+            end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a fail read operation on map
+
+-spec find_failed_read_map(Pool, Node, El) -> {ok, Process} | error when
+    Pool :: cauder_pool:pool(),
+    Node :: node(),
+    El :: cauder_map:map_element(),
+    Process :: cauder_process:process().
+
+find_failed_read_map(Pool, Node, El) ->
+    value_to_ok(
+        lists:search(
+            fun(#process{node = ProcNode, hist = H}) ->
+                case ProcNode =:= Node of
+                    true -> cauder_history:has_fail_read_map(H, El);
                     false -> error
                 end
             end,

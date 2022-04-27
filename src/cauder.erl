@@ -36,7 +36,7 @@
     rollback_start/1,
     rollback_spawn/1,
     rollback_send/1,
-    rollback_senda/1,
+    %rollback_senda/1,
     rollback_receive/1,
     rollback_variable/1,
     rollback_reg/1,
@@ -466,12 +466,12 @@ rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 %%
 %% @see task_rollback_senda/2
 
--spec rollback_senda(Uid) -> Reply when
-    Uid :: cauder_message:uid(),
-    Reply :: {ok, CurrentSystem} | busy,
-    CurrentSystem :: cauder_system:system().
+%-spec rollback_senda(Uid) -> Reply when
+%    Uid :: cauder_message:uid(),
+%    Reply :: {ok, CurrentSystem} | busy,
+%    CurrentSystem :: cauder_system:system().
 
-rollback_senda(Uid) -> gen_server:call(?SERVER, {user, {rollback_senda, Uid}}).
+%rollback_senda(Uid) -> gen_server:call(?SERVER, {user, {rollback_senda, Uid}}).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid.
@@ -1078,8 +1078,13 @@ task_rollback_send(Uid, Sys0) ->
         timer:tc(
             fun() ->
                 case cauder_rollback:can_rollback_send(Uid, Sys0) of
-                    false -> error(no_rollback);
-                    true -> cauder_rollback:rollback_send(Uid, Sys0)
+                    false ->
+                        case cauder_rollback:can_rollback_senda(Uid, Sys0) of
+                            false -> error(no_rollback);
+                            true -> cauder_rollback:rollback_senda(Uid, Sys0)
+                        end;
+                    true ->
+                        cauder_rollback:rollback_send(Uid, Sys0)
                 end
             end
         ),

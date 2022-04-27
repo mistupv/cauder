@@ -336,7 +336,7 @@ rule_receive(
 
 rule_del(
     Pid,
-    #hist_del{mapEl = El} = Entry,
+    #hist_del{mapEl = El = {A, P, K, top}} = Entry,
     #system{pool = Pool} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
@@ -347,7 +347,7 @@ rule_del(
     },
     SystemMap = cauder_map:get_map(Sys#system.maps, P0#process.node),
     NewMaps = lists:delete({SystemMap, P1#process.node}, Sys#system.maps),
-    NewMap = lists:append(SystemMap, [El]),
+    NewMap = lists:delete({A, P, K, bot}, lists:append(SystemMap, [El])),
     Sys#system{
         pool = cauder_pool:update(P1, Pool),
         maps = lists:append(NewMaps, [{NewMap, P1#process.node}])
@@ -442,11 +442,12 @@ process_option(Pid, Sys) ->
                 true -> {ok, ?RULE_READ};
                 false -> false
             end;
-        {value, #hist_readF{atom = A, node = Node}} ->
+        {value, #hist_readF{atom = A, mapGhost = MG, node = Node}} ->
             M = cauder_map:get_map(Sys#system.maps, Node),
-            case cauder_map:not_in_map(M, A) of
-                true -> {ok, ?RULE_READ};
-                false -> false
+            Ghost = cauder_map:get_ghost_list(A, M, []),
+            case {Ghost =:= MG, cauder_map:not_in_map(M, A)} of
+                {true, true} -> {ok, ?RULE_READ};
+                _ -> false
             end;
         {value, #hist_regS{mapEl = El, node = Node}} ->
             M = cauder_map:get_map(Sys#system.maps, Node),
@@ -456,13 +457,15 @@ process_option(Pid, Sys) ->
                 {true, error} -> {ok, ?RULE_REG};
                 _ -> false
             end;
-        {value, #hist_del{map = Map, mapEl = {A, P, _K}, node = Node}} ->
+        {value, #hist_del{map = MapG, mapEl = {A, P, K, _}, node = Node}} ->
             SystemMap = cauder_map:get_map(Sys#system.maps, Node),
             AtomInMap = cauder_map:not_in_map(SystemMap, A),
             PidInMap = cauder_map:not_in_map(SystemMap, P),
-            ProcWithRegistered = cauder_pool:find_registered(Pool1, Node, Map),
-            case {AtomInMap, PidInMap, ProcWithRegistered} of
-                {true, true, error} -> {ok, ?RULE_DEL};
+            LG = cauder_map:get_ghost_list(A, SystemMap, []) ++ cauder_map:get_ghost_list(P, SystemMap, []),
+            ProcWithRegistered = cauder_pool:find_registered(Pool1, Node, SystemMap),
+            ProcWithFailRead = cauder_pool:find_failed_read_map(Pool1, Node, {A, P, K, bot}),
+            case {AtomInMap, PidInMap, LG =:= MapG, ProcWithRegistered, ProcWithFailRead} of
+                {true, true, true, error, error} -> {ok, ?RULE_DEL};
                 _ -> false
             end;
         {value, #hist_sendA{mapEl = El, node = Node, msg = #message{uid = Uid}}} ->

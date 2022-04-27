@@ -474,10 +474,10 @@ create_rollback(Parent) ->
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Send, {"Roll send", ?ACTION_Rollback_Send_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
-    create_choice(
-        Win, Content, "Atom-Uid:", ?ACTION_Rollback_Senda, {"Roll send with atom", ?ACTION_Rollback_Senda_Button}
-    ),
-    wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+    %create_choice(
+    %    Win, Content, "Atom-Uid:", ?ACTION_Rollback_Senda, {"Roll send with atom", ?ACTION_Rollback_Senda_Button}
+    %),
+    %wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     %create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Deliver, {"Roll deliver", ?ACTION_Rollback_Deliver_Button}),
     %wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(Win, Content, "Uid:", ?ACTION_Rollback_Receive, {"Roll receive", ?ACTION_Rollback_Receive_Button}),
@@ -490,10 +490,12 @@ create_rollback(Parent) ->
 
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
     create_choice(
-        Win, Content, "Element:", ?ACTION_Rollback_Register, {"Roll register", ?ACTION_Rollback_Register_Button}
+        Win, Content, "Map Element:", ?ACTION_Rollback_Register, {"Roll register", ?ACTION_Rollback_Register_Button}
     ),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
-    create_choice(Win, Content, "Element:", ?ACTION_Rollback_Delete, {"Roll delete", ?ACTION_Rollback_Delete_Button}),
+    create_choice(
+        Win, Content, "Map Element:", ?ACTION_Rollback_Delete, {"Roll delete", ?ACTION_Rollback_Delete_Button}
+    ),
 
     Win.
 
@@ -534,7 +536,7 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
                 'start' := StartNodes,
                 'spawn' := SpawnPids,
                 'register' := RegEls,
-                'sendA' := AtomsUids,
+                %'sendA' := AtomsUids,
                 'del' := DelEls
             } = lists:foldl(
                 fun(P, Map0) ->
@@ -561,7 +563,7 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
             update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, StartNodes),
             update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, SpawnPids),
 
-            update_choice(?ACTION_Rollback_Senda, ?ACTION_Rollback_Senda_Button, AtomsUids),
+            %update_choice(?ACTION_Rollback_Senda, ?ACTION_Rollback_Senda_Button, AtomsUids),
             update_choice(?ACTION_Rollback_Register, ?ACTION_Rollback_Receive_Button, RegEls),
             update_choice(?ACTION_Rollback_Delete, ?ACTION_Rollback_Delete_Button, DelEls),
 
@@ -578,7 +580,7 @@ disable_rollback() ->
     update_choice(?ACTION_Rollback_Start, ?ACTION_Rollback_Start_Button, []),
     update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, []),
 
-    update_choice(?ACTION_Rollback_Senda, ?ACTION_Rollback_Senda_Button, []),
+    %update_choice(?ACTION_Rollback_Senda, ?ACTION_Rollback_Senda_Button, []),
     update_choice(?ACTION_Rollback_Register, ?ACTION_Rollback_Register_Button, []),
     update_choice(?ACTION_Rollback_Delete, ?ACTION_Rollback_Delete_Button, []),
 

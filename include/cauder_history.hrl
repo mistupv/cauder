@@ -55,30 +55,6 @@
     q_pos :: pos_integer()
 }).
 
--record(hist_readS, {
-    env :: cauder_bindings:bindings(),
-    expr :: [cauder_syntax:abstract_expr()],
-    stack :: cauder_stack:stack(),
-    mapEl :: [cauder_map:map_element()],
-    node :: node()
-}).
-
--record(hist_readF, {
-    env :: cauder_bindings:bindings(),
-    expr :: [cauder_syntax:abstract_expr()],
-    stack :: cauder_stack:stack(),
-    atom :: atom(),
-    node :: node()
-}).
-
--record(hist_registered, {
-    env :: cauder_bindings:bindings(),
-    expr :: [cauder_syntax:abstract_expr()],
-    stack :: cauder_stack:stack(),
-    map :: [cauder_map:map_element()],
-    node :: node()
-}).
-
 -record(hist_regS, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
@@ -96,11 +72,36 @@
     node :: node()
 }).
 
+-record(hist_readS, {
+    env :: cauder_bindings:bindings(),
+    expr :: [cauder_syntax:abstract_expr()],
+    stack :: cauder_stack:stack(),
+    mapEl :: [cauder_map:map_element()],
+    node :: node()
+}).
+
+-record(hist_readF, {
+    env :: cauder_bindings:bindings(),
+    expr :: [cauder_syntax:abstract_expr()],
+    stack :: cauder_stack:stack(),
+    atom :: atom() | cauder_process:id(),
+    mapGhost :: [cauder_map:map_element()],
+    node :: node()
+}).
+
 -record(hist_sendA, {
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     msg :: cauder_message:message(),
     mapEl :: cauder_map:map_element(),
+    node :: node()
+}).
+
+-record(hist_registered, {
+    env :: cauder_bindings:bindings(),
+    expr :: [cauder_syntax:abstract_expr()],
+    stack :: cauder_stack:stack(),
+    map :: [cauder_map:map_element()],
     node :: node()
 }).

@@ -209,6 +209,15 @@ rollback_step(Pid, #system{pool = Pool, nodes = SysNodes, roll = RollLog} = Sys0
         {value, #hist_del{mapEl = El, map = Map, node = Node}} ->
             Sys = Sys0#system{},
             rollback_del(Pid, Sys, El, Map, Node);
+        {value, #hist_registered{map = Map, node = Node}} ->
+            Sys = Sys0#system{},
+            rollback_registered(Pid, Sys, Map, Node);
+        {value, #hist_readF{atom = El, mapGhost = MapGhost, node = Node}} ->
+            Sys = Sys0#system{},
+            rollback_read_f(Pid, Sys, El, MapGhost, Node);
+        {value, #hist_readS{mapEl = El, node = Node}} ->
+            Sys = Sys0#system{},
+            rollback_read_s(Pid, Sys, El, Node);
         {value, _} ->
             cauder_semantics_backwards:step(Pid, Sys0)
     end.
@@ -398,7 +407,6 @@ rollback_senda(Pid, Sys0, DestPid, Uid, El, Node) ->
         {ok, ?RULE_SEND} ->
             cauder_semantics_backwards:step(Pid, Sys0);
         error ->
-            %TODO CHECK IF A IS IN MAP OTHERWHISE PUT A IN MAP
             Map = cauder_map:get_map(Sys0#system.maps, Node),
             case cauder_map:is_in_map(Map, El) of
                 true ->
@@ -438,41 +446,146 @@ rollback_reg(Pid, Sys0, El, Node) ->
             rollback_reg(Pid, Sys1, El, Node)
     end.
 
--spec rollback_del(Pid, System, El, Map, Node) -> NewSystem when
+-spec rollback_del(Pid, System, El, MapG, Node) -> NewSystem when
     Pid :: cauder_process:id(),
     System :: cauder_system:system(),
     El :: cauder_map:map_element(),
-    Map :: [cauder_map:map_element()],
+    MapG :: [cauder_map:map_element()],
     Node :: node(),
     NewSystem :: cauder_system:system().
 
-rollback_del(Pid, Sys0, El = {A, P, _K}, Map, Node) ->
+rollback_del(Pid, Sys0, El = {A, P, K, _}, MapG, Node) ->
     Opts = cauder_semantics_backwards:options(Sys0),
     case maps:find(Pid, Opts) of
         {ok, ?RULE_DEL} ->
             cauder_semantics_backwards:step(Pid, Sys0);
         error ->
-            case cauder_pool:find_registered(Sys0#system.pool, Node, Map) of
+            case cauder_pool:find_failed_read_map(Sys0#system.pool, Node, {A, P, K, bot}) of
                 {ok, #process{pid = PidUndo}} ->
                     Sys1 = rollback_step(PidUndo, Sys0),
-                    rollback_del(Pid, Sys1, El, Map, Node);
+                    rollback_del(Pid, Sys1, El, MapG, Node);
                 error ->
-                    case cauder_map:find_atom(P, Map) of
-                        {Atom, Key} ->
-                            {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
-                                {Atom, P, Key}, Sys0#system.pool
+                    Map = cauder_map:get_map(Sys0#system.maps, Node),
+                    LG = cauder_map:get_ghost_list(A, Map, []) ++ cauder_map:get_ghost_list(P, Map, []),
+                    case LG -- MapG of
+                        [{Atom1, Pid1, K1, bot} | _] ->
+                            {ok, #process{pid = PidUndo}} = cauder_pool:find_history_del(
+                                {Atom1, Pid1, K1, top}, Sys0#system.pool
                             ),
                             Sys1 = rollback_step(PidUndo, Sys0),
-                            rollback_del(Pid, Sys1, El, Map, Node);
-                        undefined ->
-                            {PidReg, Key} = cauder_map:find_pid(A, Map),
-                            {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
-                                {A, PidReg, Key}, Sys0#system.pool
-                            ),
-                            Sys1 = rollback_step(PidUndo, Sys0),
-                            rollback_del(Pid, Sys1, El, Map, Node)
+                            rollback_del(Pid, Sys1, El, MapG, Node);
+                        [] ->
+                            case cauder_map:find_atom(P, Map) of
+                                {Atom, Key} ->
+                                    {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
+                                        {Atom, P, Key, top}, Sys0#system.pool
+                                    ),
+                                    Sys1 = rollback_step(PidUndo, Sys0),
+                                    rollback_del(Pid, Sys1, El, MapG, Node);
+                                undefined ->
+                                    {PidReg, Key} = cauder_map:find_pid(A, Map),
+                                    {ok, #process{pid = PidUndo}} = cauder_pool:find_history_reg(
+                                        {A, PidReg, Key, top}, Sys0#system.pool
+                                    ),
+                                    Sys1 = rollback_step(PidUndo, Sys0),
+                                    rollback_del(Pid, Sys1, El, MapG, Node)
+                            end
                     end
             end
+    end.
+
+-spec rollback_read_s(Pid, System, El, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: [cauder_map:map_element()],
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_read_s(Pid, Sys0, El, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_READ} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            SystemMap = cauder_map:get_map(Sys0#system.maps, Node),
+            PidUndo =
+              case El of
+                    [{A, P, K, _}] ->
+                        {ok, #process{pid = PidEl}} = cauder_pool:find_history_del({A, P, K, top}, Sys0#system.pool),
+                        PidEl;
+                    [{A1, P1, K1, _} | [{A2, P2, K2, _}]] ->
+                        case cauder_map:is_in_map(SystemMap, {A1, P1, K1, top}) of
+                            true ->
+                                {ok, #process{pid = PidEl1}} = cauder_pool:find_history_del({A2, P2, K2, top}, Sys0#system.pool),
+                                PidEl1;
+                            false ->
+                                {ok, #process{pid = PidEl2}} = cauder_pool:find_history_del({A1, P1, K1, top}, Sys0#system.pool),
+                                PidEl2
+                        end
+                end,
+            Sys1 = rollback_step(PidUndo, Sys0),
+            rollback_read_s(Pid, Sys1, El, Node)
+    end.
+
+-spec rollback_read_f(Pid, System, El, MapGhost, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    El :: atom() | cauder_process:id(),
+    MapGhost :: [cauder_map:map_element()],
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_read_f(Pid, Sys0, El, MapGhost, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_READ} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            Map = cauder_map:get_map(Sys0#system.maps, Node),
+            SystemGhost = cauder_map:get_ghost_list(El, Map, []),
+            PidUndo =
+                case SystemGhost -- MapGhost of
+                    [] ->
+                        Tuple = cauder_map:find_el(El, Map),
+                        {ok, #process{pid = PidU}} = cauder_pool:find_history_reg(Tuple, Sys0#system.pool),
+                        PidU;
+                    [{A, P, K, _} | _] ->
+                        {ok, #process{pid = DelPid}} = cauder_pool:find_history_del({A, P, K, top}, Sys0#system.pool),
+                        DelPid
+                end,
+            Sys1 = rollback_step(PidUndo, Sys0),
+            rollback_read_f(Pid, Sys1, El, MapGhost, Node)
+    end.
+
+-spec rollback_registered(Pid, System, Map, Node) -> NewSystem when
+    Pid :: cauder_process:id(),
+    System :: cauder_system:system(),
+    Map :: [cauder_map:map_element()],
+    Node :: node(),
+    NewSystem :: cauder_system:system().
+
+rollback_registered(Pid, Sys0, Map, Node) ->
+    Opts = cauder_semantics_backwards:options(Sys0),
+    case maps:find(Pid, Opts) of
+        {ok, ?RULE_READ} ->
+            cauder_semantics_backwards:step(Pid, Sys0);
+        error ->
+            SystemMap = cauder_map:get_map(Sys0#system.maps, Node),
+            PidUndo =
+                case SystemMap -- Map of
+                    [{Atom1, Pid1, K1, top} | _] ->
+                        {ok, #process{pid = ReadPid}} = cauder_pool:find_history_reg(
+                            {Atom1, Pid1, K1, top}, Sys0#system.pool
+                        ),
+                        ReadPid;
+                    [{Atom1, Pid1, K1, bot} | _] ->
+                        {ok, #process{pid = DelPid}} = cauder_pool:find_history_del(
+                            {Atom1, Pid1, K1, top}, Sys0#system.pool
+                        ),
+                        DelPid
+                end,
+            Sys1 = rollback_step(PidUndo, Sys0),
+            rollback_registered(Pid, Sys1, Map, Node)
     end.
 
 %%%=============================================================================

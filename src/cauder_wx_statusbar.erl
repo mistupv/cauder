@@ -25,7 +25,7 @@
 -export([rollback_variable_start/1, rollback_variable_finish/2, rollback_variable_fail/0]).
 -export([rollback_reg_start/1, rollback_reg_finish/2, rollback_reg_fail/0]).
 -export([rollback_del_start/1, rollback_del_finish/2, rollback_del_fail/0]).
--export([rollback_senda_start/1, rollback_senda_finish/2, rollback_senda_fail/0]).
+%-export([rollback_senda_start/1, rollback_senda_finish/2, rollback_senda_fail/0]).
 
 -elvis([{elvis_style, god_modules, disable}]).
 
@@ -397,23 +397,23 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 
 %%%=============================================================================
 
--spec rollback_senda_start(Uid) -> ok when
-    Uid :: cauder_message:uid().
+%-spec rollback_senda_start(Uid) -> ok when
+%    Uid :: cauder_message:uid().
 
-rollback_senda_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SENDA_START, [Uid])).
+%rollback_senda_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SENDA_START, [Uid])).
 
--spec rollback_senda_finish(Uid, Time) -> ok when
-    Uid :: cauder_message:uid(),
-    Time :: non_neg_integer().
+%-spec rollback_senda_finish(Uid, Time) -> ok when
+%    Uid :: cauder_message:uid(),
+%    Time :: non_neg_integer().
 
-rollback_senda_finish(Uid, Time) ->
-    TimeStr = time_to_string(Time),
-    Status = io_lib:format(?ROLLBACK_SENDA_FINISH, [Uid, TimeStr]),
-    set_text(Status).
+%rollback_senda_finish(Uid, Time) ->
+%    TimeStr = time_to_string(Time),
+%    Status = io_lib:format(?ROLLBACK_SENDA_FINISH, [Uid, TimeStr]),
+%    set_text(Status).
 
--spec rollback_senda_fail() -> ok.
+%-spec rollback_senda_fail() -> ok.
 
-rollback_senda_fail() -> set_text(?ROLLBACK_SENDA_FAIL).
+%rollback_senda_fail() -> set_text(?ROLLBACK_SENDA_FAIL).
 
 %%%=============================================================================
 

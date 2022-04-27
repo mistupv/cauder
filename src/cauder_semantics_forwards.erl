@@ -41,6 +41,7 @@ step(Pid, Sys, Sched, Mode) ->
     #process{stack = Stk0, env = Bs0, expr = Es0} = cauder_pool:get(Pid, Sys#system.pool),
     Result = cauder_eval:seq(Bs0, Es0, Stk0),
     case Result#result.label of
+        % consider the map contains ghost
         #label_tau{} ->
             rule_local(Pid, Result, Sys);
         #label_self{} ->
@@ -49,12 +50,16 @@ step(Pid, Sys, Sched, Mode) ->
             rule_node(Pid, Result, Sys);
         #label_nodes{} ->
             rule_nodes(Pid, Result, Sys);
+        % consider the map contains ghost
         #label_registered{} ->
             rule_registered(Pid, Result, Sys);
+        % consider the map contains ghost
         #label_whereis{} ->
             rule_whereis(Pid, Result, Sys);
+        % consider the map contains ghost
         #label_register{} ->
             rule_register(Pid, Result, Sys);
+        % consider the map contains ghost
         #label_unregister{} ->
             rule_unregister(Pid, Result, Sys);
         #label_start{} ->
@@ -63,6 +68,7 @@ step(Pid, Sys, Sched, Mode) ->
             rule_spawn(Pid, Result, Sys);
         #label_spawn_mfa{} ->
             rule_spawn(Pid, Result, Sys);
+        % consider the map contains ghost
         #label_send{} ->
             rule_send(Pid, Result, Sys);
         #label_receive{var = Var} when Result#result.expr == [Var] ->
@@ -114,14 +120,14 @@ rule_local(
             case cauder_map:find_atom(Pid, M) of
                 {A, K} ->
                     NewMaps = Maps -- [{M, P0#process.node}],
-                    NewMap = M -- [{A, Pid, K}],
+                    NewMap = (M -- [{A, Pid, K, top}]) ++ [{A, Pid, K, bot}],
                     HistEntry = #hist_del{
                         env = P0#process.env,
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
-                        mapEl = {A, Pid, K},
-                        map = NewMap
+                        mapEl = {A, Pid, K, top},
+                        map = cauder_map:get_ghost_list(A, NewMap, []) ++ cauder_map:get_ghost_list(Pid, NewMap, [])
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -134,10 +140,14 @@ rule_local(
                         pool = cauder_pool:update(P1, Pool)
                     };
                 undefined ->
-                    HistEntry = #hist_tau{
+                    Ghost = cauder_map:get_ghost_list(Pid, M, []),
+                    HistEntry = #hist_readF{
                         env = P0#process.env,
                         expr = P0#process.expr,
-                        stack = P0#process.stack
+                        stack = P0#process.stack,
+                        node = P0#process.node,
+                        atom = Pid,
+                        mapGhost = Ghost
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -465,12 +475,14 @@ rule_send(
             case cauder_map:find_pid(Dst, Map) of
                 undefined ->
                     [{send_op, Line, _, _}, _] = P0#process.expr,
+                    Ghost = cauder_map:get_ghost_list(Dst, Map, []),
                     HistEntry = #hist_readF{
                         env = P0#process.env,
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
-                        atom = Dst
+                        atom = Dst,
+                        mapGhost = Ghost
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -495,7 +507,7 @@ rule_send(
                         stack = P0#process.stack,
                         node = P0#process.node,
                         msg = M,
-                        mapEl = {Dst, PidDst, Key}
+                        mapEl = {Dst, PidDst, Key, top}
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -652,12 +664,14 @@ rule_whereis(
     P1 =
         case cauder_map:find_pid(Atom, M) of
             undefined ->
+                Ghost = cauder_map:get_ghost_list(Atom, M, []),
                 HistEntry = #hist_readF{
                     env = P0#process.env,
                     expr = P0#process.expr,
                     stack = P0#process.stack,
                     node = P0#process.node,
-                    atom = Atom
+                    atom = Atom,
+                    mapGhost = Ghost
                 },
                 P0#process{
                     env = Result#result.env,
@@ -671,7 +685,7 @@ rule_whereis(
                     expr = P0#process.expr,
                     stack = P0#process.stack,
                     node = P0#process.node,
-                    mapEl = [{Atom, MyPid, K}]
+                    mapEl = [{Atom, MyPid, K, top}]
                 },
                 P0#process{
                     env = Result#result.env,
@@ -707,7 +721,7 @@ rule_register(
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
-                        mapEl = {Atom, MyPid, Key}
+                        mapEl = {Atom, MyPid, Key, top}
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -716,7 +730,7 @@ rule_register(
                         hist = cauder_history:push(HistEntry, P0#process.hist)
                     },
                     NewMaps = Maps -- [{M, P0#process.node}],
-                    NewMap = M ++ [{Atom, MyPid, Key}],
+                    NewMap = M ++ [{Atom, MyPid, Key, top}],
                     Sys#system{
                         maps = NewMaps ++ [{NewMap, P0#process.node}],
                         pool = cauder_pool:update(P1, Pool)
@@ -728,7 +742,7 @@ rule_register(
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
-                        mapEl = [{MapAtom, MyPid, K}]
+                        mapEl = [{MapAtom, MyPid, K, top}]
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -749,7 +763,7 @@ rule_register(
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
-                        mapEl = [{Atom, MapPid, K1}]
+                        mapEl = [{Atom, MapPid, K1, top}]
                     },
                     P1 = P0#process{
                         env = Result#result.env,
@@ -769,7 +783,7 @@ rule_register(
                                 expr = P0#process.expr,
                                 stack = P0#process.stack,
                                 node = P0#process.node,
-                                mapEl = [{MapAtom, MyPid, K1}]
+                                mapEl = [{MapAtom, MyPid, K1, top}]
                             },
                             P1 = P0#process{
                                 env = Result#result.env,
@@ -787,7 +801,7 @@ rule_register(
                                 expr = P0#process.expr,
                                 stack = P0#process.stack,
                                 node = P0#process.node,
-                                mapEl = [{MapAtom, MyPid, K2}, {Atom, MapPid, K1}]
+                                mapEl = [{MapAtom, MyPid, K2, top}, {Atom, MapPid, K1, top}]
                             },
                             P1 = P0#process{
                                 env = Result#result.env,
@@ -818,12 +832,14 @@ rule_unregister(
     case cauder_map:find_pid(Atom, M) of
         undefined ->
             {var, Line, _} = VarResult,
+            Ghost = cauder_map:get_ghost_list(Atom, M, []),
             HistEntry = #hist_readF{
                 env = P0#process.env,
                 expr = P0#process.expr,
                 stack = P0#process.stack,
                 node = P0#process.node,
-                atom = Atom
+                atom = Atom,
+                mapGhost = Ghost
             },
             P1 = P0#process{
                 env = Result#result.env,
@@ -836,14 +852,14 @@ rule_unregister(
             };
         {MapPid, K} ->
             NewMaps = Maps -- [{M, P0#process.node}],
-            NewMap = M -- [{Atom, MapPid, K}],
+            NewMap = (M -- [{Atom, MapPid, K, top}]) ++ [{Atom, MapPid, K, bot}],
             HistEntry = #hist_del{
                 env = P0#process.env,
                 expr = P0#process.expr,
                 stack = P0#process.stack,
                 node = P0#process.node,
-                mapEl = {Atom, MapPid, K},
-                map = NewMap
+                mapEl = {Atom, MapPid, K, top},
+                map = cauder_map:get_ghost_list(Atom, NewMap, []) ++ cauder_map:get_ghost_list(MapPid, NewMap, [])
             },
             P1 = P0#process{
                 env = Result#result.env,
