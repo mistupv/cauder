@@ -36,7 +36,6 @@
     rollback_start/1,
     rollback_spawn/1,
     rollback_send/1,
-    %rollback_senda/1,
     rollback_receive/1,
     rollback_variable/1,
     rollback_reg/1,
