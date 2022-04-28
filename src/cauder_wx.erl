@@ -654,12 +654,6 @@ handle_info(?DBG_SUCCESS(rollback_send, Uid, Time, System), #wx_state{task = rol
 handle_info(?DBG_FAILURE(rollback_send, no_rollback, _Stacktrace), #wx_state{task = rollback_send} = State) ->
     cauder_wx_statusbar:rollback_send_fail(),
     {noreply, refresh(State, State#wx_state{task = undefined})};
-%handle_info(?DBG_SUCCESS(rollback_senda, Uid, Time, System), #wx_state{task = rollback_senda} = State) ->
-%    cauder_wx_statusbar:rollback_senda_finish(Uid, Time),
-%    {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-%handle_info(?DBG_FAILURE(rollback_senda, no_rollback, _Stacktrace), #wx_state{task = rollback_senda} = State) ->
-%    cauder_wx_statusbar:rollback_senda_fail(),
-%    {noreply, refresh(State, State#wx_state{task = undefined})};
 handle_info(?DBG_SUCCESS(rollback_reg, El, Time, System), #wx_state{task = rollback_reg} = State) ->
     cauder_wx_statusbar:rollback_reg_finish(El, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
