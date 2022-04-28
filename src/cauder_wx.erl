@@ -443,13 +443,6 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Delete_Button), State) ->
     {ok, System} = cauder:rollback_del(Couple),
     cauder_wx_statusbar:rollback_del_start(Couple),
     {noreply, refresh(State, State#wx_state{system = System, task = rollback_del})};
-%handle_event(?BUTTON_EVENT(?ACTION_Rollback_Senda_Button), State) ->
-%    Choice = cauder_wx:find(?ACTION_Rollback_Senda, wxChoice),
-%    Idx = wxChoice:getSelection(Choice),
-%    {_, Uid} = wxChoice:getClientData(Choice, Idx),
-%    {ok, System} = cauder:rollback_senda(Uid),
-%    cauder_wx_statusbar:rollback_senda_start(Uid),
-%    {noreply, refresh(State, State#wx_state{system = System, task = rollback_senda})};
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
     Idx = wxChoice:getSelection(Choice),
