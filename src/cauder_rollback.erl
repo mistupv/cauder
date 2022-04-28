@@ -509,17 +509,21 @@ rollback_read_s(Pid, Sys0, El, Node) ->
         error ->
             SystemMap = cauder_map:get_map(Sys0#system.maps, Node),
             PidUndo =
-              case El of
+                case El of
                     [{A, P, K, _}] ->
                         {ok, #process{pid = PidEl}} = cauder_pool:find_history_del({A, P, K, top}, Sys0#system.pool),
                         PidEl;
                     [{A1, P1, K1, _} | [{A2, P2, K2, _}]] ->
                         case cauder_map:is_in_map(SystemMap, {A1, P1, K1, top}) of
                             true ->
-                                {ok, #process{pid = PidEl1}} = cauder_pool:find_history_del({A2, P2, K2, top}, Sys0#system.pool),
+                                {ok, #process{pid = PidEl1}} = cauder_pool:find_history_del(
+                                    {A2, P2, K2, top}, Sys0#system.pool
+                                ),
                                 PidEl1;
                             false ->
-                                {ok, #process{pid = PidEl2}} = cauder_pool:find_history_del({A1, P1, K1, top}, Sys0#system.pool),
+                                {ok, #process{pid = PidEl2}} = cauder_pool:find_history_del(
+                                    {A1, P1, K1, top}, Sys0#system.pool
+                                ),
                                 PidEl2
                         end
                 end,
