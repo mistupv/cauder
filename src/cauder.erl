@@ -457,23 +457,6 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
 rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
 
 %%------------------------------------------------------------------------------
-%% @doc Rolls back the sending of the message with the given uid.
-%%
-%% This is an asynchronous action: if the server accepts the task then the tuple
-%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
-%% system prior to executing this action, otherwise the atom `busy' is returned,
-%% to indicate that the server is currently executing a different task.
-%%
-%% @see task_rollback_senda/2
-
-%-spec rollback_senda(Uid) -> Reply when
-%    Uid :: cauder_message:uid(),
-%    Reply :: {ok, CurrentSystem} | busy,
-%    CurrentSystem :: cauder_system:system().
-
-%rollback_senda(Uid) -> gen_server:call(?SERVER, {user, {rollback_senda, Uid}}).
-
-%%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid.
 %%
 %% This is an asynchronous action: if the server accepts the task then the tuple
