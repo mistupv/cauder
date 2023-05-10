@@ -432,14 +432,16 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Start_Button), State) ->
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Register_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Register, wxChoice),
     Idx = wxChoice:getSelection(Choice),
-    Couple = wxChoice:getClientData(Choice, Idx),
+    {A,B,C} = wxChoice:getClientData(Choice, Idx),
+    Couple =  {A,B,C,top},
     {ok, System} = cauder:rollback_reg(Couple),
     cauder_wx_statusbar:rollback_reg_start(Couple),
     {noreply, refresh(State, State#wx_state{system = System, task = rollback_reg})};
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Delete_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Delete, wxChoice),
     Idx = wxChoice:getSelection(Choice),
-    Couple = wxChoice:getClientData(Choice, Idx),
+    {A,B,C} = wxChoice:getClientData(Choice, Idx),
+    Couple =  {A,B,C,top},
     {ok, System} = cauder:rollback_del(Couple),
     cauder_wx_statusbar:rollback_del_start(Couple),
     {noreply, refresh(State, State#wx_state{system = System, task = rollback_del})};
