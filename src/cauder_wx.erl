@@ -432,24 +432,19 @@ handle_event(?BUTTON_EVENT(?ACTION_Rollback_Start_Button), State) ->
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Register_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Register, wxChoice),
     Idx = wxChoice:getSelection(Choice),
-    Couple = wxChoice:getClientData(Choice, Idx),
+    {A,B,C} = wxChoice:getClientData(Choice, Idx),
+    Couple =  {A,B,C,top},
     {ok, System} = cauder:rollback_reg(Couple),
     cauder_wx_statusbar:rollback_reg_start(Couple),
     {noreply, refresh(State, State#wx_state{system = System, task = rollback_reg})};
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Delete_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Delete, wxChoice),
     Idx = wxChoice:getSelection(Choice),
-    Couple = wxChoice:getClientData(Choice, Idx),
+    {A,B,C} = wxChoice:getClientData(Choice, Idx),
+    Couple =  {A,B,C,top},
     {ok, System} = cauder:rollback_del(Couple),
     cauder_wx_statusbar:rollback_del_start(Couple),
     {noreply, refresh(State, State#wx_state{system = System, task = rollback_del})};
-%handle_event(?BUTTON_EVENT(?ACTION_Rollback_Senda_Button), State) ->
-%    Choice = cauder_wx:find(?ACTION_Rollback_Senda, wxChoice),
-%    Idx = wxChoice:getSelection(Choice),
-%    {_, Uid} = wxChoice:getClientData(Choice, Idx),
-%    {ok, System} = cauder:rollback_senda(Uid),
-%    cauder_wx_statusbar:rollback_senda_start(Uid),
-%    {noreply, refresh(State, State#wx_state{system = System, task = rollback_senda})};
 handle_event(?BUTTON_EVENT(?ACTION_Rollback_Send_Button), State) ->
     Choice = cauder_wx:find(?ACTION_Rollback_Send, wxChoice),
     Idx = wxChoice:getSelection(Choice),
@@ -661,12 +656,6 @@ handle_info(?DBG_SUCCESS(rollback_send, Uid, Time, System), #wx_state{task = rol
 handle_info(?DBG_FAILURE(rollback_send, no_rollback, _Stacktrace), #wx_state{task = rollback_send} = State) ->
     cauder_wx_statusbar:rollback_send_fail(),
     {noreply, refresh(State, State#wx_state{task = undefined})};
-%handle_info(?DBG_SUCCESS(rollback_senda, Uid, Time, System), #wx_state{task = rollback_senda} = State) ->
-%    cauder_wx_statusbar:rollback_senda_finish(Uid, Time),
-%    {noreply, refresh(State, State#wx_state{system = System, task = undefined})};
-%handle_info(?DBG_FAILURE(rollback_senda, no_rollback, _Stacktrace), #wx_state{task = rollback_senda} = State) ->
-%    cauder_wx_statusbar:rollback_senda_fail(),
-%    {noreply, refresh(State, State#wx_state{task = undefined})};
 handle_info(?DBG_SUCCESS(rollback_reg, El, Time, System), #wx_state{task = rollback_reg} = State) ->
     cauder_wx_statusbar:rollback_reg_finish(El, Time),
     {noreply, refresh(State, State#wx_state{system = System, task = undefined})};

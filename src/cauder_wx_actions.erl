@@ -564,8 +564,10 @@ update_rollback(_, #wx_state{system = #system{pool = Pool}, pid = Pid}) ->
             update_choice(?ACTION_Rollback_Spawn, ?ACTION_Rollback_Spawn_Button, SpawnPids),
 
             %update_choice(?ACTION_Rollback_Senda, ?ACTION_Rollback_Senda_Button, AtomsUids),
-            update_choice(?ACTION_Rollback_Register, ?ACTION_Rollback_Receive_Button, RegEls),
-            update_choice(?ACTION_Rollback_Delete, ?ACTION_Rollback_Delete_Button, DelEls),
+            ElsReg = updates(RegEls),
+            ElsDel = updates(DelEls),
+            update_choice(?ACTION_Rollback_Register, ?ACTION_Rollback_Receive_Button, ElsReg),
+            update_choice(?ACTION_Rollback_Delete, ?ACTION_Rollback_Delete_Button, ElsDel),
 
             ok
     end.
@@ -710,3 +712,6 @@ populate_choice(Choice, Items) ->
         Items
     ),
     wxChoice:thaw(Choice).
+
+updates([])->[];
+updates([{A,B,C,_} | L]) -> [{A,B,C} | updates(L)].

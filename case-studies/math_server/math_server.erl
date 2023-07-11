@@ -51,7 +51,7 @@ adder() -> adder(0).
 adder(N)->
   receive
     Val ->
-      server ! {reply,{addder,Val + N}}, adder(Val + N)
+      server ! {reply,{adder,Val + N}}, adder(Val + N)
   end.
 
 sendRequest([]) -> ok;
