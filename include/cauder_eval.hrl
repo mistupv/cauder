@@ -14,7 +14,7 @@
 
 -record(label_start, {
     var :: cauder_syntax:af_variable(),
-    name :: atom(),
+    name :: atom() | list(),
     host :: 'undefined' | atom()
 }).
 

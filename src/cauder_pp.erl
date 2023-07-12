@@ -46,7 +46,15 @@ log_action(#log_spawn{node = Node, pid = Pid, success = 'false'}) ->
 log_action(#log_send{uid = Uid}) ->
     "send(" ++ blue(to_string(Uid)) ++ ")";
 log_action(#log_receive{uid = Uid}) ->
-    "receive(" ++ blue(to_string(Uid)) ++ ")".
+    "receive(" ++ blue(to_string(Uid)) ++ ")";
+log_action(#log_reg{key = K}) ->
+    "register {" ++ blue(to_string(K)) ++ "}";
+log_action(#log_del{key = K}) ->
+    "delete {" ++ blue(to_string(K)) ++ "}";
+log_action(#log_read{}) ->
+    "read";
+log_action(#log_sendA{uid = Uid, el = {A, _, _, _}}) ->
+    "send(" ++ blue(to_string(Uid)) ++ ") with atom " ++ blue(to_string(A)).
 
 %%%=============================================================================
 

@@ -36,8 +36,8 @@
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
     node :: node(),
-    pid :: cauder_process:id()
-    %success :: boolean() % TODO
+    pid :: cauder_process:id(),
+    success :: boolean()
 }).
 
 -record(hist_send, {
@@ -76,6 +76,8 @@
     env :: cauder_bindings:bindings(),
     expr :: [cauder_syntax:abstract_expr()],
     stack :: cauder_stack:stack(),
+    atom :: atom(),
+    pid :: cauder_process:id(),
     mapEl :: [cauder_map:map_element()],
     node :: node()
 }).

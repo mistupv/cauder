@@ -389,6 +389,13 @@ create_replay(Parent) ->
     create_choice(Win, Content, "Pid:", ?ACTION_Replay_Spawn, {"Replay spawn", ?ACTION_Replay_Spawn_Button}),
     wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
 
+    create_choice(
+        Win, Content, "Map Element:", ?ACTION_Replay_Register, {"Replay register", ?ACTION_Replay_Register_Button}
+    ),
+    wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+    create_choice(Win, Content, "Map Element:", ?ACTION_Replay_Delete, {"Replay delete", ?ACTION_Replay_Delete_Button}),
+    wxBoxSizer:addSpacer(Content, ?SPACER_LARGE),
+
     % Replay Full Log
 
     FullLog = wxBoxSizer:new(?wxHORIZONTAL),
@@ -427,7 +434,9 @@ update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
                 'send' := SendUids,
                 'receive' := ReceiveUids,
                 'start' := StartNodes,
-                'spawn' := SpawnPids
+                'spawn' := SpawnPids,
+                'register' := RegEls,
+                'delete' := DelEls
             } = cauder_log:group_actions(Log),
 
             update_choice(?ACTION_Replay_Send, ?ACTION_Replay_Send_Button, SendUids),
@@ -435,6 +444,10 @@ update_replay(_, #wx_state{system = #system{log = Log}, pid = Pid}) ->
             update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, ReceiveUids),
             update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, StartNodes),
             update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, SpawnPids),
+            ElsReg = updates(RegEls),
+            ElsDel = updates(DelEls),
+            update_choice(?ACTION_Replay_Register, ?ACTION_Replay_Register_Button, ElsReg),
+            update_choice(?ACTION_Replay_Delete, ?ACTION_Replay_Delete_Button, ElsDel),
 
             ok
     end.
@@ -448,6 +461,9 @@ disable_replay() ->
     update_choice(?ACTION_Replay_Receive, ?ACTION_Replay_Receive_Button, []),
     update_choice(?ACTION_Replay_Start, ?ACTION_Replay_Start_Button, []),
     update_choice(?ACTION_Replay_Spawn, ?ACTION_Replay_Spawn_Button, []),
+    update_choice(?ACTION_Replay_Register, ?ACTION_Replay_Register_Button, []),
+    update_choice(?ACTION_Replay_Delete, ?ACTION_Replay_Delete_Button, []),
+
     ok.
 
 %%%=============================================================================

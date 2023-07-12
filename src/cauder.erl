@@ -28,6 +28,8 @@
     replay_spawn/1,
     replay_send/1,
     replay_receive/1,
+    replay_register/1,
+    replay_delete/1,
     replay_full_log/0
 ]).
 % Rollback actions
@@ -36,6 +38,7 @@
     rollback_start/1,
     rollback_spawn/1,
     rollback_send/1,
+    %rollback_senda/1,
     rollback_receive/1,
     rollback_variable/1,
     rollback_reg/1,
@@ -369,6 +372,40 @@ replay_send(Uid) -> gen_server:call(?SERVER, {user, {replay_send, Uid}}).
 replay_receive(Uid) -> gen_server:call(?SERVER, {user, {replay_receive, Uid}}).
 
 %%------------------------------------------------------------------------------
+%% @doc Replays the reception of the message with the given uid.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_replay_register/2
+
+-spec replay_register(El) -> Reply when
+    El :: cauder_map:map_element(),
+    Reply :: {ok, CurrentSystem} | busy,
+    CurrentSystem :: cauder_system:system().
+
+replay_register({A,B,C}) -> gen_server:call(?SERVER, {user, {replay_register, {A,B,C,top}}}).
+
+%%------------------------------------------------------------------------------
+%% @doc Replays the reception of the message with the given uid.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_replay_delete/2
+
+-spec replay_delete(El) -> Reply when
+    El :: cauder_map:map_element(),
+    Reply :: {ok, CurrentSystem} | busy,
+    CurrentSystem :: cauder_system:system().
+
+replay_delete({A,B,C}) -> gen_server:call(?SERVER, {user, {replay_delete, {A,B,C,bot}}}).
+
+%%------------------------------------------------------------------------------
 %% @doc Replays the full log.
 %%
 %% This is an asynchronous action: if the server accepts the task then the tuple
@@ -454,6 +491,23 @@ rollback_spawn(Pid) -> gen_server:call(?SERVER, {user, {rollback_spawn, Pid}}).
     CurrentSystem :: cauder_system:system().
 
 rollback_send(Uid) -> gen_server:call(?SERVER, {user, {rollback_send, Uid}}).
+
+%%------------------------------------------------------------------------------
+%% @doc Rolls back the sending of the message with the given uid.
+%%
+%% This is an asynchronous action: if the server accepts the task then the tuple
+%% `{ok, CurrentSystem}' is returned, where `CurrentSystem' is the current
+%% system prior to executing this action, otherwise the atom `busy' is returned,
+%% to indicate that the server is currently executing a different task.
+%%
+%% @see task_rollback_senda/2
+
+%-spec rollback_senda(Uid) -> Reply when
+%    Uid :: cauder_message:uid(),
+%    Reply :: {ok, CurrentSystem} | busy,
+%    CurrentSystem :: cauder_system:system().
+
+%rollback_senda(Uid) -> gen_server:call(?SERVER, {user, {rollback_senda, Uid}}).
 
 %%------------------------------------------------------------------------------
 %% @doc Rolls back the reception of the message with the given uid.
@@ -707,6 +761,8 @@ handle_call({user, {Task, Args}}, _From, #state{system = System} = State) ->
             replay_spawn -> fun task_replay_spawn/2;
             replay_send -> fun task_replay_send/2;
             replay_receive -> fun task_replay_receive/2;
+            replay_register -> fun task_replay_register/2;
+            replay_delete -> fun task_replay_delete/2;
             replay_full_log -> fun task_replay_full_log/2;
             rollback_steps -> fun task_rollback_steps/2;
             rollback_start -> fun task_rollback_start/2;
@@ -995,6 +1051,40 @@ task_replay_receive(Uid, Sys0) ->
         ),
 
     {success, Uid, Time, Sys1}.
+
+-spec task_replay_register(El, System) -> task_result(El) when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system().
+
+task_replay_register(El, Sys0) ->
+    {Time, Sys1} =
+        timer:tc(
+            fun() ->
+                case cauder_replay:can_replay_register(El, Sys0) of
+                    false -> error(no_replay);
+                    true -> cauder_replay:replay_register(El, Sys0)
+                end
+            end
+        ),
+
+    {success, El, Time, Sys1}.
+
+-spec task_replay_delete(El, System) -> task_result(El) when
+    El :: cauder_map:map_element(),
+    System :: cauder_system:system().
+
+task_replay_delete(El, Sys0) ->
+    {Time, Sys1} =
+        timer:tc(
+            fun() ->
+                case cauder_replay:can_replay_delete(El, Sys0) of
+                    false -> error(no_replay);
+                    true -> cauder_replay:replay_delete(El, Sys0)
+                end
+            end
+        ),
+
+    {success, El, Time, Sys1}.
 
 -spec task_replay_full_log([], System) -> task_result() when
     System :: cauder_system:system().

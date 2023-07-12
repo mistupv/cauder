@@ -111,7 +111,7 @@ options(#system{pool = Pool} = Sys, Mode) ->
 rule_local(
     Pid,
     #result{expr = [{'value', _, _}], stack = Stk, label = #label_tau{}} = Result,
-    #system{pool = Pool, maps = Maps} = Sys
+    #system{pool = Pool, maps = Maps, log = Log0} = Sys
 ) ->
     case cauder_stack:is_empty(Stk) of
         true ->
@@ -119,6 +119,13 @@ rule_local(
             M = cauder_map:get_map(Maps, P0#process.node),
             case cauder_map:find_atom(Pid, M) of
                 {A, K} ->
+                    Log1 =
+                        case cauder_log:pop_del(Pid, Log0) of
+                            {#log_del{} = _, Log} ->
+                                Log;
+                            error ->
+                                Log0
+                        end,
                     NewMaps = Maps -- [{M, P0#process.node}],
                     NewMap = (M -- [{A, Pid, K, top}]) ++ [{A, Pid, K, bot}],
                     HistEntry = #hist_del{
@@ -133,13 +140,22 @@ rule_local(
                         env = Result#result.env,
                         expr = Result#result.expr,
                         stack = Result#result.stack,
-                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                        hist = cauder_history:push(HistEntry, P0#process.hist),
+                        is_alive = false
                     },
                     Sys#system{
                         maps = NewMaps ++ [{NewMap, P0#process.node}],
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     };
                 undefined ->
+                    Log1 =
+                        case cauder_log:pop_read(Pid, Log0) of
+                            {#log_read{} = _, Log} ->
+                                Log;
+                            error ->
+                                Log0
+                        end,
                     Ghost = cauder_map:get_ghost_list(Pid, M, []),
                     HistEntry = #hist_readF{
                         env = P0#process.env,
@@ -153,10 +169,12 @@ rule_local(
                         env = Result#result.env,
                         expr = Result#result.expr,
                         stack = Result#result.stack,
-                        hist = cauder_history:push(HistEntry, P0#process.hist)
+                        hist = cauder_history:push(HistEntry, P0#process.hist),
+                        is_alive = false
                     },
                     Sys#system{
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     }
             end;
         false ->
@@ -263,15 +281,14 @@ rule_nodes(
     #system{pool = Pool, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
-
-    {LogEntry, Log1} =
+    {Nodes, Log1} =
         case cauder_log:pop_nodes(Pid, Log0) of
-            {#log_nodes{} = Entry, Log} ->
-                {Entry, Log};
+            {#log_nodes{nodes = Nodes1}, Log} ->
+                {Nodes1, Log};
             error ->
                 {Sys#system.nodes, Log0}
         end,
-    OtherNodes = lists:delete(P0#process.node, LogEntry#log_nodes.nodes),
+    OtherNodes = lists:delete(P0#process.node, Nodes),
 
     HistEntry = #hist_nodes{
         env = P0#process.env,
@@ -320,14 +337,25 @@ rule_start(
                         Host0
                 end
         end,
-
-    Node = list_to_atom(atom_to_list(Name) ++ "@" ++ atom_to_list(Host)),
+    %io:format("\n Host ~p \n", [Host]),
+    %io:format("\n Name ~p \n", [Name]),
+    AtomName =
+        case is_atom(Name) of
+            true ->
+                %io:format("\n I am Here TRUE ~p \n", [Name]),
+                Name;
+            _ ->
+                %io:format("\n I am Here False~p \n", [Name]),
+                list_to_atom(Name)
+        end,
+    Node = list_to_atom(atom_to_list(AtomName) ++ "@" ++ atom_to_list(Host)),
+    %io:format("\n Node ~p \n", [Node]),
 
     {LogEntry, Log1} =
         case cauder_log:pop_start(Pid, Log0) of
             {#log_start{node = Node} = Entry, Log} ->
                 % Assert node is not started
-                false = lists:member(Node, Nodes0),
+                %false = lists:member(Node, Nodes0),
                 {Entry, Log};
             error ->
                 Entry = #log_start{
@@ -412,8 +440,8 @@ rule_spawn(
         expr = P0#process.expr,
         stack = P0#process.stack,
         node = LogEntry#log_spawn.node,
-        pid = LogEntry#log_spawn.pid
-        %success = LogEntry#log_spawn.success
+        pid = LogEntry#log_spawn.pid,
+        success = LogEntry#log_spawn.success
     },
 
     P1 = P0#process{
@@ -474,6 +502,13 @@ rule_send(
             Map = cauder_map:get_map(Sys#system.maps, P0#process.node),
             case cauder_map:find_pid(Dst, Map) of
                 undefined ->
+                    Log1 =
+                        case cauder_log:pop_read(Pid, Log0) of
+                            {#log_read{} = _, Log} ->
+                                Log;
+                            error ->
+                                Log0
+                        end,
                     [{send_op, Line, _, _}, _] = P0#process.expr,
                     Ghost = cauder_map:get_ghost_list(Dst, Map, []),
                     HistEntry = #hist_readF{
@@ -491,11 +526,20 @@ rule_send(
                         hist = cauder_history:push(HistEntry, P0#process.hist)
                     },
                     Sys#system{
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     };
                 {PidDst, Key} ->
+                    {Uid, Log1} =
+                        case cauder_log:pop_send(Pid, Log0) of
+                            {#log_sendA{} = Entry, Log} ->
+                                {Entry#log_sendA.uid, Log};
+                            error ->
+                                {cauder_message:new_uid(), Log0}
+                        end,
+
                     M = #message{
-                        uid = cauder_message:new_uid(),
+                        uid = Uid,
                         src = Pid,
                         dst = PidDst,
                         val = Val
@@ -517,7 +561,8 @@ rule_send(
                     },
                     Sys#system{
                         mail = cauder_mailbox:add(M, Sys#system.mail),
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     }
             end;
         false ->
@@ -626,11 +671,18 @@ rule_receive(
 rule_registered(
     Pid,
     #result{label = #label_registered{var = VarMap}} = Result,
-    #system{pool = Pool, maps = Maps} = Sys
+    #system{pool = Pool, maps = Maps, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     M = cauder_map:get_map(Maps, P0#process.node),
     L = cauder_map:get_atoms_list(M, []),
+    Log1 =
+        case cauder_log:pop_read(Pid, Log0) of
+            {#log_read{} = _, Log} ->
+                Log;
+            error ->
+                Log0
+        end,
     HistEntry = #hist_registered{
         env = P0#process.env,
         expr = P0#process.expr,
@@ -645,7 +697,8 @@ rule_registered(
         hist = cauder_history:push(HistEntry, P0#process.hist)
     },
     Sys#system{
-        pool = cauder_pool:update(P1, Pool)
+        pool = cauder_pool:update(P1, Pool),
+        log = Log1
     }.
 
 -spec rule_whereis(Pid, Result, System) -> NewSystem when
@@ -657,8 +710,15 @@ rule_registered(
 rule_whereis(
     Pid,
     #result{label = #label_whereis{var = VarPid, atom = Atom}} = Result,
-    #system{pool = Pool, maps = Maps} = Sys
+    #system{pool = Pool, maps = Maps, log = Log0} = Sys
 ) ->
+    Log1 =
+        case cauder_log:pop_read(Pid, Log0) of
+            {#log_read{} = _, Log} ->
+                Log;
+            error ->
+                Log0
+        end,
     P0 = cauder_pool:get(Pid, Pool),
     M = cauder_map:get_map(Maps, P0#process.node),
     P1 =
@@ -685,6 +745,8 @@ rule_whereis(
                     expr = P0#process.expr,
                     stack = P0#process.stack,
                     node = P0#process.node,
+                    atom = Atom,
+                    pid = MyPid,
                     mapEl = [{Atom, MyPid, K, top}]
                 },
                 P0#process{
@@ -695,7 +757,8 @@ rule_whereis(
                 }
         end,
     Sys#system{
-        pool = cauder_pool:update(P1, Pool)
+        pool = cauder_pool:update(P1, Pool),
+        log = Log1
     }.
 
 -spec rule_register(Pid, Result, System) -> NewSystem when
@@ -707,7 +770,7 @@ rule_whereis(
 rule_register(
     Pid,
     #result{label = #label_register{var = VarResult, atom = Atom, pid = MyPid}} = Result,
-    #system{pool = Pool, maps = Maps} = Sys
+    #system{pool = Pool, maps = Maps, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     M = cauder_map:get_map(Maps, P0#process.node),
@@ -715,7 +778,13 @@ rule_register(
         undefined ->
             case cauder_map:find_atom(MyPid, M) of
                 undefined ->
-                    Key = cauder_map:new_key(),
+                    {Key, Log1} =
+                        case cauder_log:pop_reg(Pid, Log0) of
+                            {#log_reg{} = Entry, Log} ->
+                                {Entry#log_reg.key, Log};
+                            error ->
+                                {cauder_map:new_key(), Log0}
+                        end,
                     HistEntry = #hist_regS{
                         env = P0#process.env,
                         expr = P0#process.expr,
@@ -733,15 +802,25 @@ rule_register(
                     NewMap = M ++ [{Atom, MyPid, Key, top}],
                     Sys#system{
                         maps = NewMaps ++ [{NewMap, P0#process.node}],
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     };
                 {MapAtom, K} ->
+                    Log1 =
+                        case cauder_log:pop_read(Pid, Log0) of
+                            {#log_read{} = _, Log} ->
+                                Log;
+                            error ->
+                                Log0
+                        end,
                     {var, Line, _} = VarResult,
                     HistEntry = #hist_readS{
                         env = P0#process.env,
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
+                        atom = Atom,
+                        pid = MyPid,
                         mapEl = [{MapAtom, MyPid, K, top}]
                     },
                     P1 = P0#process{
@@ -751,18 +830,28 @@ rule_register(
                         hist = cauder_history:push(HistEntry, P0#process.hist)
                     },
                     Sys#system{
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     }
             end;
         {MapPid, K1} ->
             case cauder_map:find_atom(MyPid, M) of
                 undefined ->
+                    Log1 =
+                        case cauder_log:pop_read(Pid, Log0) of
+                            {#log_read{} = _, Log} ->
+                                Log;
+                            error ->
+                                Log0
+                        end,
                     {var, Line, _} = VarResult,
                     HistEntry = #hist_readS{
                         env = P0#process.env,
                         expr = P0#process.expr,
                         stack = P0#process.stack,
                         node = P0#process.node,
+                        atom = Atom,
+                        pid = MyPid,
                         mapEl = [{Atom, MapPid, K1, top}]
                     },
                     P1 = P0#process{
@@ -772,17 +861,27 @@ rule_register(
                         hist = cauder_history:push(HistEntry, P0#process.hist)
                     },
                     Sys#system{
-                        pool = cauder_pool:update(P1, Pool)
+                        pool = cauder_pool:update(P1, Pool),
+                        log = Log1
                     };
                 {MapAtom, K2} ->
                     case {MapAtom, MyPid} =:= {Atom, MapPid} of
                         true ->
+                            Log1 =
+                                case cauder_log:pop_read(Pid, Log0) of
+                                    {#log_read{} = _, Log} ->
+                                        Log;
+                                    error ->
+                                        Log0
+                                end,
                             {var, Line, _} = VarResult,
                             HistEntry = #hist_readS{
                                 env = P0#process.env,
                                 expr = P0#process.expr,
                                 stack = P0#process.stack,
                                 node = P0#process.node,
+                                atom = Atom,
+                                pid = MyPid,
                                 mapEl = [{MapAtom, MyPid, K1, top}]
                             },
                             P1 = P0#process{
@@ -792,15 +891,25 @@ rule_register(
                                 hist = cauder_history:push(HistEntry, P0#process.hist)
                             },
                             Sys#system{
-                                pool = cauder_pool:update(P1, Pool)
+                                pool = cauder_pool:update(P1, Pool),
+                                log = Log1
                             };
                         false ->
+                            Log1 =
+                                case cauder_log:pop_read(Pid, Log0) of
+                                    {#log_read{} = _, Log} ->
+                                        Log;
+                                    error ->
+                                        Log0
+                                end,
                             {var, Line, _} = VarResult,
                             HistEntry = #hist_readS{
                                 env = P0#process.env,
                                 expr = P0#process.expr,
                                 stack = P0#process.stack,
                                 node = P0#process.node,
+                                atom = Atom,
+                                pid = MyPid,
                                 mapEl = [{MapAtom, MyPid, K2, top}, {Atom, MapPid, K1, top}]
                             },
                             P1 = P0#process{
@@ -810,7 +919,8 @@ rule_register(
                                 hist = cauder_history:push(HistEntry, P0#process.hist)
                             },
                             Sys#system{
-                                pool = cauder_pool:update(P1, Pool)
+                                pool = cauder_pool:update(P1, Pool),
+                                log = Log1
                             }
                     end
             end
@@ -825,12 +935,19 @@ rule_register(
 rule_unregister(
     Pid,
     #result{label = #label_unregister{var = VarResult, atom = Atom}} = Result,
-    #system{pool = Pool, maps = Maps} = Sys
+    #system{pool = Pool, maps = Maps, log = Log0} = Sys
 ) ->
     P0 = cauder_pool:get(Pid, Pool),
     M = cauder_map:get_map(Maps, P0#process.node),
     case cauder_map:find_pid(Atom, M) of
         undefined ->
+            Log1 =
+                case cauder_log:pop_read(Pid, Log0) of
+                    {#log_read{} = _, Log} ->
+                        Log;
+                    error ->
+                        Log0
+                end,
             {var, Line, _} = VarResult,
             Ghost = cauder_map:get_ghost_list(Atom, M, []),
             HistEntry = #hist_readF{
@@ -848,9 +965,17 @@ rule_unregister(
                 hist = cauder_history:push(HistEntry, P0#process.hist)
             },
             Sys#system{
-                pool = cauder_pool:update(P1, Pool)
+                pool = cauder_pool:update(P1, Pool),
+                log = Log1
             };
         {MapPid, K} ->
+            {Key, Log1} =
+                case cauder_log:pop_del(Pid, Log0) of
+                    {#log_del{} = Entry, Log} ->
+                        {Entry#log_del.key, Log};
+                    error ->
+                        {K, Log0}
+                end,
             NewMaps = Maps -- [{M, P0#process.node}],
             NewMap = (M -- [{Atom, MapPid, K, top}]) ++ [{Atom, MapPid, K, bot}],
             HistEntry = #hist_del{
@@ -858,7 +983,7 @@ rule_unregister(
                 expr = P0#process.expr,
                 stack = P0#process.stack,
                 node = P0#process.node,
-                mapEl = {Atom, MapPid, K, top},
+                mapEl = {Atom, MapPid, Key, top},
                 map = cauder_map:get_ghost_list(Atom, NewMap, []) ++ cauder_map:get_ghost_list(MapPid, NewMap, [])
             },
             P1 = P0#process{
@@ -869,7 +994,8 @@ rule_unregister(
             },
             Sys#system{
                 maps = NewMaps ++ [{NewMap, P0#process.node}],
-                pool = cauder_pool:update(P1, Pool)
+                pool = cauder_pool:update(P1, Pool),
+                log = Log1
             }
     end.
 
@@ -888,6 +1014,7 @@ rule_unregister(
 
 expression_option([E0 | Es0], Pid, Sys, Mode) ->
     Proc = cauder_pool:get(Pid, Sys#system.pool),
+    %TODO is alive false check for del or read otherwhise normal check
     case is_reducible(E0, Proc#process.env) of
         false ->
             case {Es0, cauder_stack:is_empty(Proc#process.stack)} of
@@ -909,13 +1036,13 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
                 {node, _} ->
                     {ok, ?RULE_NODE};
                 {registered, _} ->
-                    {ok, ?RULE_READ};
-                {whereis, _, _} ->
-                    {ok, ?RULE_READ};
-                {register, _, _, _} ->
-                    {ok, ?RULE_REG};
-                {unregister, _, _} ->
-                    {ok, ?RULE_DEL};
+                    check_reducibility([], Pid, Sys, Mode, registered);
+                {whereis, _, A} ->
+                    check_reducibility([A], Pid, Sys, Mode, whereis);
+                {register, _, A, P} ->
+                    check_reducibility([A, P], Pid, Sys, Mode, register);
+                {unregister, _, A} ->
+                    check_reducibility([A], Pid, Sys, Mode, unregister);
                 {tuple, _, Es} ->
                     expression_option(Es, Pid, Sys, Mode);
                 {nodes, _} ->
@@ -963,10 +1090,34 @@ expression_option([E0 | Es0], Pid, Sys, Mode) ->
             end
     end.
 
-check_reducibility([], _, _, _, send) ->
-    {ok, ?RULE_SEND};
-check_reducibility([], _, _, _, send_op) ->
-    {ok, ?RULE_SEND};
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, send) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_sendA{el = El}} ->
+            case cauder_map:is_in_map(SystemMap, El) of
+                true ->
+                    {ok, ?RULE_SEND};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_SEND}
+    end;
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, send_op) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_sendA{el = El}} ->
+            case cauder_map:is_in_map(SystemMap, El) of
+                true ->
+                    {ok, ?RULE_SEND};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_SEND}
+    end;
 check_reducibility([], _, _, _, local_call) ->
     {ok, ?RULE_LOCAL};
 check_reducibility([], _, _, _, remote_call) ->
@@ -1030,21 +1181,112 @@ check_reducibility([], Pid, #system{log = Log, nodes = Nodes}, _, start) ->
             case cauder_log:find_failed_spawns(Node, Log) of
                 [_ | _] when Success ->
                     false;
-                [] ->
+                _ ->
                     case cauder_log:find_nodes(Node, Log) of
                         [_ | _] when Success ->
                             false;
-                        [] ->
+                        _ ->
                             case lists:member(Node, Nodes) of
                                 false when not Success ->
                                     false;
-                                true ->
+                                true when Success ->
+                                    false;
+                                _ ->
                                     {ok, ?RULE_START}
                             end
                     end
             end;
         _ ->
             {ok, ?RULE_START}
+    end;
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, whereis) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_read{map = M}} ->
+            case cauder_map:in_map(SystemMap, M) of
+                true ->
+                    {ok, ?RULE_READ};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_READ}
+    end;
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, registered) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_read{map = M}} ->
+            case {SystemMap -- M, M -- SystemMap} of
+                {[], []} ->
+                    {ok, ?RULE_READ};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_READ}
+    end;
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, register) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_reg{key = K, atom = A, pid = P, map = M}} ->
+            case
+                {
+                    cauder_map:in_map(SystemMap, M),
+                    cauder_map:find_pid(A, SystemMap) =:= cauder_map:find_atom(P, SystemMap),
+                    cauder_log:find_fail_read({A, P, K, bot}, M, Log) =:= error,
+                    cauder_log:find_registered(M, Log) =:= error
+                }
+            of
+                {true, true, true, true} ->
+                    {ok, ?RULE_REG};
+                _ ->
+                    false
+            end;
+        {value, #log_read{atom = A, pid = P, map = M}} ->
+            case
+                {
+                    cauder_map:in_map(SystemMap, M),
+                    cauder_map:find_pid(A, SystemMap) =/= cauder_map:find_atom(P, SystemMap)
+                }
+            of
+                {true, true} ->
+                    {ok, ?RULE_REG};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_REG}
+    end;
+check_reducibility([], Pid, #system{maps = Maps, log = Log} = Sys, _, unregister) ->
+    Proc = cauder_pool:get(Pid, Sys#system.pool),
+    SystemMap = cauder_map:get_map(Maps, Proc#process.node),
+    case cauder_log:peek(Pid, Log) of
+        {value, #log_del{atom = A, pid = P, key = K, map = M}} ->
+            case
+                {
+                    cauder_map:in_map(SystemMap, M),
+                    cauder_map:find_pid(A, SystemMap),
+                    cauder_log:find_success_read({A, P, K, top}, Log) =:= error,
+                    cauder_log:find_registered(M, Log) =:= error
+                }
+            of
+                {true, S, true, true} when S =/= undefined ->
+                    {ok, ?RULE_DEL};
+                _ ->
+                    false
+            end;
+        {value, #log_read{atom = A, map = M}} ->
+            case {cauder_map:in_map(SystemMap, M), cauder_map:find_pid(A, SystemMap)} of
+                {true, undefined} ->
+                    {ok, ?RULE_DEL};
+                _ ->
+                    false
+            end;
+        _ ->
+            {ok, ?RULE_DEL}
     end;
 check_reducibility([H | T], Pid, Sys, Mode, ExprType) ->
     #process{env = Bs} = cauder_pool:get(Pid, Sys#system.pool),

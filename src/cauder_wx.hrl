@@ -164,6 +164,8 @@
 -define(ACTION_Replay_Receive, 2313).
 -define(ACTION_Replay_Start, 2314).
 -define(ACTION_Replay_Spawn, 2315).
+-define(ACTION_Replay_Register, 2316).
+-define(ACTION_Replay_Delete, 2317).
 
 -define(ACTION_Replay_Steps_Button, 2320).
 -define(ACTION_Replay_Send_Button, 2321).
@@ -171,6 +173,8 @@
 -define(ACTION_Replay_Receive_Button, 2323).
 -define(ACTION_Replay_Start_Button, 2324).
 -define(ACTION_Replay_Spawn_Button, 2325).
+-define(ACTION_Replay_Register_Button, 2327).
+-define(ACTION_Replay_Delete_Button, 2328).
 -define(ACTION_Replay_FullLog_Button, 2326).
 
 %% -----

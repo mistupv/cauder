@@ -36,6 +36,14 @@
 -define(REPLAY_RECEIVE_FINISH, "Replayed the reception of the message with UID ~p in ~s").
 -define(REPLAY_RECEIVE_FAIL, "Could not replay the reception of that message").
 
+-define(REPLAY_REGISTER_START, "Replaying the register of the tuple with KEY ~p...").
+-define(REPLAY_REGISTER_FINISH, "Replayed the register of the tuple with KEY ~p in ~s").
+-define(REPLAY_REGISTER_FAIL, "Could not replay the register").
+
+-define(REPLAY_DELETE_START, "Replaying the delete of the tuple with KEY ~p...").
+-define(REPLAY_DELETE_FINISH, "Replayed the delete of the tuple with KEY ~p in ~s").
+-define(REPLAY_DELETE_FAIL, "Could not replay the delete").
+
 -define(REPLAY_FULL_LOG_START, "Replaying the full log...").
 -define(REPLAY_FULL_LOG_FINISH, "Replayed the full log in ~s").
 

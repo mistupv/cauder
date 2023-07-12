@@ -15,6 +15,8 @@
 -export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
 -export([replay_send_start/1, replay_send_finish/2, replay_send_fail/0]).
 -export([replay_receive_start/1, replay_receive_finish/2, replay_receive_fail/0]).
+-export([replay_register_start/1, replay_register_finish/2, replay_register_fail/0]).
+-export([replay_delete_start/1, replay_delete_finish/2, replay_delete_fail/0]).
 -export([replay_full_log_start/0, replay_full_log_finish/1]).
 % Rollback
 -export([rollback_steps_start/0, rollback_steps_finish/2]).
@@ -304,6 +306,46 @@ replay_receive_finish(Uid, Time) ->
 -spec replay_receive_fail() -> ok.
 
 replay_receive_fail() -> set_text(?REPLAY_RECEIVE_FAIL).
+
+%%%=============================================================================
+
+-spec replay_register_start(Key) -> ok when
+    Key :: cauder_map:key().
+
+replay_register_start(Key) -> set_text(io_lib:format(?REPLAY_REGISTER_START, [Key])).
+
+-spec replay_register_finish(Key, Time) -> ok when
+    Key :: cauder_map:key(),
+    Time :: non_neg_integer().
+
+replay_register_finish(Key, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?REPLAY_REGISTER_FINISH, [Key, TimeStr]),
+    set_text(Status).
+
+-spec replay_register_fail() -> ok.
+
+replay_register_fail() -> set_text(?REPLAY_REGISTER_FAIL).
+
+%%%=============================================================================
+
+-spec replay_delete_start(Key) -> ok when
+    Key :: cauder_map:key().
+
+replay_delete_start(Key) -> set_text(io_lib:format(?REPLAY_DELETE_START, [Key])).
+
+-spec replay_delete_finish(Key, Time) -> ok when
+    Key :: cauder_map:key(),
+    Time :: non_neg_integer().
+
+replay_delete_finish(Key, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?REPLAY_DELETE_FINISH, [Key, TimeStr]),
+    set_text(Status).
+
+-spec replay_delete_fail() -> ok.
+
+replay_delete_fail() -> set_text(?REPLAY_DELETE_FAIL).
 
 %%%=============================================================================
 

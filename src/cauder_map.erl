@@ -60,8 +60,10 @@ is_in_map([_ | M], El) -> is_in_map(M, El).
 
 -spec in_map(Map, El) -> boolean() when
     Map :: [cauder_map:map_element()],
-    El :: cauder_map:map_element().
+    El :: [cauder_map:map_element()].
 
+in_map(_, []) ->
+    true;
 in_map(M, [El]) ->
     is_in_map(M, El);
 in_map(M, [El | T]) ->
