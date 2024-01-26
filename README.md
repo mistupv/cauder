@@ -129,9 +129,9 @@ be created in the root of the project.
 
 ## Creating a log
 
-To trace the execution of a function call you should use either the `tracer:trace/3` or `tracer:trace/4` function. Both
+To trace the execution of a function call you should use either the `cauder_tracer:trace/3` or `cauder_tracer:trace/4` function. Both
 functions accept as their first three argument the components of a function application, i.e. to
-trace `apply(Module, Function, Arguments)` you should call `tracer:trace(Module, Function, Arguments)`, they also return
+trace `apply(Module, Function, Arguments)` you should call `cauder_tracer:trace(Module, Function, Arguments)`, they also return
 the trace in case you want to use it directly.
 
 The optional fourth argument is a collection of configuration options for the trace process, these options can be
@@ -162,11 +162,11 @@ like to store the results in a new folder called `trace/`.
 
 If you prefer using a `proplist` for options, type:
 
-    tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
+    cauder_tracer:trace(barber, main, [], [{dir, "case-studies/barber"}, {output, "case-studies/barber/trace"}]).
 
 Or if you prefer using a `map` for options, type:
 
-    tracer:trace(barber, main, [], #{dir => "case-studies/barber", output => "case-studies/barber/trace"}).
+    cauder_tracer:trace(barber, main, [], #{dir => "case-studies/barber", output => "case-studies/barber/trace"}).
 
 ## Screenshot
 
