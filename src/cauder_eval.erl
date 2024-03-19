@@ -22,7 +22,11 @@
     | label_spawn_fun()
     | label_spawn_mfa()
     | label_send()
-    | label_receive().
+    | label_receive()
+    | label_registered()
+    | label_whereis()
+    | label_register()
+    | label_unregister().
 
 -type label_tau() :: #label_tau{}.
 -type label_self() :: #label_self{}.
@@ -33,6 +37,10 @@
 -type label_spawn_mfa() :: #label_spawn_mfa{}.
 -type label_send() :: #label_send{}.
 -type label_receive() :: #label_receive{}.
+-type label_registered() :: #label_registered{}.
+-type label_whereis() :: #label_whereis{}.
+-type label_register() :: #label_register{}.
+-type label_unregister() :: #label_unregister{}.
 
 %%%=============================================================================
 %%% API
@@ -237,6 +245,42 @@ expr(Bs, {nodes, Line}, Stk) ->
     Var = cauder_utils:temp_variable(Line),
     Label = #label_nodes{var = Var},
     #result{env = Bs, expr = [Var], stack = Stk, label = Label};
+expr(Bs, {registered, Line}, Stk) ->
+    Var = cauder_utils:temp_variable(Line),
+    Label = #label_registered{var = Var},
+    #result{env = Bs, expr = [Var], stack = Stk, label = Label};
+expr(Bs, E = {whereis, Line, Atom}, Stk) ->
+    case is_reducible(Atom, Bs) of
+        true ->
+            eval_and_update({Bs, Atom, Stk}, {3, E});
+        false ->
+            Var = cauder_utils:temp_variable(Line),
+            Label = #label_whereis{var = Var, atom = concrete(Atom)},
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
+    end;
+expr(Bs, E = {register, Line, Atom, Pid}, Stk) ->
+    case is_reducible(Atom, Bs) of
+        true ->
+            eval_and_update({Bs, Atom, Stk}, {3, E});
+        false ->
+            case is_reducible(Pid, Bs) of
+                true ->
+                    eval_and_update({Bs, Pid, Stk}, {4, E});
+                false ->
+                    Var = cauder_utils:temp_variable(Line),
+                    Label = #label_register{var = Var, atom = concrete(Atom), pid = concrete(Pid)},
+                    #result{env = Bs, expr = [Var], stack = Stk, label = Label}
+            end
+    end;
+expr(Bs, E = {unregister, Line, Atom}, Stk) ->
+    case is_reducible(Atom, Bs) of
+        true ->
+            eval_and_update({Bs, Atom, Stk}, {3, E});
+        false ->
+            Var = cauder_utils:temp_variable(Line),
+            Label = #label_unregister{var = Var, atom = concrete(Atom)},
+            #result{env = Bs, expr = [Var], stack = Stk, label = Label}
+    end;
 expr(Bs, E = {spawn, Line, Fun}, Stk) ->
     case is_reducible(Fun, Bs) of
         true ->

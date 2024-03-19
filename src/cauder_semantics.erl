@@ -21,4 +21,7 @@
     | ?RULE_START
     | ?RULE_SPAWN
     | ?RULE_SEND
-    | ?RULE_RECEIVE.
+    | ?RULE_RECEIVE
+    | ?RULE_READ
+    | ?RULE_REG
+    | ?RULE_DEL.

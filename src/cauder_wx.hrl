@@ -164,6 +164,8 @@
 -define(ACTION_Replay_Receive, 2313).
 -define(ACTION_Replay_Start, 2314).
 -define(ACTION_Replay_Spawn, 2315).
+-define(ACTION_Replay_Register, 2316).
+-define(ACTION_Replay_Delete, 2317).
 
 -define(ACTION_Replay_Steps_Button, 2320).
 -define(ACTION_Replay_Send_Button, 2321).
@@ -171,6 +173,8 @@
 -define(ACTION_Replay_Receive_Button, 2323).
 -define(ACTION_Replay_Start_Button, 2324).
 -define(ACTION_Replay_Spawn_Button, 2325).
+-define(ACTION_Replay_Register_Button, 2327).
+-define(ACTION_Replay_Delete_Button, 2328).
 -define(ACTION_Replay_FullLog_Button, 2326).
 
 %% -----
@@ -185,6 +189,10 @@
 -define(ACTION_Rollback_Spawn, 2415).
 -define(ACTION_Rollback_Variable, 2416).
 
+-define(ACTION_Rollback_Register, 2417).
+-define(ACTION_Rollback_Delete, 2418).
+-define(ACTION_Rollback_Senda, 2419).
+
 -define(ACTION_Rollback_Steps_Button, 2420).
 -define(ACTION_Rollback_Send_Button, 2421).
 %-define(ACTION_Rollback_Deliver_Button, 2422).
@@ -192,6 +200,10 @@
 -define(ACTION_Rollback_Start_Button, 2424).
 -define(ACTION_Rollback_Spawn_Button, 2425).
 -define(ACTION_Rollback_Variable_Button, 2426).
+
+-define(ACTION_Rollback_Register_Button, 2427).
+-define(ACTION_Rollback_Delete_Button, 2428).
+-define(ACTION_Rollback_Senda_Button, 2429).
 
 %% ----- System Info Panel ----- %%
 
@@ -213,6 +225,9 @@
 -define(SYSTEM_Mail, 2531).
 -define(SYSTEM_Trace, 2532).
 -define(SYSTEM_RollLog, 2533).
+
+-define(SYSTEM_Map, 2534).
+-define(PROCESS_Map, 2535).
 
 %% ----- Process Info Panel ----- %%
 

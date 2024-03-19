@@ -15,7 +15,13 @@
     has_failed_start/2,
     has_spawn/2,
     has_send/2,
-    has_receive/2
+    has_receive/2,
+    has_read_map/2,
+    has_fail_read_map/2,
+    has_registered/2,
+    has_reg/2,
+    has_del/2,
+    has_senda/2
 ]).
 -export([
     group_actions/1,
@@ -36,7 +42,13 @@
     | entry_start()
     | entry_spawn()
     | entry_send()
-    | entry_receive().
+    | entry_receive()
+    | entry_readS()
+    | entry_readF()
+    | entry_registered()
+    | entry_regS()
+    | entry_del()
+    | entry_sendA().
 
 -type entry_tau() :: #hist_tau{}.
 -type entry_self() :: #hist_self{}.
@@ -46,6 +58,12 @@
 -type entry_spawn() :: #hist_spawn{}.
 -type entry_send() :: #hist_send{}.
 -type entry_receive() :: #hist_receive{}.
+-type entry_readS() :: #hist_readS{}.
+-type entry_readF() :: #hist_readF{}.
+-type entry_registered() :: #hist_registered{}.
+-type entry_regS() :: #hist_regS{}.
+-type entry_del() :: #hist_del{}.
+-type entry_sendA() :: #hist_sendA{}.
 
 %%%=============================================================================
 %%% API
@@ -133,6 +151,14 @@ has_send(_, []) -> false;
 has_send(Uid, [#hist_send{msg = #message{uid = Uid}} | _]) -> true;
 has_send(Uid, [_ | H]) -> has_send(Uid, H).
 
+-spec has_senda(Uid, History) -> boolean() when
+    Uid :: cauder_message:uid(),
+    History :: cauder_history:history().
+
+has_senda(_, []) -> false;
+has_senda(Uid, [#hist_sendA{msg = #message{uid = Uid}} | _]) -> true;
+has_senda(Uid, [_ | H]) -> has_senda(Uid, H).
+
 -spec has_receive(Uid, History) -> boolean() when
     Uid :: cauder_message:uid(),
     History :: cauder_history:history().
@@ -140,6 +166,88 @@ has_send(Uid, [_ | H]) -> has_send(Uid, H).
 has_receive(_, []) -> false;
 has_receive(Uid, [#hist_receive{msg = #message{uid = Uid}} | _]) -> true;
 has_receive(Uid, [_ | H]) -> has_receive(Uid, H).
+
+-spec has_reg(El, History) -> boolean() when
+    El :: cauder_map:map_element(),
+    History :: cauder_history:history().
+
+has_reg(_, []) -> false;
+has_reg(El, [#hist_regS{mapEl = El} | _]) -> true;
+has_reg(El, [_ | H]) -> has_reg(El, H).
+
+-spec has_del(El, History) -> boolean() when
+    El :: cauder_map:map_element(),
+    History :: cauder_history:history().
+
+has_del(_, []) -> false;
+has_del(El, [#hist_del{mapEl = El} | _]) -> true;
+has_del(El, [_ | H]) -> has_del(El, H).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a read of `element' by checking
+%% the history items 'read1', 'registered' or 'sendS'
+
+-spec has_read_map(History, El) -> boolean() when
+    History :: cauder_history:history(),
+    El :: cauder_map:map_element().
+
+has_read_map([], _) ->
+    false;
+has_read_map([#hist_readS{mapEl = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_read_map(H, El)
+    end;
+has_read_map([#hist_sendA{mapEl = SubMap} | H], El) ->
+    case cauder_map:is_in_map([SubMap], El) of
+        true -> true;
+        false -> has_read_map(H, El)
+    end;
+has_read_map([#hist_registered{map = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_read_map(H, El)
+    end;
+has_read_map([_ | H], El) ->
+    has_read_map(H, El).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a fail read of `element' by checking
+%% the history item 'readF'
+
+-spec has_fail_read_map(History, El) -> boolean() when
+    History :: cauder_history:history(),
+    El :: cauder_map:map_element().
+
+has_fail_read_map([], _) ->
+    false;
+has_fail_read_map([#hist_readF{mapGhost = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_fail_read_map(H, El)
+    end;
+has_fail_read_map([#hist_registered{map = SubMap} | H], El) ->
+    case cauder_map:is_in_map(SubMap, El) of
+        true -> true;
+        false -> has_fail_read_map(H, El)
+    end;
+has_fail_read_map([_ | H], El) ->
+    has_fail_read_map(H, El).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks whether the given history contains a read of `element' by checking
+%% the history items 'registered'
+
+-spec has_registered(History, Map) -> boolean() when
+    History :: cauder_history:history(),
+    Map :: [cauder_map:map_element()].
+
+has_registered([], _) ->
+    false;
+has_registered([#hist_registered{map = Map} | _], Map) ->
+    true;
+has_registered([_ | H], Map) ->
+    has_registered(H, Map).
 
 %%%=============================================================================
 
@@ -149,13 +257,18 @@ has_receive(Uid, [_ | H]) -> has_receive(Uid, H).
         'send' := ordsets:ordset(cauder_message:uid()),
         'receive' := ordsets:ordset(cauder_message:uid()),
         'spawn' := ordsets:ordset(cauder_process:id()),
-        'start' := ordsets:ordset(node())
+        'start' := ordsets:ordset(node()),
+        'register' := ordsets:ordset(cauder_map:map_element()),
+        'sendA' := ordsets:ordset(cauder_message:uid()),
+        'del' := ordsets:ordset([{cauder_map:map_element(), [cauder_map:map_element()]}])
     }.
 
 group_actions(History) ->
     lists:foldl(
         fun
             (#hist_send{msg = #message{uid = Uid}}, Map) ->
+                maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
+            (#hist_sendA{msg = #message{uid = Uid}}, Map) ->
                 maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
             (#hist_receive{msg = #message{uid = Uid}}, Map) ->
                 maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map);
@@ -164,6 +277,12 @@ group_actions(History) ->
                 maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map);
             (#hist_start{node = Node, success = 'true'}, Map) ->
                 maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map);
+            %(#hist_sendA{mapEl = El, msg = #message{uid = Uid}}, Map) ->
+            %    maps:update_with('sendA', fun(Uids) -> ordsets:add_element({El, Uid}, Uids) end, Map);
+            (#hist_regS{mapEl = RegEl}, Map) ->
+                maps:update_with('register', fun(El) -> ordsets:add_element(RegEl, El) end, Map);
+            (#hist_del{mapEl = DelEl}, Map) ->
+                maps:update_with('del', fun(El) -> ordsets:add_element(DelEl, El) end, Map);
             (_, Map1) ->
                 Map1
         end,
@@ -171,7 +290,10 @@ group_actions(History) ->
             'send' => ordsets:new(),
             'receive' => ordsets:new(),
             'spawn' => ordsets:new(),
-            'start' => ordsets:new()
+            'start' => ordsets:new(),
+            'register' => ordsets:new(),
+            'sendA' => ordsets:new(),
+            'del' => ordsets:new()
         },
         History
     ).
@@ -185,6 +307,12 @@ is_concurrent(#hist_self{}) -> false;
 is_concurrent(#hist_node{}) -> false;
 is_concurrent(#hist_nodes{}) -> true;
 is_concurrent(#hist_start{}) -> true;
+is_concurrent(#hist_readS{}) -> true;
+is_concurrent(#hist_readF{}) -> true;
+is_concurrent(#hist_registered{}) -> true;
+is_concurrent(#hist_regS{}) -> true;
+is_concurrent(#hist_del{}) -> true;
+is_concurrent(#hist_sendA{}) -> true;
 is_concurrent(#hist_spawn{}) -> true;
 is_concurrent(#hist_send{}) -> true;
 is_concurrent(#hist_receive{}) -> true.

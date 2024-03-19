@@ -54,6 +54,10 @@
     | af_self_call()
     | af_node_call()
     | af_nodes_call()
+    | af_registered_call()
+    | af_whereis_call()
+    | af_register_call()
+    | af_unregister_call()
     | af_start_1_call()
     | af_start_2_call()
     | af_spawn_1_call()
@@ -97,6 +101,14 @@
 -type af_node_call() :: {node, line()}.
 
 -type af_nodes_call() :: {nodes, line()}.
+
+-type af_registered_call() :: {registered, line()}.
+
+-type af_whereis_call() :: {whereis, line(), abstract_expr()}.
+
+-type af_register_call() :: {register, line(), abstract_expr(), abstract_expr()}.
+
+-type af_unregister_call() :: {unregister, line(), abstract_expr()}.
 
 -type af_start_1_call() :: {start, line(), abstract_expr()}.
 
@@ -158,7 +170,11 @@
     | af_guard_call()
     | af_self_call()
     | af_node_call()
-    | af_nodes_call().
+    | af_nodes_call()
+    | af_registered_call()
+    | af_whereis_call()
+    | af_register_call()
+    | af_unregister_call().
 
 -type af_guard_call() :: {'bif', line(), erlang, atom(), [af_guard_test()]}.
 
@@ -295,6 +311,14 @@ guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
     {node, ln(Anno)};
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
     {nodes, ln(Anno)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, registered}}, []}) ->
+    {registered, ln(Anno)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, whereis}}, [Atom]}) ->
+    {whereis, ln(Anno), expr(Atom)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, register}}, [Atom, Pid]}) ->
+    {register, ln(Anno), expr(Atom), expr(Pid)};
+guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, unregister}}, [Atom]}) ->
+    {unregister, ln(Anno), expr(Atom)};
 guard_test({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, F}}, As0}) ->
     check_guard_bif(F, length(As0)),
     As = gexpr_list(As0),
@@ -373,6 +397,14 @@ gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
     {node, ln(Anno)};
 gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
     {nodes, ln(Anno)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, registered}}, []}) ->
+    {registered, ln(Anno)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, whereis}}, [Atom]}) ->
+    {whereis, ln(Anno), expr(Atom)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, register}}, [Atom, Pid]}) ->
+    {register, ln(Anno), expr(Atom), expr(Pid)};
+gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, unregister}}, [Atom]}) ->
+    {unregister, ln(Anno), expr(Atom)};
 gexpr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, F}}, As0}) ->
     check_guard_bif(F, length(As0)),
     As = gexpr_list(As0),
@@ -449,6 +481,14 @@ expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, node}}, []}) ->
     {node, ln(Anno)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, nodes}}, []}) ->
     {nodes, ln(Anno)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, registered}}, []}) ->
+    {registered, ln(Anno)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, whereis}}, [Atom]}) ->
+    {whereis, ln(Anno), expr(Atom)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, register}}, [Atom, Pid]}) ->
+    {register, ln(Anno), expr(Atom), expr(Pid)};
+expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, unregister}}, [Atom]}) ->
+    {unregister, ln(Anno), expr(Atom)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Fun]}) ->
     {spawn, ln(Anno), expr(Fun)};
 expr({call, Anno, {remote, _, {atom, _, erlang}, {atom, _, spawn}}, [Node, Fun]}) ->
@@ -635,6 +675,18 @@ replace_variable(E = {node, _}, _, _) ->
     E;
 replace_variable(E = {nodes, _}, _, _) ->
     E;
+replace_variable(E = {registered, _}, _, _) ->
+    E;
+replace_variable({whereis, Line, Atom}, Var, Val) ->
+    A = replace_variable(Atom, Var, Val),
+    {whereis, Line, A};
+replace_variable({register, Line, Atom, Pid}, Var, Val) ->
+    A = replace_variable(Atom, Var, Val),
+    P = replace_variable(Pid, Var, Val),
+    {register, Line, A, P};
+replace_variable({unregister, Line, Atom}, Var, Val) ->
+    A = replace_variable(Atom, Var, Val),
+    {unregister, Line, A};
 replace_variable({spawn, Line, Fun0}, Var, Val) ->
     Fun = replace_variable(Fun0, Var, Val),
     {spawn, Line, Fun};
@@ -756,6 +808,30 @@ to_abstract_expr({node, Line}) ->
     set_line(Node, Line);
 to_abstract_expr({nodes, Line}) ->
     Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(nodes), []),
+    set_line(Node, Line);
+to_abstract_expr({registered, Line}) ->
+    Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(registered), []),
+    set_line(Node, Line);
+to_abstract_expr({whereis, Line, Atom}) ->
+    Node = erl_syntax:application(
+        erl_syntax:atom(erlang),
+        erl_syntax:atom(whereis),
+        [to_abstract_expr(Atom)]
+    ),
+    set_line(Node, Line);
+to_abstract_expr({register, Line, Atom, Pid}) ->
+    Node = erl_syntax:application(
+        erl_syntax:atom(erlang),
+        erl_syntax:atom(register),
+        [to_abstract_expr(Atom), to_abstract_expr(Pid)]
+    ),
+    set_line(Node, Line);
+to_abstract_expr({unregister, Line, Atom}) ->
+    Node = erl_syntax:application(
+        erl_syntax:atom(erlang),
+        erl_syntax:atom(unregister),
+        [to_abstract_expr(Atom)]
+    ),
     set_line(Node, Line);
 to_abstract_expr({spawn, Line, Fun}) ->
     Node = erl_syntax:application(erl_syntax:atom(erlang), erl_syntax:atom(spawn), [to_abstract_expr(Fun)]),

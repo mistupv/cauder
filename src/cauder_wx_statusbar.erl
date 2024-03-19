@@ -15,6 +15,8 @@
 -export([replay_spawn_start/1, replay_spawn_finish/2, replay_spawn_fail/0]).
 -export([replay_send_start/1, replay_send_finish/2, replay_send_fail/0]).
 -export([replay_receive_start/1, replay_receive_finish/2, replay_receive_fail/0]).
+-export([replay_register_start/1, replay_register_finish/2, replay_register_fail/0]).
+-export([replay_delete_start/1, replay_delete_finish/2, replay_delete_fail/0]).
 -export([replay_full_log_start/0, replay_full_log_finish/1]).
 % Rollback
 -export([rollback_steps_start/0, rollback_steps_finish/2]).
@@ -23,6 +25,9 @@
 -export([rollback_send_start/1, rollback_send_finish/2, rollback_send_fail/0]).
 -export([rollback_receive_start/1, rollback_receive_finish/2, rollback_receive_fail/0]).
 -export([rollback_variable_start/1, rollback_variable_finish/2, rollback_variable_fail/0]).
+-export([rollback_reg_start/1, rollback_reg_finish/2, rollback_reg_fail/0]).
+-export([rollback_del_start/1, rollback_del_finish/2, rollback_del_fail/0]).
+%-export([rollback_senda_start/1, rollback_senda_finish/2, rollback_senda_fail/0]).
 
 -elvis([{elvis_style, god_modules, disable}]).
 
@@ -304,6 +309,46 @@ replay_receive_fail() -> set_text(?REPLAY_RECEIVE_FAIL).
 
 %%%=============================================================================
 
+-spec replay_register_start(Key) -> ok when
+    Key :: cauder_map:key().
+
+replay_register_start(Key) -> set_text(io_lib:format(?REPLAY_REGISTER_START, [Key])).
+
+-spec replay_register_finish(Key, Time) -> ok when
+    Key :: cauder_map:key(),
+    Time :: non_neg_integer().
+
+replay_register_finish(Key, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?REPLAY_REGISTER_FINISH, [Key, TimeStr]),
+    set_text(Status).
+
+-spec replay_register_fail() -> ok.
+
+replay_register_fail() -> set_text(?REPLAY_REGISTER_FAIL).
+
+%%%=============================================================================
+
+-spec replay_delete_start(Key) -> ok when
+    Key :: cauder_map:key().
+
+replay_delete_start(Key) -> set_text(io_lib:format(?REPLAY_DELETE_START, [Key])).
+
+-spec replay_delete_finish(Key, Time) -> ok when
+    Key :: cauder_map:key(),
+    Time :: non_neg_integer().
+
+replay_delete_finish(Key, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?REPLAY_DELETE_FINISH, [Key, TimeStr]),
+    set_text(Status).
+
+-spec replay_delete_fail() -> ok.
+
+replay_delete_fail() -> set_text(?REPLAY_DELETE_FAIL).
+
+%%%=============================================================================
+
 -spec replay_full_log_start() -> ok.
 
 replay_full_log_start() -> set_text(?REPLAY_FULL_LOG_START).
@@ -394,6 +439,65 @@ rollback_send_fail() -> set_text(?ROLLBACK_SEND_FAIL).
 
 %%%=============================================================================
 
+%-spec rollback_senda_start(Uid) -> ok when
+%    Uid :: cauder_message:uid().
+
+%rollback_senda_start(Uid) -> set_text(io_lib:format(?ROLLBACK_SENDA_START, [Uid])).
+
+%-spec rollback_senda_finish(Uid, Time) -> ok when
+%    Uid :: cauder_message:uid(),
+%    Time :: non_neg_integer().
+
+%rollback_senda_finish(Uid, Time) ->
+%    TimeStr = time_to_string(Time),
+%    Status = io_lib:format(?ROLLBACK_SENDA_FINISH, [Uid, TimeStr]),
+%    set_text(Status).
+
+%-spec rollback_senda_fail() -> ok.
+
+%rollback_senda_fail() -> set_text(?ROLLBACK_SENDA_FAIL).
+
+%%%=============================================================================
+
+-spec rollback_reg_start(El) -> ok when
+    El :: cauder_map:map_element().
+
+rollback_reg_start(El) -> set_text(io_lib:format(?ROLLBACK_REG_START, [El])).
+
+-spec rollback_reg_finish(El, Time) -> ok when
+    El :: cauder_map:map_element(),
+    Time :: non_neg_integer().
+
+rollback_reg_finish(El, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?ROLLBACK_REG_FINISH, [El, TimeStr]),
+    set_text(Status).
+
+-spec rollback_reg_fail() -> ok.
+
+rollback_reg_fail() -> set_text(?ROLLBACK_REG_FAIL).
+
+%%%=============================================================================
+
+-spec rollback_del_start(El) -> ok when
+    El :: cauder_map:map_element().
+
+rollback_del_start(El) -> set_text(io_lib:format(?ROLLBACK_DEL_START, [El])).
+
+-spec rollback_del_finish(El, Time) -> ok when
+    El :: cauder_map:map_element(),
+    Time :: non_neg_integer().
+
+rollback_del_finish(El, Time) ->
+    TimeStr = time_to_string(Time),
+    Status = io_lib:format(?ROLLBACK_DEL_FINISH, [El, TimeStr]),
+    set_text(Status).
+
+-spec rollback_del_fail() -> ok.
+
+rollback_del_fail() -> set_text(?ROLLBACK_DEL_FAIL).
+
+%%%=============================================================================
 -spec rollback_receive_start(Uid) -> ok when
     Uid :: cauder_message:uid().
 
