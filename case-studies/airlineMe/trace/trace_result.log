@@ -1,0 +1,8 @@
+{call,{airline,main,[]}}.
+{comp,1281000}.
+{exec,10000000}.
+{node,nonode@nohost}.
+{pid,0}.
+{return,none}.
+{tracing,timeout}.
+
