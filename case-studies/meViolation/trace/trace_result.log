@@ -3,5 +3,5 @@
 {exec,10016000}.
 {node,nonode@nohost}.
 {pid,209}.
-{return,{value,<0.216.0>}}.
+{return,{value,216}}.
 {tracing,timeout}.
