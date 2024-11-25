@@ -10,6 +10,9 @@
     pop_spawn/2,
     pop_send/2,
     pop_receive/2,
+    pop_reg/2,
+    pop_del/2,
+    pop_read/2,
     push/3,
     is_element/2,
     is_empty/1,
@@ -25,7 +28,12 @@
     %has_start/3,
     has_spawn/3,
     has_send/3,
-    has_receive/3
+    has_receive/3,
+    has_register/3,
+    has_delete/3,
+    has_registered/3,
+    has_fail_read/4,
+    has_success_read/3
 ]).
 -export([
     find_nodes/2,
@@ -34,7 +42,12 @@
     find_spawn_action/2,
     find_failed_spawns/2,
     find_send/2,
-    find_receive/2
+    find_receive/2,
+    find_register/2,
+    find_delete/2,
+    find_registered/2,
+    find_fail_read/3,
+    find_success_read/2
 ]).
 
 -include("cauder_log.hrl").
@@ -47,13 +60,19 @@
     | action_send()
     | action_receive()
     | action_nodes()
-    | action_start().
+    | action_start()
+    | action_reg()
+    | action_del()
+    | action_read().
 
 -type action_spawn() :: #log_spawn{}.
--type action_send() :: #log_send{}.
+-type action_send() :: #log_send{} | #log_sendA{}.
 -type action_receive() :: #log_receive{}.
 -type action_nodes() :: #log_nodes{}.
 -type action_start() :: #log_start{}.
+-type action_reg() :: #log_reg{}.
+-type action_del() :: #log_del{}.
+-type action_read() :: #log_read{}.
 
 %%%=============================================================================
 %%% API
@@ -110,6 +129,8 @@ pop_send(Pid, Log) ->
     case maps:find(Pid, Log) of
         {ok, [#log_send{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
+        {ok, [#log_sendA{} = Action | Actions]} ->
+            {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
     end.
@@ -151,6 +172,48 @@ pop_nodes(Pid, Log) ->
 pop_start(Pid, Log) ->
     case maps:find(Pid, Log) of
         {ok, [#log_start{} = Action | Actions]} ->
+            {Action, update_or_remove(Pid, Actions, Log)};
+        _ ->
+            error
+    end.
+
+-spec pop_reg(Pid, Log) -> {Action, NewLog} | error when
+    Pid :: cauder_process:id(),
+    Log :: cauder_log:log(),
+    Action :: cauder_log:action_reg(),
+    NewLog :: cauder_log:log().
+
+pop_reg(Pid, Log) ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_reg{} = Action | Actions]} ->
+            {Action, update_or_remove(Pid, Actions, Log)};
+        _ ->
+            error
+    end.
+
+-spec pop_del(Pid, Log) -> {Action, NewLog} | error when
+    Pid :: cauder_process:id(),
+    Log :: cauder_log:log(),
+    Action :: cauder_log:action_del(),
+    NewLog :: cauder_log:log().
+
+pop_del(Pid, Log) ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_del{} = Action | Actions]} ->
+            {Action, update_or_remove(Pid, Actions, Log)};
+        _ ->
+            error
+    end.
+
+-spec pop_read(Pid, Log) -> {Action, NewLog} | error when
+    Pid :: cauder_process:id(),
+    Log :: cauder_log:log(),
+    Action :: cauder_log:action_read(),
+    NewLog :: cauder_log:log().
+
+pop_read(Pid, Log) ->
+    case maps:find(Pid, Log) of
+        {ok, [#log_read{} = Action | Actions]} ->
             {Action, update_or_remove(Pid, Actions, Log)};
         _ ->
             error
@@ -211,7 +274,9 @@ rdep(Pid, Log) -> remove_dependents_spawn(Pid, Log).
         'send' := ordsets:ordset(cauder_message:uid()),
         'receive' := ordsets:ordset(cauder_message:uid()),
         'spawn' := ordsets:ordset(cauder_process:id()),
-        'start' := ordsets:ordset(node())
+        'start' := ordsets:ordset(node()),
+        'register' := ordsets:ordset(cauder_map:map_element()),
+        'delete' := ordsets:ordset(cauder_map:map_element())
     }.
 
 group_actions(Log) ->
@@ -221,12 +286,18 @@ group_actions(Log) ->
                 fun
                     (#log_send{uid = Uid}, Map1) ->
                         maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
+                    (#log_sendA{uid = Uid}, Map1) ->
+                        maps:update_with('send', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
                     (#log_receive{uid = Uid}, Map1) ->
                         maps:update_with('receive', fun(Uids) -> ordsets:add_element(Uid, Uids) end, Map1);
                     (#log_spawn{pid = Pid, success = 'true'}, Map1) ->
                         maps:update_with('spawn', fun(Pids) -> ordsets:add_element(Pid, Pids) end, Map1);
                     (#log_start{node = Node, success = 'true'}, Map1) ->
                         maps:update_with('start', fun(Nodes) -> ordsets:add_element(Node, Nodes) end, Map1);
+                    (#log_reg{key = K, atom = A, pid = P}, Map1) ->
+                        maps:update_with('register', fun(Els) -> ordsets:add_element({A, P, K, top}, Els) end, Map1);
+                    (#log_del{key = K, atom = A, pid = P}, Map1) ->
+                        maps:update_with('delete', fun(Els) -> ordsets:add_element({A, P, K, bot}, Els) end, Map1);
                     (_, Map1) ->
                         Map1
                 end,
@@ -238,7 +309,9 @@ group_actions(Log) ->
             'send' => ordsets:new(),
             'receive' => ordsets:new(),
             'spawn' => ordsets:new(),
-            'start' => ordsets:new()
+            'start' => ordsets:new(),
+            'register' => ordsets:new(),
+            'delete' => ordsets:new()
         },
         Log
     ).
@@ -270,6 +343,7 @@ has_send(Pid, Uid, Log) ->
     lists:any(
         fun
             (#log_send{uid = Uid1}) -> Uid1 =:= Uid;
+            (#log_sendA{uid = Uid1}) -> Uid1 =:= Uid;
             (_) -> false
         end,
         maps:get(Pid, Log)
@@ -285,6 +359,84 @@ has_receive(Pid, Uid, Log) ->
     lists:any(
         fun
             (#log_receive{uid = Uid1}) -> Uid1 =:= Uid;
+            (_) -> false
+        end,
+        maps:get(Pid, Log)
+    ).
+
+-spec has_register(Pid, El, Log) -> boolean() when
+    Pid :: cauder_process:id(),
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log().
+
+has_register(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
+has_register(Pid, {_, _, Key, _}, Log) ->
+    lists:any(
+        fun
+            (#log_reg{key = Key1}) -> Key1 =:= Key;
+            (_) -> false
+        end,
+        maps:get(Pid, Log)
+    ).
+
+-spec has_delete(Pid, El, Log) -> boolean() when
+    Pid :: cauder_process:id(),
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log().
+
+has_delete(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
+has_delete(Pid, {_, _, Key, _}, Log) ->
+    lists:any(
+        fun
+            (#log_del{key = Key1}) -> Key1 =:= Key;
+            (_) -> false
+        end,
+        maps:get(Pid, Log)
+    ).
+
+-spec has_registered(Pid, Map, Log) -> boolean() when
+    Pid :: cauder_process:id(),
+    Map :: [cauder_map:map_element()],
+    Log :: cauder_log:log().
+
+has_registered(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
+has_registered(Pid, Map, Log) ->
+    lists:any(
+        fun
+            (#log_read{atom = undefined, pid = undefined, map = LogMap}) ->
+                ((LogMap -- Map == []) and (Map -- LogMap == []));
+            (_) ->
+                'false'
+        end,
+        maps:get(Pid, Log)
+    ).
+
+-spec has_fail_read(Pid, Map, El, Log) -> boolean() when
+    Pid :: cauder_process:id(),
+    Map :: [cauder_map:map_element()],
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log().
+
+has_fail_read(Pid, _, _, Log) when not is_map_key(Pid, Log) -> false;
+has_fail_read(Pid, Map, {A1, P1, _, _}, Log) ->
+    lists:any(
+        fun
+            (#log_read{atom = A, pid = P, map = LogMap}) -> (((A =:= A1) or (P =:= P1)) and (LogMap -- Map == []));
+            (_) -> false
+        end,
+        maps:get(Pid, Log)
+    ).
+
+-spec has_success_read(Pid, El, Log) -> boolean() when
+    Pid :: cauder_process:id(),
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log().
+
+has_success_read(Pid, _, Log) when not is_map_key(Pid, Log) -> false;
+has_success_read(Pid, El, Log) ->
+    lists:any(
+        fun
+            (#log_read{map = Map}) -> cauder_map:is_in_map(Map, El);
             (_) -> false
         end,
         maps:get(Pid, Log)
@@ -306,7 +458,7 @@ find_nodes(Node, Log) ->
         fun(_Pid, Actions) ->
             lists:any(
                 fun
-                    (#log_nodes{nodes = Nodes}) -> lists:member(Node, Nodes);
+                    (#log_nodes{nodes = Nodes}) -> not lists:member(Node, Nodes);
                     (_) -> 'false'
                 end,
                 Actions
@@ -418,6 +570,7 @@ find_send(Uid, Log) ->
     find_pid(
         fun
             (#log_send{uid = Uid1}) -> Uid =:= Uid1;
+            (#log_sendA{uid = Uid1}) -> Uid =:= Uid1;
             (_) -> 'false'
         end,
         Log
@@ -436,6 +589,92 @@ find_receive(Uid, Log) ->
     find_pid(
         fun
             (#log_receive{uid = Uid1}) -> Uid =:= Uid1;
+            (_) -> 'false'
+        end,
+        Log
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the log of each process, until it finds the process that delete
+%% the message with the given `Uid'.
+
+-spec find_delete(El, Log) -> {ok, Pid} | error when
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_delete({_, _, Key, _}, Log) ->
+    find_pid(
+        fun
+            (#log_del{key = Key1}) -> Key =:= Key1;
+            (_) -> 'false'
+        end,
+        Log
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the log of each process, until it finds the process that registered
+%% the message with the given `Uid'.
+
+-spec find_register(El, Log) -> {ok, Pid} | error when
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_register({_, _, Key, _}, Log) ->
+    find_pid(
+        fun
+            (#log_reg{key = Key1}) -> Key =:= Key1;
+            (_) -> 'false'
+        end,
+        Log
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the log of each process, until it finds the process that registered
+%% the message with the given `Uid'.
+
+-spec find_registered(Map, Log) -> {ok, Pid} | error when
+    Map :: [cauder_map:map_element()],
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_registered(Map, Log) ->
+    find_pid(
+        fun
+            (#log_read{atom = undefined, pid = undefined, map = LogMap}) ->
+                ((LogMap -- Map == []) and (Map -- LogMap == []));
+            (_) ->
+                'false'
+        end,
+        Log
+    ).
+
+-spec find_fail_read(El, Map, Log) -> {ok, Pid} | error when
+    El :: cauder_map:map_element(),
+    Map :: [cauder_map:map_element()],
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_fail_read({A1, P1, _, _}, Map, Log) ->
+    find_pid(
+        fun
+            (#log_read{atom = A, pid = P, map = LogMap}) -> (((A =:= A1) or (P =:= P1)) and (LogMap -- Map == []));
+            (_) -> 'false'
+        end,
+        Log
+    ).
+
+-spec find_success_read(El, Log) -> {ok, Pid} | error when
+    El :: cauder_map:map_element(),
+    Log :: cauder_log:log(),
+    Pid :: cauder_process:id().
+
+find_success_read(El, Log) ->
+    find_pid(
+        fun
+            (#log_read{map = Map}) -> cauder_map:is_in_map(Map, El);
+            (#log_sendA{el = El1}) -> El1 == El;
             (_) -> 'false'
         end,
         Log
@@ -518,6 +757,7 @@ remove_dependents_receive(Uid, Log) ->
 
 remove_dependents(#log_spawn{pid = Pid}, Log) -> remove_dependents_spawn(Pid, Log);
 remove_dependents(#log_send{uid = Uid}, Log) -> remove_dependents_receive(Uid, Log);
+remove_dependents(#log_sendA{uid = Uid}, Log) -> remove_dependents_receive(Uid, Log);
 remove_dependents(_, Log) -> Log.
 
 %%%=============================================================================

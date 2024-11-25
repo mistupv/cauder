@@ -9,3 +9,6 @@
 -define(RULE_START, 'start').
 -define(RULE_SEND, 'send').
 -define(RULE_RECEIVE, 'receive').
+-define(RULE_READ, 'read').
+-define(RULE_REG, 'register').
+-define(RULE_DEL, 'del').

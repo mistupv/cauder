@@ -22,7 +22,13 @@
     find_history_spawn/2,
     find_history_send/2,
     find_history_receive/2,
-    find_variable/2
+    find_variable/2,
+    find_read_map/3,
+    find_failed_read_map/3,
+    find_registered/3,
+    find_history_reg/2,
+    find_history_del/2,
+    find_history_senda/2
 ]).
 
 -include("cauder_process.hrl").
@@ -227,6 +233,23 @@ find_history_send(Uid, Pool) ->
 %% @doc Checks the history of each process, until it finds the process that
 %% sent the message with the given `Uid'.
 
+-spec find_history_senda(Uid, Pool) -> {ok, Process} | error when
+    Uid :: cauder_message:uid(),
+    Pool :: cauder_pool:pool(),
+    Process :: cauder_process:process().
+
+find_history_senda(Uid, Pool) ->
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_senda(Uid, P#process.hist) end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the history of each process, until it finds the process that
+%% sent the message with the given `Uid'.
+
 -spec find_history_receive(Uid, Pool) -> {ok, Process} | error when
     Uid :: cauder_message:uid(),
     Pool :: cauder_pool:pool(),
@@ -236,6 +259,40 @@ find_history_receive(Uid, Pool) ->
     value_to_ok(
         lists:search(
             fun(P) -> cauder_history:has_receive(Uid, P#process.hist) end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the history of each process, until it finds the process that
+%% .
+
+-spec find_history_reg(El, Pool) -> {ok, Process} | error when
+    El :: cauder_map:map_element(),
+    Pool :: cauder_pool:pool(),
+    Process :: cauder_process:process().
+
+find_history_reg(El, Pool) ->
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_reg(El, P#process.hist) end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Checks the history of each process, until it finds the process that
+%% .
+
+-spec find_history_del(El, Pool) -> {ok, Process} | error when
+    El :: cauder_map:map_element(),
+    Pool :: cauder_pool:pool(),
+    Process :: cauder_process:process().
+
+find_history_del(El, Pool) ->
+    value_to_ok(
+        lists:search(
+            fun(P) -> cauder_history:has_del(El, P#process.hist) end,
             maps:values(Pool)
         )
     ).
@@ -253,6 +310,72 @@ find_variable(Name, Pool) ->
     value_to_ok(
         lists:search(
             fun(P) -> cauder_bindings:is_bound(Name, P#process.env) end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a read operation on map
+
+-spec find_read_map(Pool, Node, El) -> {ok, Process} | error when
+    Pool :: cauder_pool:pool(),
+    Node :: node(),
+    El :: cauder_map:map_element(),
+    Process :: cauder_process:process().
+
+find_read_map(Pool, Node, El) ->
+    value_to_ok(
+        lists:search(
+            fun(#process{node = ProcNode, hist = H}) ->
+                case ProcNode =:= Node of
+                    true -> cauder_history:has_read_map(H, El);
+                    false -> error
+                end
+            end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a fail read operation on map
+
+-spec find_failed_read_map(Pool, Node, El) -> {ok, Process} | error when
+    Pool :: cauder_pool:pool(),
+    Node :: node(),
+    El :: cauder_map:map_element(),
+    Process :: cauder_process:process().
+
+find_failed_read_map(Pool, Node, El) ->
+    value_to_ok(
+        lists:search(
+            fun(#process{node = ProcNode, hist = H}) ->
+                case ProcNode =:= Node of
+                    true -> cauder_history:has_fail_read_map(H, El);
+                    false -> error
+                end
+            end,
+            maps:values(Pool)
+        )
+    ).
+
+%%------------------------------------------------------------------------------
+%% @doc Searches for process(es) that have performed a read operation on map
+
+-spec find_registered(Pool, Node, Map) -> {ok, Process} | error when
+    Pool :: cauder_pool:pool(),
+    Node :: node(),
+    Map :: [cauder_map:map_element()],
+    Process :: cauder_process:process().
+
+find_registered(Pool, Node, Map) ->
+    value_to_ok(
+        lists:search(
+            fun(#process{node = ProcNode, hist = H}) ->
+                case ProcNode =:= Node of
+                    true -> cauder_history:has_registered(H, Map);
+                    false -> error
+                end
+            end,
             maps:values(Pool)
         )
     ).

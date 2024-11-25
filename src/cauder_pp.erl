@@ -46,7 +46,15 @@ log_action(#log_spawn{node = Node, pid = Pid, success = 'false'}) ->
 log_action(#log_send{uid = Uid}) ->
     "send(" ++ blue(to_string(Uid)) ++ ")";
 log_action(#log_receive{uid = Uid}) ->
-    "receive(" ++ blue(to_string(Uid)) ++ ")".
+    "receive(" ++ blue(to_string(Uid)) ++ ")";
+log_action(#log_reg{key = K}) ->
+    "register {" ++ blue(to_string(K)) ++ "}";
+log_action(#log_del{key = K}) ->
+    "delete {" ++ blue(to_string(K)) ++ "}";
+log_action(#log_read{}) ->
+    "read";
+log_action(#log_sendA{uid = Uid, el = {A, _, _, _}}) ->
+    "send(" ++ blue(to_string(Uid)) ++ ") with atom " ++ blue(to_string(A)).
 
 %%%=============================================================================
 
@@ -73,6 +81,18 @@ history_entry(#hist_tau{}) ->
     "local";
 history_entry(#hist_self{}) ->
     "self";
+history_entry(#hist_registered{}) ->
+    "registered";
+history_entry(#hist_readS{mapEl = Map}) ->
+    "read of " ++ to_string(Map);
+history_entry(#hist_readF{atom = Atom}) ->
+    "try to read " ++ to_string(Atom);
+history_entry(#hist_regS{mapEl = {A, P, K, _}}) ->
+    "register {" ++ to_string(A) ++ ", " ++ to_string(P) ++ ", " ++ to_string(K) ++ "}";
+history_entry(#hist_del{mapEl = El}) ->
+    "delete " ++ to_string(El);
+history_entry(#hist_sendA{mapEl = {A, _, _, _}, msg = #message{uid = Uid, val = Val}}) ->
+    "send with atom " ++ to_string(A) ++ " (" ++ to_string(Val) ++ "," ++ blue(to_string(Uid)) ++ ")";
 history_entry(#hist_nodes{nodes = Nodes}) ->
     "nodes(" ++ pp_nodes(Nodes) ++ ")";
 history_entry(#hist_start{node = Node, success = true}) ->
